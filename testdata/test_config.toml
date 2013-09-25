@@ -1,0 +1,13 @@
+[mail]
+sendmail = true
+smtp = false
+
+[crawl]
+maxCrawlers = 10
+minInterval = 300
+maxInterval = 3600
+
+[feeds]
+  urls = [
+    "http://arstechnica.com/index.ars/rss",
+  ]
