@@ -4,17 +4,17 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/jpoehls/gophermail"
-	rss "github.com/jteeuwen/go-pkg-rss"
 	"log"
 	"net/smtp"
 	"os/exec"
 	"github.com/hobeone/rss2go/config"
+	"github.com/hobeone/rss2go/feed"
 )
 
 const MTA_BINARY = "sendmail"
 
 type MailRequest struct {
-	Item       *rss.Item
+	Item       *feed.Story
 	ResultChan chan error
 }
 
@@ -133,13 +133,13 @@ func (self *MailDispatcher) DispatchLoop() {
 	}
 }
 
-func (self *MailDispatcher) handleMail(m *rss.Item) error {
+func (self *MailDispatcher) handleMail(m *feed.Story) error {
 	msg := &gophermail.Message{
 		From:     self.FromAddress,
 		To:       []string{self.ToAddress},
 		Subject:  m.Title,
-		Body:     m.Description, // Convert to plain text
-		HTMLBody: m.Description,
+		Body:     m.Content, // Convert to plain text
+		HTMLBody: m.Content,
 	}
 
 	if self.stubOutMail {

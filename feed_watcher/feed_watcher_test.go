@@ -71,13 +71,7 @@ func TestFeedWatcherPolling(t *testing.T) {
 	u := "http://test/test.rss"
 	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, db, *new(time.Time))
 
-	Sleep = func(d time.Duration) {
-		expected := time.Minute * time.Duration(30)
-		if d != expected {
-			t.Fatalf("Expected to sleep for %+v. Got %+v", expected, d)
-		}
-		return
-	}
+	SleepForce()
 	go n.PollFeed()
 	req := <-crawl_chan
 	if req.URI != u {
@@ -95,12 +89,11 @@ func TestFeedWatcherPolling(t *testing.T) {
 		Error: nil,
 	}
 	resp := <-resp_chan
-	if len(resp.Feed.Channels[0].Items) != 25 {
-		t.Error("Expected 25 items from the feed.")
+	if len(resp.Items) != 25 {
+		t.Errorf("Expected 25 items from the feed. Got %d", len(resp.Items))
 	}
-	fmt.Println("Got to here")
 	// Second Poll, should not have new items
-	req = <- crawl_chan
+	req = <-crawl_chan
 	req.ResponseChan <- &FeedCrawlResponse{
 		URI:   u,
 		Body:  feed_resp,
@@ -108,8 +101,8 @@ func TestFeedWatcherPolling(t *testing.T) {
 	}
 	go n.StopPoll()
 	resp = <-resp_chan
-	if len(resp.Feed.Channels[0].Items) != 0 {
-		t.Error("Expected 25 items from the feed.")
+	if len(resp.Items) != 0 {
+		t.Errorf("Expected 0 items from the feed. Got %d", len(resp.Items))
 	}
 }
 
@@ -122,6 +115,7 @@ func TestFeedWatcherWithMalformedFeed(t *testing.T) {
 	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, db, *new(time.Time))
 
 	Sleep = func(d time.Duration) {
+		fmt.Println("Called mock sleep")
 		expected := time.Minute * time.Duration(1)
 		if d != expected {
 			t.Fatalf("Expected to sleep for %+v. Got %+v", expected, d)
@@ -176,8 +170,8 @@ func TestFeedWatcherWithLastDateSet(t *testing.T) {
 		Error: nil,
 	}
 	resp := <-resp_chan
-	if len(resp.Feed.Channels[0].Items) != 0 {
-		t.Errorf("Expected 0 items from the feed but got %d.", len(resp.Feed.Channels[0].Items))
+	if len(resp.Items) != 0 {
+		t.Errorf("Expected 0 items from the feed but got %d.", len(resp.Items))
 	}
 	// TODO: add a second poll with an updated feed that will return new items.
 }

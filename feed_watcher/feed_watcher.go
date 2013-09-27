@@ -1,13 +1,10 @@
 package feed_watcher
 
 import (
-	"code.google.com/p/go-charset/charset"
-	_ "code.google.com/p/go-charset/data"
 	"errors"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/mail"
-	rss "github.com/jteeuwen/go-pkg-rss"
-	"github.com/moovweb/gokogiri"
+	"github.com/hobeone/rss2go/feed"
 	"log"
 	"time"
 )
@@ -32,10 +29,9 @@ type FeedCrawlRequest struct {
 type FeedCrawlResponse struct {
 	URI          string
 	Body         []byte
-	Feed         rss.Feed
+	Feed         feed.Feed
+	Items         []*feed.Story
 	Error        error
-	CrawlTime    time.Time
-	LastItemTime time.Time
 }
 
 //
@@ -114,13 +110,6 @@ func (self *FeedWatcher) Crawling() (r bool) {
 	return self.crawling
 }
 
-func chanHandler(feed *rss.Feed, newchannels []*rss.Channel) {
-}
-
-func itemHandler(feed *rss.Feed, ch *rss.Channel, newitems []*rss.Item) {
-	log.Printf("%d new item(s) in %s\n", len(newitems), feed.Url)
-}
-
 func (self *FeedWatcher) PollFeed() bool {
 	if !self.lockPoll() {
 		log.Printf("Called PollLoop on %v when already polling. ignoring.\n",
@@ -140,80 +129,63 @@ func (self *FeedWatcher) PollFeed() bool {
 			to_sleep := self.min_sleep_seconds
 			if resp.Error != nil {
 				log.Printf("Error getting feed %v: %v", self.URI, resp.Error)
-			} else {
-				log.Printf("got response to crawl: %v", resp.URI)
-				// Parse with Gokogiri
-				doc, err := gokogiri.ParseXml(resp.Body)
-				if err != nil {
-					log.Printf("Error Parsing feed with Gokogiri: %s", err.Error())
-					resp.Error = err
-				} else {
-					charset_handler := charset.NewReader
-					feed := rss.New(10, true, nil, nil)
-					err = feed.FetchBytes(resp.URI, []byte(doc.String()), charset_handler)
-					if err != nil {
-						log.Printf("Error parsing feed response from %s: %s", resp.URI,
-							err.Error())
-						resp.Error = err
-					} else {
-						resp.Feed = *feed
-						for _, channel := range feed.Channels {
-							log.Printf("Channel has %d items", len(channel.Items))
-						}
+				self.response_chan <- resp
+				continue
+			}
+			log.Printf("Got response to crawl of %v", resp.URI)
+			feed, stories := feed.ParseFeed(resp.URI, resp.Body)
 
-						self.filterNewItems(feed)
-						resp.LastItemTime = self.last_item_time
-						for _, channel := range feed.Channels {
-							log.Printf("Channel %s has new %d items", channel.Title, len(channel.Items))
-							for _, item := range channel.Items {
-								log.Printf("Got Item: %s, sending for mail.", item.Title)
-								err = self.sendMail(item)
-								if err != nil {
-									log.Printf("Error sending mail: %s", err.Error())
-								}
-							}
-						}
-						feed.CanUpdate()
-						to_sleep = feed.SecondsTillUpdate()
-						self.updateDB()
+			if feed == nil || stories == nil {
+				log.Printf("Error parsing response from %s", resp.URI)
+				self.response_chan <- resp
+				continue
+			}
+
+			resp.Items = self.filterNewItems(stories, self.last_item_time)
+
+			log.Printf("Feed %s has new %d items", feed.Title, len(resp.Items))
+			for _, item := range resp.Items {
+				log.Printf("New Story: %s, sending for mail.", item.Title)
+				err := self.sendMail(item)
+				if err != nil {
+					log.Printf("Error sending mail: %s", err.Error())
+				} else {
+					// Now that the item is safely away set the last updated time so we
+					// don't send a duplicate.
+					if item.Published.After(self.last_item_time) {
+						self.last_item_time = item.Published
 					}
-					self.response_chan <- resp
 				}
 			}
+			self.updateDB(self.last_item_time)
+
+			self.response_chan <- resp
+
+			// TODO extract proper amount of time to sleep.
+
 			log.Printf("Sleeping %v seconds for %v", to_sleep, self.URI)
 			Sleep(time.Second * time.Duration(to_sleep))
 		}
 	}
+	return false
 }
 
-func (self *FeedWatcher) updateDB() error {
-	return nil
+func (self *FeedWatcher) updateDB(last_update time.Time) {
+	self.db.UpdateFeedLastItemTimeByUrl(self.URI, last_update)
 }
 
-func (self *FeedWatcher) filterNewItems(f *rss.Feed) {
-	new_items := []*rss.Item{}
-	for _, channel := range f.Channels {
-		log.Printf("Got channel: %s", channel.Title)
-		handle_all := self.last_item_time.IsZero()
-		for _, item := range channel.Items {
-			d, err := parseDate(item.PubDate)
-			if err != nil {
-				log.Printf("Couldn't parse %s, skipping", item.PubDate)
-				continue
-			}
-			if handle_all || d.After(self.last_item_time) {
-				if d.After(self.last_item_time) {
-					log.Printf("Got newer item date (%v) > (%v)", d, self.last_item_time)
-					self.last_item_time = d
-				}
-				new_items = append(new_items, item)
-			}
+func (self *FeedWatcher) filterNewItems(stories []*feed.Story, last_date time.Time) []*feed.Story {
+	log.Printf("Filtering stories older than %v", last_date)
+	new_stories := []*feed.Story{}
+	for _, story := range stories {
+		if story.Published.After(self.last_item_time) {
+			new_stories = append(new_stories, story)
 		}
-		channel.Items = new_items
 	}
+	return new_stories
 }
 
-func (self *FeedWatcher) sendMail(item *rss.Item) error {
+func (self *FeedWatcher) sendMail(item *feed.Story) error {
 	req := &mail.MailRequest{
 		Item:       item,
 		ResultChan: make(chan error),

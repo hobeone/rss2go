@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"io/ioutil"
 	"fmt"
-	"time"
 	"github.com/hobeone/rss2go/feed_watcher"
 )
 
@@ -34,7 +33,6 @@ func FeedCrawler(crawl_requests chan *feed_watcher.FeedCrawlRequest) {
 				continue
 			}
 			resp.Body, resp.Error = ioutil.ReadAll(r.Body)
-			resp.CrawlTime = time.Now()
 			log.Printf("Crawled %v: %v", req.URI, r.Status)
 			req.ResponseChan <- resp
 		}
