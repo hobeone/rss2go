@@ -1,13 +1,15 @@
 package feed_watcher
 
 import (
-	"log"
-	"time"
-	"errors"
 	"code.google.com/p/go-charset/charset"
 	_ "code.google.com/p/go-charset/data"
+	"errors"
+	"github.com/hobeone/rss2go/db"
+	"github.com/hobeone/rss2go/mail"
 	rss "github.com/jteeuwen/go-pkg-rss"
 	"github.com/moovweb/gokogiri"
+	"log"
+	"time"
 )
 
 // Allow for mocking out in test
@@ -20,7 +22,7 @@ var Sleep = func(d time.Duration) {
 //FeedCrawlRequest
 //
 type FeedCrawlRequest struct {
-	URI string
+	URI          string
 	ResponseChan chan *FeedCrawlResponse
 }
 
@@ -28,11 +30,11 @@ type FeedCrawlRequest struct {
 // FeedCrawlResponse
 //
 type FeedCrawlResponse struct {
-	URI string
-	Body []byte
-	Feed rss.Feed
-	Error error
-	CrawlTime time.Time
+	URI          string
+	Body         []byte
+	Feed         rss.Feed
+	Error        error
+	CrawlTime    time.Time
 	LastItemTime time.Time
 }
 
@@ -40,35 +42,41 @@ type FeedCrawlResponse struct {
 // FEEDWATCHER
 //
 type FeedWatcher struct {
-	URI           string
-	poll_now_chan chan int
-	exit_now_chan chan int
-	crawler_chan  chan *FeedCrawlRequest
-	response_chan chan *FeedCrawlResponse
-	polling bool // make sure only one PollFeed at a time
-	crawling bool // make sure only one crawl outstanding at a time
-	last_item_time time.Time
+	URI               string
+	poll_now_chan     chan int
+	exit_now_chan     chan int
+	crawler_chan      chan *FeedCrawlRequest
+	response_chan     chan *FeedCrawlResponse
+	mailer_chan       chan *mail.MailRequest
+	polling           bool // make sure only one PollFeed at a time
+	crawling          bool // make sure only one crawl outstanding at a time
+	last_item_time    time.Time
 	min_sleep_seconds int64
 	max_sleep_seconds int64
+	db                db.FeedDbDispatcher
 }
 
 func NewFeedWatcher(
 	uri string,
-	crawler_chan chan*FeedCrawlRequest,
-	response_channel chan*FeedCrawlResponse,
+	crawler_chan chan *FeedCrawlRequest,
+	response_channel chan *FeedCrawlResponse,
+	mail_channel chan *mail.MailRequest,
+	db db.FeedDbDispatcher,
 	last_item_time time.Time,
 ) *FeedWatcher {
 	return &FeedWatcher{
-		URI:           uri,
-		poll_now_chan: make(chan int),
-		exit_now_chan: make(chan int),
-		crawler_chan:  crawler_chan,
-		response_chan: response_channel,
-		polling: false,
-		crawling: false,
+		URI:               uri,
+		poll_now_chan:     make(chan int),
+		exit_now_chan:     make(chan int),
+		crawler_chan:      crawler_chan,
+		response_chan:     response_channel,
+		mailer_chan:       mail_channel,
+		polling:           false,
+		crawling:          false,
 		min_sleep_seconds: 60,
 		max_sleep_seconds: 3600,
-		last_item_time: last_item_time,
+		last_item_time:    last_item_time,
+		db:                db,
 	}
 }
 
@@ -123,7 +131,7 @@ func (self *FeedWatcher) PollFeed() bool {
 
 	for {
 		select {
-		case <- self.exit_now_chan:
+		case <-self.exit_now_chan:
 			log.Printf("Stopping poll of %v", self.URI)
 			return true
 		default:
@@ -146,20 +154,28 @@ func (self *FeedWatcher) PollFeed() bool {
 					if err != nil {
 						log.Printf("Error parsing feed response from %s: %s", resp.URI,
 							err.Error())
-					  resp.Error = err
+						resp.Error = err
 					} else {
 						resp.Feed = *feed
 						for _, channel := range feed.Channels {
 							log.Printf("Channel has %d items", len(channel.Items))
 						}
 
-						self.handleNewItems(feed)
+						self.filterNewItems(feed)
 						resp.LastItemTime = self.last_item_time
 						for _, channel := range feed.Channels {
-							log.Printf("Channel has %d items", len(channel.Items))
+							log.Printf("Channel %s has new %d items", channel.Title, len(channel.Items))
+							for _, item := range channel.Items {
+								log.Printf("Got Item: %s, sending for mail.", item.Title)
+								err = self.sendMail(item)
+								if err != nil {
+									log.Printf("Error sending mail: %s", err.Error())
+								}
+							}
 						}
 						feed.CanUpdate()
 						to_sleep = feed.SecondsTillUpdate()
+						self.updateDB()
 					}
 					self.response_chan <- resp
 				}
@@ -170,7 +186,11 @@ func (self *FeedWatcher) PollFeed() bool {
 	}
 }
 
-func (self *FeedWatcher) handleNewItems(f *rss.Feed) {
+func (self *FeedWatcher) updateDB() error {
+	return nil
+}
+
+func (self *FeedWatcher) filterNewItems(f *rss.Feed) {
 	new_items := []*rss.Item{}
 	for _, channel := range f.Channels {
 		log.Printf("Got channel: %s", channel.Title)
@@ -187,33 +207,38 @@ func (self *FeedWatcher) handleNewItems(f *rss.Feed) {
 					self.last_item_time = d
 				}
 				new_items = append(new_items, item)
-				log.Printf("-------------------------")
-				log.Printf("Got Item: %s", item.Title)
-				log.Printf("Got Item: %+v", d)
-				log.Printf("-------------------------")
 			}
 		}
 		channel.Items = new_items
-		log.Printf("Found %d new items", len(channel.Items))
 	}
+}
+
+func (self *FeedWatcher) sendMail(item *rss.Item) error {
+	req := &mail.MailRequest{
+		Item:       item,
+		ResultChan: make(chan error),
+	}
+	self.mailer_chan <- req
+	resp := <-req.ResultChan
+	return resp
 }
 
 func (self *FeedWatcher) doCrawl() (r *FeedCrawlResponse) {
 	if self.crawling {
-		return &FeedCrawlResponse {
-			URI: self.URI,
-			Error: errors.New("Already crawling "+self.URI),
+		return &FeedCrawlResponse{
+			URI:   self.URI,
+			Error: errors.New("Already crawling " + self.URI),
 		}
 	}
 	self.lockCrawl()
 	defer self.unlockCrawl()
 
-	req := &FeedCrawlRequest {
-		URI: self.URI,
+	req := &FeedCrawlRequest{
+		URI:          self.URI,
 		ResponseChan: make(chan *FeedCrawlResponse),
 	}
 	self.crawler_chan <- req
-	resp := <- req.ResponseChan
+	resp := <-req.ResponseChan
 	return resp
 }
 

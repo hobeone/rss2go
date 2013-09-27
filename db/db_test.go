@@ -6,16 +6,6 @@ import (
 	"time"
 )
 
-func TestDbTest(t *testing.T) {
-	orm := CreateAndOpenDb("test.db", false)
-
-	_, err := GetAllFeeds(orm)
-
-	if err != nil {
-		t.Error("Error getting all feeds: ", err.Error())
-	}
-}
-
 func TestFeedCreation(t *testing.T) {
 	orm := CreateAndOpenDb("test.db", false)
 
@@ -38,28 +28,26 @@ func TestFeedCreation(t *testing.T) {
 }
 
 func TestUpdateFeedPollTime(t *testing.T) {
-	orm := CreateAndOpenDb("test.db", false)
+	d := NewDbDispatcher("test.db", false)
 
 	var feed FeedInfo
 	feed.Name = "Test Feed"
 	feed.Url = "https://testfeed.com/test"
 	feed.LastPollTime = *new(time.Time)
-	err := orm.Save(&feed)
+	err := d.OrmHandle.Save(&feed)
 	if err != nil {
 		t.Fatal("Error saving test user:", err)
 	}
 
-	err = UpdateFeedPollTime(orm, &feed)
+	err = d.UpdateFeedLastItemTimeByUrl(feed.Url, feed.LastPollTime)
 	if err != nil {
 		t.Fatal("Error updating test feed:", err.Error())
 	}
 
-
 	var fetched_feed FeedInfo
-	orm.Where(feed.Id).Find(&fetched_feed)
+	d.OrmHandle.Where(feed.Id).Find(&fetched_feed)
 
 	if fetched_feed.LastPollTime == feed.LastPollTime {
 		t.Error("UpdateFeedPollTime didn't update the poll time.")
 	}
-
 }

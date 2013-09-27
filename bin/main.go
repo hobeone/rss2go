@@ -5,5 +5,5 @@ import (
 )
 
 func main() {
-	rssgomail.RunCollector()
+	rss2go.RunCollector()
 }

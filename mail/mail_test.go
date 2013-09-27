@@ -2,24 +2,78 @@ package mail
 
 import (
 	"testing"
-	rss "github.com/jteeuwen/go-pkg-rss"
+	"github.com/jpoehls/gophermail"
 )
 
-func TestMail(t *testing.T) {
-	m := NewMailDispatcher(
-		"test@test.com","recipient@gmail.com")
-	go m.DispatchLoop()
+func TestSendMailWithSendmail(t *testing.T) {
+	d := NewMailDispatcher(
+		"test@test.com",
+		"recipient@test.com",
+		true,
+		"/bin/true",
+		"",
+		"",
+		"",
+	)
 
-	f := &rss.Item {
-		Title: "Testing the Mailer...",
-		Source: &rss.Source {
-			Url: "http://testing.test/item_url",
-			Text: "Item Url Name",
-		},
-		Content: &rss.Content {
-			Text: "Test Content",
-		},
+	msg := &gophermail.Message{
+		From:     "from@example.com",
+		To:       []string{"to@example.com"},
+		Subject:  "Testing subject",
+		Body:     "Test Body",
 	}
 
-	m.OutgoingMail <- f
+	result := d.sendMailWithSendmail(msg)
+
+	if result != nil {
+		t.Error("Sending to /bin/true should always work.")
+	}
+
+
+	d = NewMailDispatcher(
+		"test@test.com",
+		"recipient@test.com",
+		true,
+		"/bin/false",
+		"",
+		"",
+		"",
+	)
+	result = d.sendMailWithSendmail(msg)
+
+	if result == nil {
+		t.Error("Sending to /bin/false should always fail.")
+	}
+}
+
+func TestObjectCreation(t *testing.T) {
+	d := NewMailDispatcher(
+		"test@test.com",
+		"recipient@test.com",
+		false,
+		"",
+		"localhost:25",
+		"testuser",
+		"testpass",
+	)
+
+	if d.MtaBinary != MTA_BINARY {
+		t.Error("NewMailDispatcher should set the MTA to the default when given and empty string.")
+	}
+
+	defer func() {
+		if err := recover(); err == nil {
+			t.Error("NewMailDispatcher should fail on non existing MTA path.")
+		}
+	}()
+
+	d = NewMailDispatcher(
+		"test@test.com",
+		"recipient@test.com",
+		true,
+		"/notexist",
+		"",
+		"",
+		"",
+	)
 }

@@ -29,7 +29,18 @@ func TestDefaultsGetOverridden(t *testing.T) {
 	if err != nil {
 		t.Fatal("Expected no errors when parsing: ", path)
 	}
-	if c.Mail.Smtp {
+	if c.Mail.UseSmtp {
 		t.Fatal("Expected c.Mail.Smtp to be false")
+	}
+}
+
+func TestSendNoMailSetter(t *testing.T) {
+	c := NewConfig()
+	if c.Mail.SendNoMail == true {
+		t.Error("SendNoMail should be false.")
+	}
+	c.Mail.SendNoMail = true
+	if c.Mail.SendNoMail == false {
+		t.Error("SendNoMail should be true.")
 	}
 }
