@@ -59,6 +59,8 @@ func NewFeedWatcher(
 	mail_channel chan *mail.MailRequest,
 	db db.FeedDbDispatcher,
 	last_item_time time.Time,
+	min_sleep int64,
+	max_sleep int64,
 ) *FeedWatcher {
 	return &FeedWatcher{
 		URI:               uri,
@@ -69,8 +71,8 @@ func NewFeedWatcher(
 		mailer_chan:       mail_channel,
 		polling:           false,
 		crawling:          false,
-		min_sleep_seconds: 60,
-		max_sleep_seconds: 3600,
+		min_sleep_seconds: min_sleep,
+		max_sleep_seconds: max_sleep,
 		last_item_time:    last_item_time,
 		db:                db,
 	}
@@ -133,10 +135,11 @@ func (self *FeedWatcher) PollFeed() bool {
 				continue
 			}
 			log.Printf("Got response to crawl of %v", resp.URI)
-			feed, stories := feed.ParseFeed(resp.URI, resp.Body)
+			feed, stories, errors := feed.ParseFeed(resp.URI, resp.Body)
 
 			if feed == nil || stories == nil {
-				log.Printf("Error parsing response from %s", resp.URI)
+				log.Printf("Error parsing response from %s: %s", resp.URI, errors[0])
+				resp.Error = errors[0]
 				self.response_chan <- resp
 				continue
 			}

@@ -72,12 +72,24 @@ func TestEndToEndIntegration(t *testing.T) {
 		log.Fatalf("Error reading feeds: %s", err.Error())
 	}
 
-	mailer := mail.CreateAndStartStubMailer()
+	config.Mail.ToAddress = "test@localhost"
+	config.Mail.FromAddress = "test_from@localhost"
+	config.Mail.UseSendmail = true
+	config.Mail.MtaPath = "/bin/true"
+	mailer := mail.CreateAndStartMailer(config)
 
 	_, response_channel := CreateAndStartFeedWatchers(
 		all_feeds, config, mailer, db)
 
-	for i := 0; i < 3; i++ {
-		_ = <-response_channel
+	resp := <-response_channel
+	if len(resp.Items) != 25 {
+		t.Errorf("Expected 25 items from the feed. Got %d", len(resp.Items))
 	}
+
+	resp = <-response_channel
+	if len(resp.Items) != 0 {
+		t.Errorf("Expected 0 items from the feed. Got %d", len(resp.Items))
+	}
+
+
 }

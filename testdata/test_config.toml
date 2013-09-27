@@ -1,13 +1,16 @@
 [mail]
-sendmail = true
-smtp = false
+useSendmail = false
+useSmtp = true
+fromAddress = "rss2go@example.net"
+toAddress = "example@gmail.com"
+smtp_server = "mail.gmail.com"
+smtp_username = "example_user@gmail.com"
+smtp_password = "example_password"
 
 [crawl]
 maxCrawlers = 10
 minInterval = 300
 maxInterval = 3600
 
-[feeds]
-  urls = [
-    "http://arstechnica.com/index.ars/rss",
-  ]
+[db]
+path = "foo.db"

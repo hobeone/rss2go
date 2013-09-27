@@ -169,6 +169,7 @@ type Story struct {
 	Author       string
 	Summary      string
 	MediaContent string
+	ParentFeed   *Feed
 
 	Content string
 }
@@ -189,7 +190,7 @@ func parseDate(feed *Feed, ds ...string) (t time.Time, err error) {
 	return
 }
 
-func ParseFeed(u string, b []byte) (*Feed, []*Story) {
+func ParseFeed(u string, b []byte) (*Feed, []*Story, []error) {
 	f := Feed{Url: u}
 	var s []*Story
 
@@ -221,6 +222,7 @@ func ParseFeed(u string, b []byte) (*Feed, []*Story) {
 			st := Story{
 				Id:    i.ID,
 				Title: i.Title,
+				ParentFeed: &f,
 			}
 			if t, err := parseDate(&f, string(i.Updated)); err == nil {
 				st.Updated = t
@@ -269,6 +271,7 @@ func ParseFeed(u string, b []byte) (*Feed, []*Story) {
 			st := Story{
 				Link:   i.Link,
 				Author: i.Author,
+				ParentFeed: &f,
 			}
 			if i.Title != "" {
 				st.Title = i.Title
@@ -315,6 +318,7 @@ func ParseFeed(u string, b []byte) (*Feed, []*Story) {
 				Title:  i.Title,
 				Link:   i.Link,
 				Author: i.Creator,
+				ParentFeed: &f,
 			}
 			st.Content = html.UnescapeString(i.Description)
 			if t, err := parseDate(&f, i.Date); err == nil {
@@ -330,7 +334,7 @@ func ParseFeed(u string, b []byte) (*Feed, []*Story) {
 	log.Printf("atom parse error: %s", atomerr.Error())
 	log.Printf("xml parse error: %s", rsserr.Error())
 	log.Printf("rdf parse error: %s", rdferr.Error())
-	return nil, nil
+	return nil, nil, []error{atomerr, rsserr, rdferr}
 }
 
 func findBestAtomLink(links []atom.Link) atom.Link {
@@ -360,7 +364,7 @@ func findBestAtomLink(links []atom.Link) atom.Link {
 	return bestlink
 }
 
-func parseFix(f *Feed, ss []*Story) (*Feed, []*Story) {
+func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, []error) {
 	f.Checked = time.Now()
 	//f.Image = loadImage(f)
 
@@ -395,7 +399,7 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story) {
 				s.Id = s.Title
 			} else {
 				log.Printf("story has no id: %v", s)
-				return nil, nil
+				return nil, nil, []error{}
 			}
 		}
 		// if a story doesn't have a link, see if its id is a URL
@@ -420,5 +424,5 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story) {
 		s.Content, s.Summary = Sanitize(s.Content, su)
 	}
 
-	return f, ss
+	return f, ss, []error{}
 }

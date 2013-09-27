@@ -54,6 +54,10 @@ func NewMailDispatcher(
 		mta_binary_name = c
 	}
 
+	if to_address == "" {
+		panic("to_address can't be blank.")
+	}
+
 	return &MailDispatcher{
 		OutgoingMail: make(chan *MailRequest),
 		ToAddress:    to_address,
@@ -73,22 +77,24 @@ func CreateAndStartMailer(config config.Config) *MailDispatcher {
 		config.Mail.ToAddress,
 		config.Mail.FromAddress,
 		config.Mail.UseSendmail,
-//		config.Mail.MtaPath,
-		"/bin/true",
+		config.Mail.MtaPath,
 		config.Mail.SmtpServer,
 		config.Mail.SmtpUsername,
 		config.Mail.SmtpPassword,
 	)
 	if config.Mail.SendNoMail {
+		log.Print("Setting dry run as configured.")
 		mailer.SetDryRun(true)
 	}
+	log.Printf("Created new mailer: %#v", mailer)
 	go mailer.DispatchLoop()
 	return mailer
 }
 
 func CreateAndStartStubMailer() *MailDispatcher {
 	// Start Mailer
-	mailer := NewMailDispatcher("to@exmaple.com", "from@example.com", false, "", "", "", "")
+	mailer := NewMailDispatcher(
+		"to@exmaple.com", "from@example.com", false, "", "", "", "")
 	mailer.SetDryRun(true)
 	go mailer.DispatchLoop()
 	return mailer
@@ -98,12 +104,14 @@ func (self *MailDispatcher) SetDryRun(v bool) {
 	self.stubOutMail = v
 }
 
-func (self *MailDispatcher) sendMailWithSendmail(msg *gophermail.Message) error {
+func (self *MailDispatcher) sendMailWithSendmail(
+	msg *gophermail.Message) error {
 	cmd := exec.Command(self.MtaBinary, "-t")
 
 	msgBytes, err := msg.Bytes()
 	if err != nil {
-		return fmt.Errorf("Error converting message to text: %s", err.Error())
+		return fmt.Errorf(
+			"Error converting message to text: %s", err.Error())
 	}
 	cmd.Stdin = bytes.NewReader(msgBytes)
 
@@ -137,7 +145,7 @@ func (self *MailDispatcher) handleMail(m *feed.Story) error {
 	msg := &gophermail.Message{
 		From:     self.FromAddress,
 		To:       []string{self.ToAddress},
-		Subject:  m.Title,
+		Subject:  fmt.Sprintf("%s: %s", m.ParentFeed.Title, m.Title),
 		Body:     m.Content, // Convert to plain text
 		HTMLBody: m.Content,
 	}

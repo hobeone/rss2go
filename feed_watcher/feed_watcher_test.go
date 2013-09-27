@@ -37,7 +37,7 @@ func TestNewFeedWatcher(t *testing.T) {
 	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
 	db := new(FakeDbDispatcher)
 	u := "http://test"
-	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, db, *new(time.Time))
+	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, db, *new(time.Time), 10, 100)
 	if n.URI != u {
 		t.Error("URI not set correctly: %v != %v ", u, n.URI)
 	}
@@ -52,7 +52,7 @@ func TestFeedWatcherPollLocking(t *testing.T) {
 	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
 	db := new(FakeDbDispatcher)
 	u := "http://test"
-	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, db, *new(time.Time))
+	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, db, *new(time.Time), 10, 100)
 
 	if n.Polling() {
 		t.Error("A new watcher shouldn't be polling")
@@ -69,7 +69,7 @@ func TestFeedWatcherPolling(t *testing.T) {
 	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
 	db := new(FakeDbDispatcher)
 	u := "http://test/test.rss"
-	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, db, *new(time.Time))
+	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, db, *new(time.Time), 10, 100)
 
 	SleepForce()
 	go n.PollFeed()
@@ -112,7 +112,7 @@ func TestFeedWatcherWithMalformedFeed(t *testing.T) {
 	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
 	db := new(FakeDbDispatcher)
 	u := "http://test/test.rss"
-	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, db, *new(time.Time))
+	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, db, *new(time.Time), 10, 100)
 
 	Sleep = func(d time.Duration) {
 		fmt.Println("Called mock sleep")
@@ -144,10 +144,10 @@ func TestFeedWatcherWithLastDateSet(t *testing.T) {
 	db := new(FakeDbDispatcher)
 	u := "http://test/test.rss"
 	last_date := time.Date(2013, time.December, 1, 1, 0, 0, 0, time.UTC)
-	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, db, last_date)
+	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, db, last_date, 30, 100)
 
 	Sleep = func(d time.Duration) {
-		expected := time.Minute * time.Duration(30)
+		expected := time.Second * time.Duration(30)
 		if d != expected {
 			t.Fatalf("Expected to sleep for %+v. Got %+v", expected, d)
 		}

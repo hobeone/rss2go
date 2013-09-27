@@ -32,8 +32,8 @@ type dbConfig struct {
 
 type crawlConfig struct {
 	MaxCrawlers int
-	MinInterval int // Seconds
-	MaxInterval int // Seconds
+	MinInterval int64 // Seconds
+	MaxInterval int64 // Seconds
 }
 type feedsConfig struct {
 	Urls []string
@@ -59,6 +59,6 @@ func NewConfig() Config {
 }
 
 func (self *Config) ReadConfig(config_path string) error {
-	_, err := toml.DecodeFile(config_path, self)
+	_, err := toml.DecodeFile(config_path, &self)
 	return err
 }

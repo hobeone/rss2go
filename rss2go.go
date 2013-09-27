@@ -33,6 +33,7 @@ func startPollers(
 	response_channel chan *feed_watcher.FeedCrawlResponse,
 	mail_chan chan *mail.MailRequest,
 	db db.FeedDbDispatcher,
+	config config.Config,
 ) map[string]*feed_watcher.FeedWatcher {
 	// make feeds unique
 	feeds := make(map[string]*feed_watcher.FeedWatcher)
@@ -43,7 +44,14 @@ func startPollers(
 		}
 
 		feeds[f.Url] = feed_watcher.NewFeedWatcher(
-			f.Url, http_crawl_channel, response_channel, mail_chan, db, f.LastItemTime,
+			f.Url,
+			http_crawl_channel,
+			response_channel,
+			mail_chan,
+			db,
+			f.LastItemTime,
+			config.Crawl.MinInterval,
+			config.Crawl.MaxInterval,
 		)
 		go feeds[f.Url].PollFeed()
 	}
@@ -63,7 +71,9 @@ func CreateAndStartFeedWatchers(
 	response_channel := make(chan *feed_watcher.FeedCrawlResponse)
 
 	// start crawler pool
-	crawler.StartCrawlerPool(config.Crawl.MaxCrawlers, http_crawl_channel)
+	crawler.StartCrawlerPool(
+		config.Crawl.MaxCrawlers,
+		http_crawl_channel)
 
 	// Start Polling
 	return startPollers(
@@ -72,6 +82,7 @@ func CreateAndStartFeedWatchers(
 		response_channel,
 		mailer.OutgoingMail,
 		db,
+		config,
 	), response_channel
 }
 
@@ -93,9 +104,10 @@ func RunCollector() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Printf("Config contents: %#v\n", &config)
 
 	// Override config settings from flags:
-	config.Mail.SendNoMail = !*sendmail
+	config.Mail.SendNoMail = *sendmail
 
 	mailer := mail.CreateAndStartMailer(config)
 
