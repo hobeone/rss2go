@@ -3,6 +3,7 @@ package feed_watcher
 import (
 	"fmt"
 	"github.com/hobeone/rss2go/db"
+	"github.com/hobeone/rss2go/feed"
 	"github.com/hobeone/rss2go/mail"
 	"io/ioutil"
 	"testing"
@@ -17,6 +18,13 @@ func SleepForce() {
 }
 
 type FakeDbDispatcher struct {
+	Guids []string
+}
+
+func NewFakeDbDispatcher(guids []string) *FakeDbDispatcher {
+	return &FakeDbDispatcher{
+		Guids: guids,
+	}
 }
 
 func (self *FakeDbDispatcher) GetAllFeeds() ([]db.FeedInfo, error) {
@@ -31,16 +39,32 @@ func (self *FakeDbDispatcher) UpdateFeedLastItemTimeByUrl(u string, t time.Time)
 	return nil
 }
 
+func (self *FakeDbDispatcher) GetFeedItemByGuid(guid string) (*db.FeedItem, error) {
+	return &db.FeedItem{}, nil
+}
+
+func (self *FakeDbDispatcher) RecordGuid(feed_id int, guid string) error {
+	return nil
+}
+
+func (self *FakeDbDispatcher) CheckGuidsForFeed(feed_id int, guids *[]string) (*[]string, error) {
+	return &[]string{}, nil
+}
+
+func MakeFeedInfo(url string) db.FeedInfo {
+	return db.FeedInfo{
+		Id:  1,
+		Url: url,
+	}
+}
+
 func TestNewFeedWatcher(t *testing.T) {
 	crawl_chan := make(chan *FeedCrawlRequest)
 	resp_chan := make(chan *FeedCrawlResponse)
 	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
-	db := new(FakeDbDispatcher)
-	u := "http://test"
-	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, db, *new(time.Time), 10, 100)
-	if n.URI != u {
-		t.Error("URI not set correctly: %v != %v ", u, n.URI)
-	}
+	db := NewFakeDbDispatcher([]string{})
+	u := MakeFeedInfo("http://test")
+	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, db, make([]string, 50), 10, 100)
 	if n.polling == true {
 		t.Error("polling attribute set is true")
 	}
@@ -50,9 +74,9 @@ func TestFeedWatcherPollLocking(t *testing.T) {
 	crawl_chan := make(chan *FeedCrawlRequest)
 	resp_chan := make(chan *FeedCrawlResponse)
 	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
-	db := new(FakeDbDispatcher)
-	u := "http://test"
-	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, db, *new(time.Time), 10, 100)
+	db := NewFakeDbDispatcher([]string{})
+	u := MakeFeedInfo("http://test")
+	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, db, make([]string, 50), 10, 100)
 
 	if n.Polling() {
 		t.Error("A new watcher shouldn't be polling")
@@ -67,15 +91,15 @@ func TestFeedWatcherPolling(t *testing.T) {
 	crawl_chan := make(chan *FeedCrawlRequest)
 	resp_chan := make(chan *FeedCrawlResponse)
 	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
-	db := new(FakeDbDispatcher)
-	u := "http://test/test.rss"
-	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, db, *new(time.Time), 10, 100)
+	db := NewFakeDbDispatcher([]string{})
+	u := MakeFeedInfo("http://test/test.rss")
+	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, db, make([]string, 50), 10, 100)
 
 	SleepForce()
 	go n.PollFeed()
 	req := <-crawl_chan
-	if req.URI != u {
-		t.Errorf("URI not set on request properly.  Expected: %+v Got: %+v", u, req.URI)
+	if req.URI != u.Url {
+		t.Errorf("URI not set on request properly.  Expected: %s Got: %s", u.Url, req.URI)
 	}
 
 	feed_resp, err := ioutil.ReadFile("../testdata/ars.rss")
@@ -84,7 +108,7 @@ func TestFeedWatcherPolling(t *testing.T) {
 	}
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   u,
+		URI:   u.Url,
 		Body:  feed_resp,
 		Error: nil,
 	}
@@ -95,7 +119,52 @@ func TestFeedWatcherPolling(t *testing.T) {
 	// Second Poll, should not have new items
 	req = <-crawl_chan
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   u,
+		URI:   u.Url,
+		Body:  feed_resp,
+		Error: nil,
+	}
+	go n.StopPoll()
+	resp = <-resp_chan
+	if len(resp.Items) != 0 {
+		t.Errorf("Expected 0 items from the feed. Got %d", len(resp.Items))
+	}
+	fmt.Printf("KnownGUids: %#v", n.KnownGuids)
+}
+
+func TestFeedWatcherPollingRssWithNoItemDates(t *testing.T) {
+	crawl_chan := make(chan *FeedCrawlRequest)
+	resp_chan := make(chan *FeedCrawlResponse)
+	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
+	db := NewFakeDbDispatcher([]string{})
+	u := MakeFeedInfo("http://test/bicycling_rss.xml")
+	n := NewFeedWatcher(
+		u, crawl_chan, resp_chan, mail_chan, db, make([]string, 50), 10, 100)
+
+	SleepForce()
+	go n.PollFeed()
+	req := <-crawl_chan
+	if req.URI != u.Url {
+		t.Errorf("URI not set on request properly.  Expected: %s Got: %s", u.Url, req.URI)
+	}
+
+	feed_resp, err := ioutil.ReadFile("../testdata/bicycling_rss.xml")
+	if err != nil {
+		t.Fatal("Error reading test feed.")
+	}
+
+	req.ResponseChan <- &FeedCrawlResponse{
+		URI:   u.Url,
+		Body:  feed_resp,
+		Error: nil,
+	}
+	resp := <-resp_chan
+	if len(resp.Items) != 20 {
+		t.Errorf("Expected 20 items from the feed. Got %d", len(resp.Items))
+	}
+	// Second Poll, should not have new items
+	req = <-crawl_chan
+	req.ResponseChan <- &FeedCrawlResponse{
+		URI:   u.Url,
 		Body:  feed_resp,
 		Error: nil,
 	}
@@ -110,9 +179,10 @@ func TestFeedWatcherWithMalformedFeed(t *testing.T) {
 	crawl_chan := make(chan *FeedCrawlRequest)
 	resp_chan := make(chan *FeedCrawlResponse)
 	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
-	db := new(FakeDbDispatcher)
-	u := "http://test/test.rss"
-	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, db, *new(time.Time), 10, 100)
+	db := NewFakeDbDispatcher([]string{})
+	u := MakeFeedInfo("http://test/test.rss")
+	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, db, make([]string,
+		50), 10, 100)
 
 	Sleep = func(d time.Duration) {
 		fmt.Println("Called mock sleep")
@@ -126,7 +196,7 @@ func TestFeedWatcherWithMalformedFeed(t *testing.T) {
 	req := <-crawl_chan
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   u,
+		URI:   u.Url,
 		Body:  []byte("Testing"),
 		Error: nil,
 	}
@@ -137,14 +207,12 @@ func TestFeedWatcherWithMalformedFeed(t *testing.T) {
 	}
 }
 
-func TestFeedWatcherWithLastDateSet(t *testing.T) {
+func TestFeedWatcherWithGuidsSet(t *testing.T) {
 	crawl_chan := make(chan *FeedCrawlRequest)
 	resp_chan := make(chan *FeedCrawlResponse)
 	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
-	db := new(FakeDbDispatcher)
-	u := "http://test/test.rss"
-	last_date := time.Date(2013, time.December, 1, 1, 0, 0, 0, time.UTC)
-	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, db, last_date, 30, 100)
+	db := NewFakeDbDispatcher([]string{})
+	u := MakeFeedInfo("http://test/test.rss")
 
 	Sleep = func(d time.Duration) {
 		expected := time.Second * time.Duration(30)
@@ -153,19 +221,22 @@ func TestFeedWatcherWithLastDateSet(t *testing.T) {
 		}
 		return
 	}
-	go n.PollFeed()
-	req := <-crawl_chan
-	if req.URI != u {
-		t.Errorf("URI not set on request properly.  Expected: %+v Got: %+v", u, req.URI)
-	}
 
 	feed_resp, err := ioutil.ReadFile("../testdata/ars.rss")
 	if err != nil {
 		t.Fatal("Error reading test feed.")
 	}
+	_, stories, _ := feed.ParseFeed(u.Url, feed_resp)
+	guids := make([]string, 25)
+	for _, i := range stories {
+		guids = append(guids, i.Id)
+	}
+	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, db, guids, 30, 100)
+	go n.PollFeed()
+	req := <-crawl_chan
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   u,
+		URI:   u.Url,
 		Body:  feed_resp,
 		Error: nil,
 	}

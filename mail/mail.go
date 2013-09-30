@@ -71,7 +71,7 @@ func NewMailDispatcher(
 	}
 }
 
-func CreateAndStartMailer(config config.Config) *MailDispatcher {
+func CreateAndStartMailer(config *config.Config) *MailDispatcher {
 	// Start Mailer
 	mailer := NewMailDispatcher(
 		config.Mail.ToAddress,
@@ -82,7 +82,7 @@ func CreateAndStartMailer(config config.Config) *MailDispatcher {
 		config.Mail.SmtpUsername,
 		config.Mail.SmtpPassword,
 	)
-	if config.Mail.SendNoMail {
+	if !config.Mail.SendMail {
 		log.Print("Setting dry run as configured.")
 		mailer.SetDryRun(true)
 	}
@@ -115,10 +115,10 @@ func (self *MailDispatcher) sendMailWithSendmail(
 	}
 	cmd.Stdin = bytes.NewReader(msgBytes)
 
-	output, err := cmd.CombinedOutput()
+	_, err = cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("Error running command \"%s %+v\": %s",
-			cmd.Path, cmd.Args, output)
+		return fmt.Errorf("Error running command %#v: %s",
+			cmd.Args, err)
 	}
 	log.Printf("Successfully sent mail: %s", msg.Subject)
 	return nil

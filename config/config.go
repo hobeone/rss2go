@@ -3,9 +3,9 @@ package config
 import "github.com/BurntSushi/toml"
 
 type Config struct {
-	Mail  mailConfig
-	Crawl crawlConfig
-	Db    dbConfig
+	Mail      mailConfig
+	Crawl     crawlConfig
+	Db        dbConfig
 	WebServer webConfig
 }
 
@@ -14,7 +14,7 @@ type webConfig struct {
 }
 
 type mailConfig struct {
-	SendNoMail   bool
+	SendMail     bool
 	UseSendmail  bool
 	UseSmtp      bool
 	MtaPath      string
@@ -26,7 +26,7 @@ type mailConfig struct {
 }
 
 type dbConfig struct {
-	Path string
+	Path     string
 	UpdateDb bool // if we should update db items during crawl
 }
 
@@ -39,20 +39,20 @@ type feedsConfig struct {
 	Urls []string
 }
 
-func NewConfig() Config {
-	return Config{
+func NewConfig() *Config {
+	return &Config{
 		Mail: mailConfig{
 			UseSendmail: true,
 			UseSmtp:     false,
 			FromAddress: "rss2go@localhost.localdomain",
-			SendNoMail:  false,
+			SendMail:    true,
 		},
 		Crawl: crawlConfig{
 			MaxCrawlers: 10,
 			MinInterval: 300,
 			MaxInterval: 86400,
 		},
-		WebServer: webConfig {
+		WebServer: webConfig{
 			ListenAddress: "localhost:7000",
 		},
 	}

@@ -2,52 +2,67 @@ package db
 
 import (
 	"testing"
-	_ "fmt"
 	"time"
+	"os"
 )
 
+func ResetDB() {
+	os.Remove("test.db")
+	return
+}
+
 func TestFeedCreation(t *testing.T) {
-	orm := CreateAndOpenDb("test.db", false)
+	ResetDB()
+	d := NewDbDispatcher("test.db", true, true)
 
 	var feed FeedInfo
 	feed.Name = "Test Feed"
 	feed.Url = "https://testfeed.com/test"
 	feed.LastPollTime = time.Now()
-	err := orm.Save(&feed)
+	err := d.OrmHandle.Save(&feed)
 	if err != nil {
-		t.Fatal("Error saving test user.")
+		t.Fatal("Error saving test feed.")
 	}
 
 	var fetched_feed FeedInfo
 
-	orm.Where(feed.Id).Find(&fetched_feed)
+	d.OrmHandle.Where(feed.Id).Find(&fetched_feed)
 
 	if !fetched_feed.LastItemTime.IsZero() {
 		t.Error("LastItemTime should be zero when not set.")
 	}
 }
 
-func TestUpdateFeedPollTime(t *testing.T) {
-	d := NewDbDispatcher("test.db", false)
+func TestCheckRecordGuid(t *testing.T) {
+	ResetDB()
 
-	var feed FeedInfo
-	feed.Name = "Test Feed"
-	feed.Url = "https://testfeed.com/test"
-	feed.LastPollTime = *new(time.Time)
+	d := NewDbDispatcher("test.db", true, true)
+	err := d.RecordGuid(1, "123")
+
+	if err != nil {
+		t.Errorf("Error recording guid: %s\n", err.Error())
+	}
+}
+
+func TestCheckGuidsForFeed(t *testing.T) {
+	ResetDB()
+	d := NewDbDispatcher("test.db", true, true)
+
+	guids := []string{"1","2","3"}
+
+	var feed FeedItem
+	feed.FeedInfoId = 1
+	feed.Guid = "1"
 	err := d.OrmHandle.Save(&feed)
 	if err != nil {
-		t.Fatal("Error saving test user:", err)
+		t.Fatalf("Error saving test item: %s", err)
 	}
 
-	err = d.UpdateFeedLastItemTimeByUrl(feed.Url, feed.LastPollTime)
+	known_guids, err := d.CheckGuidsForFeed(1, &guids)
 	if err != nil {
-		t.Fatal("Error updating test feed:", err.Error())
+		t.Fatalf("Error running SQL: %s", err.Error())
 	}
-
-	var fetched_feed FeedInfo
-	d.OrmHandle.Where(feed.Id).Find(&fetched_feed)
-
-	if fetched_feed.LastPollTime == feed.LastPollTime {
-		t.Error("UpdateFeedPollTime didn't update the poll time.")
+	if len(*known_guids) != 1 {
+		t.Fatalf("Error getting guids from db.  Expected 1, got: %#v", known_guids)
 	}
 }

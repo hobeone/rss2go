@@ -4,157 +4,30 @@
 package feed
 
 import (
+	"bytes"
 	"code.google.com/p/go-charset/charset"
 	_ "code.google.com/p/go-charset/data"
 	"encoding/xml"
 	"fmt"
-	"net/url"
-	"strings"
-	"time"
-	"log"
-	"html"
-	"bytes"
 	"github.com/hobeone/rss2go/atom"
 	"github.com/hobeone/rss2go/rdf"
 	"github.com/hobeone/rss2go/rss"
+	"github.com/moovweb/gokogiri"
+	"html"
+	"log"
+	"net/url"
+	"strings"
+	"time"
 )
 
-var dateFormats = []string{
-	"01-02-2006",
-	"01/02/2006 15:04:05 MST",
-	"02 Jan 2006 15:04 MST",
-	"02 Jan 2006 15:04:05 -0700",
-	"02 Jan 2006 15:04:05 MST",
-	"02 Jan 2006 15:04:05 UT",
-	"02 Jan 2006",
-	"02-01-2006 15:04:05 MST",
-	"02.01.2006 -0700",
-	"02.01.2006 15:04:05",
-	"02/01/2006 15:04:05",
-	"02/01/2006",
-	"06-1-2 15:04",
-	"06/1/2 15:04",
-	"1/2/2006 15:04:05 MST",
-	"1/2/2006 3:04:05 PM",
-	"15:04 02.01.2006 -0700",
-	"2 Jan 2006 15:04:05 MST",
-	"2 Jan 2006",
-	"2 January 2006 15:04:05 -0700",
-	"2 January 2006",
-	"2006 January 02",
-	"2006-01-02 00:00:00.0 15:04:05.0 -0700",
-	"2006-01-02 15:04",
-	"2006-01-02 15:04:05 -0700",
-	"2006-01-02 15:04:05 MST",
-	"2006-01-02 15:04:05-07:00",
-	"2006-01-02 15:04:05Z",
-	"2006-01-02",
-	"2006-01-02T15:04-07:00",
-	"2006-01-02T15:04:05 -0700",
-	"2006-01-02T15:04:05",
-	"2006-01-02T15:04:05-0700",
-	"2006-01-02T15:04:05-07:00",
-	"2006-01-02T15:04:05-07:00:00",
-	"2006-01-02T15:04:05:-0700",
-	"2006-01-02T15:04:05:00",
-	"2006-01-02T15:04:05Z",
-	"2006-1-02T15:04:05Z",
-	"2006-1-2 15:04:05",
-	"2006-1-2",
-	"2006/01/02",
-	"6-1-2 15:04",
-	"6/1/2 15:04",
-	"Jan 02 2006 03:04:05PM",
-	"Jan 2, 2006 15:04:05 MST",
-	"Jan 2, 2006 3:04:05 PM MST",
-	"January 02, 2006 03:04 PM",
-	"January 02, 2006 15:04",
-	"January 02, 2006 15:04:05 MST",
-	"January 02, 2006",
-	"January 2, 2006 03:04 PM",
-	"January 2, 2006 15:04:05 MST",
-	"January 2, 2006 15:04:05",
-	"January 2, 2006",
-	"January 2, 2006, 3:04 p.m.",
-	"Mon 02 Jan 2006 15:04:05 -0700",
-	"Mon 2 Jan 2006 15:04:05 MST",
-	"Mon Jan 2 15:04 2006",
-	"Mon Jan 2 15:04:05 2006 MST",
-	"Mon, 02 Jan 06 15:04:05 MST",
-	"Mon, 02 Jan 2006 15:04 -0700",
-	"Mon, 02 Jan 2006 15:04 MST",
-	"Mon, 02 Jan 2006 15:04:05 --0700",
-	"Mon, 02 Jan 2006 15:04:05 -07",
-	"Mon, 02 Jan 2006 15:04:05 -0700",
-	"Mon, 02 Jan 2006 15:04:05 -07:00",
-	"Mon, 02 Jan 2006 15:04:05 00",
-	"Mon, 02 Jan 2006 15:04:05 MST -0700",
-	"Mon, 02 Jan 2006 15:04:05 MST",
-	"Mon, 02 Jan 2006 15:04:05 MST-07:00",
-	"Mon, 02 Jan 2006 15:04:05 UT",
-	"Mon, 02 Jan 2006 15:04:05 Z",
-	"Mon, 02 Jan 2006 15:04:05",
-	"Mon, 02 Jan 2006 15:04:05MST",
-	"Mon, 02 Jan 2006 3:04:05 PM MST",
-	"Mon, 02 Jan 2006",
-	"Mon, 02 January 2006",
-	"Mon, 2 Jan 06 15:04:05 -0700",
-	"Mon, 2 Jan 06 15:04:05 MST",
-	"Mon, 2 Jan 15:04:05 MST",
-	"Mon, 2 Jan 2006 15:04",
-	"Mon, 2 Jan 2006 15:04:05 -0700 MST",
-	"Mon, 2 Jan 2006 15:04:05 -0700",
-	"Mon, 2 Jan 2006 15:04:05 MST",
-	"Mon, 2 Jan 2006 15:04:05 UT",
-	"Mon, 2 Jan 2006 15:04:05",
-	"Mon, 2 Jan 2006 15:04:05-0700",
-	"Mon, 2 Jan 2006 15:04:05MST",
-	"Mon, 2 Jan 2006 15:4:5 MST",
-	"Mon, 2 Jan 2006",
-	"Mon, 2 Jan 2006, 15:04 -0700",
-	"Mon, 2 January 2006 15:04:05 -0700",
-	"Mon, 2 January 2006 15:04:05 MST",
-	"Mon, 2 January 2006, 15:04 -0700",
-	"Mon, 2 January 2006, 15:04:05 MST",
-	"Mon, 2, Jan 2006 15:4",
-	"Mon, Jan 2 2006 15:04:05 -0700",
-	"Mon, Jan 2 2006 15:04:05 -700",
-	"Mon, January 02, 2006, 15:04:05 MST",
-	"Mon, January 2 2006 15:04:05 -0700",
-	"Mon,02 Jan 2006 15:04:05 -0700",
-	"Mon,02 January 2006 14:04:05 MST",
-	"Monday, 02 January 2006 15:04:05 -0700",
-	"Monday, 02 January 2006 15:04:05 MST",
-	"Monday, 02 January 2006 15:04:05",
-	"Monday, 2 Jan 2006 15:04:05 -0700",
-	"Monday, 2 Jan 2006 15:04:05 MST",
-	"Monday, 2 January 2006 15:04:05 -0700",
-	"Monday, 2 January 2006 15:04:05 MST",
-	"Monday, January 02, 2006",
-	"Monday, January 2, 2006 03:04 PM",
-	"Monday, January 2, 2006 15:04:05 MST",
-	"Monday, January 2, 2006",
-	"Updated January 2, 2006",
-	"mon,2 Jan 2006 15:04:05 MST",
-	time.ANSIC,
-	time.RFC1123,
-	time.RFC1123Z,
-	time.RFC3339,
-	time.RFC822,
-	time.RFC822Z,
-	time.RFC850,
-	time.RubyDate,
-	time.UnixDate,
-}
-
 type Feed struct {
-	Url         string
-	Title       string
-	Updated time.Time
-	NextUpdate  time.Time
-	Link string
-	Checked time.Time
-	Image string
+	Url        string
+	Title      string
+	Updated    time.Time
+	NextUpdate time.Time
+	Link       string
+	Checked    time.Time
+	Image      string
 }
 
 // parent: Feed, key: story ID
@@ -174,28 +47,28 @@ type Story struct {
 	Content string
 }
 
-func parseDate(feed *Feed, ds ...string) (t time.Time, err error) {
-	for _, d := range ds {
-		d = strings.TrimSpace(d)
-		if d == "" {
-			continue
-		}
-		for _, f := range dateFormats {
-			if t, err = time.Parse(f, d); err == nil {
-				return
-			}
-		}
-	}
-	err = fmt.Errorf("could not parse date: %v", strings.Join(ds, ", "))
-	return
-}
-
-func ParseFeed(u string, b []byte) (*Feed, []*Story, []error) {
+func ParseFeed(u string, b []byte) (*Feed, []*Story, error) {
 	f := Feed{Url: u}
 	var s []*Story
 
+	tr, err := charset.TranslatorTo("utf-8")
+	if err != nil {
+		return nil, nil, err
+	}
+	_, b, err = tr.Translate(b, true)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	doc, err := gokogiri.ParseXml(b)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	b = []byte(doc.String())
+
 	a := atom.Feed{}
-	var atomerr, rsserr, rdferr, err error
+	var atomerr, rsserr, rdferr error
 	var fb, eb *url.URL
 	d := xml.NewDecoder(bytes.NewReader(b))
 	d.CharsetReader = charset.NewReader
@@ -220,8 +93,8 @@ func ParseFeed(u string, b []byte) (*Feed, []*Story, []error) {
 				eb = fb
 			}
 			st := Story{
-				Id:    i.ID,
-				Title: i.Title,
+				Id:         i.ID,
+				Title:      i.Title,
 				ParentFeed: &f,
 			}
 			if t, err := parseDate(&f, string(i.Updated)); err == nil {
@@ -269,8 +142,8 @@ func ParseFeed(u string, b []byte) (*Feed, []*Story, []error) {
 
 		for _, i := range r.Items {
 			st := Story{
-				Link:   i.Link,
-				Author: i.Author,
+				Link:       i.Link,
+				Author:     i.Author,
 				ParentFeed: &f,
 			}
 			if i.Title != "" {
@@ -314,10 +187,10 @@ func ParseFeed(u string, b []byte) (*Feed, []*Story, []error) {
 
 		for _, i := range rd.Item {
 			st := Story{
-				Id:     i.About,
-				Title:  i.Title,
-				Link:   i.Link,
-				Author: i.Creator,
+				Id:         i.About,
+				Title:      i.Title,
+				Link:       i.Link,
+				Author:     i.Creator,
 				ParentFeed: &f,
 			}
 			st.Content = html.UnescapeString(i.Description)
@@ -334,7 +207,7 @@ func ParseFeed(u string, b []byte) (*Feed, []*Story, []error) {
 	log.Printf("atom parse error: %s", atomerr.Error())
 	log.Printf("xml parse error: %s", rsserr.Error())
 	log.Printf("rdf parse error: %s", rdferr.Error())
-	return nil, nil, []error{atomerr, rsserr, rdferr}
+	return nil, nil, atomerr
 }
 
 func findBestAtomLink(links []atom.Link) atom.Link {
@@ -364,7 +237,7 @@ func findBestAtomLink(links []atom.Link) atom.Link {
 	return bestlink
 }
 
-func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, []error) {
+func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 	f.Checked = time.Now()
 	//f.Image = loadImage(f)
 
@@ -399,7 +272,7 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, []error) {
 				s.Id = s.Title
 			} else {
 				log.Printf("story has no id: %v", s)
-				return nil, nil, []error{}
+				return nil, nil, fmt.Errorf("story has no id: %v", s)
 			}
 		}
 		// if a story doesn't have a link, see if its id is a URL
@@ -424,5 +297,5 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, []error) {
 		s.Content, s.Summary = Sanitize(s.Content, su)
 	}
 
-	return f, ss, []error{}
+	return f, ss, nil
 }

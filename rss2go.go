@@ -2,28 +2,15 @@ package rss2go
 
 import (
 	"flag"
-	"fmt"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/mail"
+	"github.com/hobeone/rss2go/server"
 	"log"
-	"net/http"
 )
 
-func startHttpServer(config config.Config, feeds map[string]*feed_watcher.FeedWatcher) {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "Hello: I have %v feeds.\n", len(feeds))
-		for uri, f := range feeds {
-			fmt.Fprintf(w, "Feed %v polling? %v. crawling? %v\n", uri, f.Polling(),
-				f.Crawling())
-		}
-	})
-
-	log.Printf("Starting http server on %v", config.WebServer.ListenAddress)
-	log.Fatal(http.ListenAndServe(config.WebServer.ListenAddress, nil))
-}
 
 const DEFAULT_CONFIG = "~/.config/rssgomail/config.toml"
 
@@ -33,7 +20,7 @@ func startPollers(
 	response_channel chan *feed_watcher.FeedCrawlResponse,
 	mail_chan chan *mail.MailRequest,
 	db db.FeedDbDispatcher,
-	config config.Config,
+	config *config.Config,
 ) map[string]*feed_watcher.FeedWatcher {
 	// make feeds unique
 	feeds := make(map[string]*feed_watcher.FeedWatcher)
@@ -44,12 +31,12 @@ func startPollers(
 		}
 
 		feeds[f.Url] = feed_watcher.NewFeedWatcher(
-			f.Url,
+			f,
 			http_crawl_channel,
 			response_channel,
 			mail_chan,
 			db,
-			f.LastItemTime,
+			[]string{},
 			config.Crawl.MinInterval,
 			config.Crawl.MaxInterval,
 		)
@@ -60,7 +47,7 @@ func startPollers(
 
 func CreateAndStartFeedWatchers(
 	feeds []db.FeedInfo,
-	config config.Config,
+	config *config.Config,
 	mailer *mail.MailDispatcher,
 	db *db.DbDispatcher,
 ) (map[string]*feed_watcher.FeedWatcher,
@@ -88,7 +75,8 @@ func CreateAndStartFeedWatchers(
 
 func RunCollector() {
 	var config_file = flag.String("config_file", "", "Config file to use.")
-	var sendmail = flag.Bool("no_mail", false, "Actually send mail or not.")
+	var send_mail = flag.Bool("send_mail", true, "Actually send mail or not.")
+	var update_db = flag.Bool("db_updates", true, "Don't actually update feed info in the db.")
 
 	log.Println("Parsing flags...")
 	flag.Parse()
@@ -107,11 +95,12 @@ func RunCollector() {
 	log.Printf("Config contents: %#v\n", &config)
 
 	// Override config settings from flags:
-	config.Mail.SendNoMail = *sendmail
+	config.Mail.SendMail = *send_mail
+	config.Db.UpdateDb = *update_db
 
 	mailer := mail.CreateAndStartMailer(config)
 
-	db := db.NewDbDispatcher(config.Db.Path, false)
+	db := db.NewDbDispatcher(config.Db.Path, true, *update_db)
 
 	all_feeds, err := db.GetAllFeeds()
 	if err != nil {
@@ -122,8 +111,9 @@ func RunCollector() {
 
 	log.Printf("Got %d feeds to watch.\n", len(all_feeds))
 
-	go startHttpServer(config, feeds)
+	go server.StartHttpServer(config, feeds)
 
+	//TODO: figure out if we still need a response_channel
 	for {
 		_ = <-response_channel
 	}
