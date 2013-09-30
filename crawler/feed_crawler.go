@@ -8,33 +8,37 @@ import (
 	"net/http"
 )
 
+func GetFeed(url string) (*http.Response, error) {
+	log.Printf("Crawling %v", url)
+	r, err := http.Get(url)
+	if err != nil {
+		log.Printf("Error getting %s: %s", url, err)
+		return r, err
+	}
+	if r.StatusCode != http.StatusOK {
+		err = fmt.Errorf("Feed %s returned a non 200 status code: %s", url, r.Status)
+		log.Print(err)
+		return r, err
+	}
+	return r, nil
+}
+
 func FeedCrawler(crawl_requests chan *feed_watcher.FeedCrawlRequest) {
 	for {
 		select {
 		case req := <-crawl_requests:
 			resp := &feed_watcher.FeedCrawlResponse{}
 			resp.URI = req.URI
-			log.Printf("Crawling %v", req.URI)
-			r, err := http.Get(req.URI)
+			r, err := GetFeed(req.URI)
 			if err != nil {
 				resp.Body = make([]byte, 0)
 				resp.Error = err
-				log.Printf("Error getting %v: %v", req.URI, err)
-				req.ResponseChan <- resp
-				continue
-			}
-			defer r.Body.Close()
-			if r.StatusCode != http.StatusOK {
-				resp.Body = make([]byte, 0)
-				resp.Error = fmt.Errorf("Feed %v returned a non 200 status code: %v",
-					req.URI, r.Status)
-				log.Printf("Error getting %v: %v", req.URI, resp.Error)
 				req.ResponseChan <- resp
 				continue
 			}
 			resp.Body, resp.Error = ioutil.ReadAll(r.Body)
+			r.Body.Close()
 			resp.HttpResponseStatus = r.Status
-			log.Printf("Crawled %v: %v", req.URI, r.Status)
 			req.ResponseChan <- resp
 		}
 	}

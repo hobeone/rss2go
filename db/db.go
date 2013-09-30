@@ -7,6 +7,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"log"
 	"time"
+	"sync"
 )
 
 type FeedDbDispatcher interface {
@@ -14,6 +15,7 @@ type FeedDbDispatcher interface {
 	GetFeedItemByGuid(string) (*FeedItem, error)
 	RecordGuid(int, string) error
 	CheckGuidsForFeed(int, *[]string) (*[]string, error)
+	GetFeedByUrl(string) (*FeedInfo, error)
 }
 
 type FeedInfo struct {
@@ -66,6 +68,7 @@ func CreateAndOpenDb(db_path string, verbose bool) beedb.Model {
 type DbDispatcher struct {
 	OrmHandle beedb.Model
 	WriteUpdates bool
+	syncMutex sync.Mutex
 }
 
 func NewDbDispatcher(db_path string, verbose bool, write_updates bool) *DbDispatcher {
@@ -78,14 +81,24 @@ func NewDbDispatcher(db_path string, verbose bool, write_updates bool) *DbDispat
 // Not sure if I need to have just one writer but funneling everything through
 // the dispatcher for now.
 func (self *DbDispatcher) GetAllFeeds() (feeds []FeedInfo, err error) {
+	self.syncMutex.Lock()
+	defer self.syncMutex.Unlock()
 	err = self.OrmHandle.FindAll(&feeds)
 	return
+}
+
+func (self *DbDispatcher) GetFeedByUrl(url string) (*FeedInfo, error) {
+	feed := FeedInfo{}
+	err := self.OrmHandle.Where("url = ?", url).Find(&feed)
+	return &feed, err
 }
 
 func (self *DbDispatcher) GetFeedItemByGuid(guid string) (
 	feed_item *FeedItem, err error) {
 	//TODO: see if beedb will handle this correctly and protect against injection
 	//attacks.
+	self.syncMutex.Lock()
+	defer self.syncMutex.Unlock()
 	err = self.OrmHandle.Where("guid = ?", guid).Find(&feed_item)
 	return
 }
@@ -96,6 +109,9 @@ func (self *DbDispatcher) RecordGuid(feed_id int, guid string) (err error) {
 		var f FeedItem
 		f.FeedInfoId = feed_id
 		f.Guid = guid
+		self.syncMutex.Lock()
+		defer self.syncMutex.Unlock()
+
 		return self.OrmHandle.Save(&f)
 	}
 	return
@@ -114,6 +130,9 @@ func (self *DbDispatcher) CheckGuidsForFeed(feed_id int, guids *[]string) (*[]st
 	*/
 
 	var allitems []FeedItem
+	self.syncMutex.Lock()
+	defer self.syncMutex.Unlock()
+
 	err := self.OrmHandle.Where("feed_info_id=?", feed_id).GroupBy("guid").FindAll(&allitems)
 	if err != nil {
 		return &[]string{}, err

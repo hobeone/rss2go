@@ -121,7 +121,7 @@ func (self *FeedWatcher) Crawling() (r bool) {
 	return self.crawling
 }
 
-func (self *FeedWatcher) handleFeed() *FeedCrawlResponse {
+func (self *FeedWatcher) UpdateFeed() *FeedCrawlResponse {
 	log.Printf("Polling feed %v", self.FeedInfo.Url)
 	resp := self.doCrawl()
 
@@ -136,7 +136,6 @@ func (self *FeedWatcher) handleFeed() *FeedCrawlResponse {
 		if err != nil {
 			log.Printf("Error parsing response from %s: %#v", resp.URI, err)
 			resp.Error = err
-			self.response_chan <- resp
 		} else {
 			e := fmt.Errorf("No items found in %s", resp.URI)
 			log.Print(e)
@@ -198,7 +197,7 @@ func (self *FeedWatcher) PollFeed() bool {
 			log.Printf("Stopping poll of %v", self.FeedInfo.Url)
 			return true
 		default:
-			resp := self.handleFeed()
+			resp := self.UpdateFeed()
 			self.LastCrawlResponse = *resp
 			self.response_chan <- resp
 			self.Sleep(self.min_sleep_seconds)
