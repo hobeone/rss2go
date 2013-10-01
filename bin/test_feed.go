@@ -6,6 +6,7 @@ import (
 	"github.com/gonuts/flag"
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/feed"
+	"github.com/hobeone/rss2go/mail"
 	"os"
 	"io/ioutil"
 )
@@ -60,6 +61,10 @@ func testFeed(cmd *commander.Command, args []string) {
 	fmt.Printf("  NextUpdate: %s\n", feed.NextUpdate)
 	fmt.Printf("  Url: %s\n", feed.Link)
 	for i, s := range stories {
+		content := mail.FormatMessageBody(s)
 		fmt.Printf("%d)  %s\n", i, s.Title)
+		fmt.Println()
+		fmt.Printf("%s\n", content)
+		fmt.Println("")
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/feed"
+	"github.com/moovweb/gokogiri"
 )
 
 const MTA_BINARY = "sendmail"
@@ -142,16 +143,17 @@ func (self *MailDispatcher) DispatchLoop() {
 }
 
 func (self *MailDispatcher) handleMail(m *feed.Story) error {
+	if self.stubOutMail {
+		return nil
+	}
+
+	content := FormatMessageBody(m)
 	msg := &gophermail.Message{
 		From:     self.FromAddress,
 		To:       []string{self.ToAddress},
 		Subject:  fmt.Sprintf("%s: %s", m.ParentFeed.Title, m.Title),
-		Body:     m.Content, // Convert to plain text
-		HTMLBody: m.Content,
-	}
-
-	if self.stubOutMail {
-		return nil
+		Body:     content, //TODO Convert to plain text
+		HTMLBody: content,
 	}
 
 	if self.UseLocalMTA {
@@ -159,4 +161,23 @@ func (self *MailDispatcher) handleMail(m *feed.Story) error {
 	} else {
 		return self.sendMailWithSmtp(msg)
 	}
+}
+
+func FormatMessageBody(story *feed.Story) string {
+	// Convert content to HTML:
+	doc, err := gokogiri.ParseHtml([]byte(story.Content))
+	var content string
+	if err != nil {
+		log.Printf("Error converting mail content to HTML: %s", err.Error())
+		content = story.Content
+	} else {
+		orig_link := fmt.Sprintf(`
+<div class="original_link">
+<a href="%s">Original Article</a>
+</div><hr>`, story.Link)
+
+		doc.Root().FirstChild().AddPreviousSibling(orig_link)
+		content = doc.String()
+	}
+	return content
 }
