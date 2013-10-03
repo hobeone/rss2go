@@ -173,10 +173,14 @@ func FormatMessageBody(story *feed.Story) string {
 	} else {
 		orig_link := fmt.Sprintf(`
 <div class="original_link">
-<a href="%s">Original Article</a>
-</div><hr>`, story.Link)
+<a href="%s">%s</a>
+</div><hr>`, story.Link, story.Title)
 
-		doc.Root().FirstChild().AddPreviousSibling(orig_link)
+		if doc.Root() == nil {
+			doc, err = gokogiri.ParseHtml([]byte(orig_link))
+		} else {
+			doc.Root().FirstChild().AddPreviousSibling(orig_link)
+		}
 		content = doc.String()
 	}
 	return content

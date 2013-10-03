@@ -49,7 +49,8 @@ type Story struct {
 
 func ParseFeed(u string, b []byte) (*Feed, []*Story, error) {
 	f := Feed{Url: u}
-	var s []*Story
+	s := []*Story{}
+
 
 	tr, err := charset.TranslatorTo("utf-8")
 	if err != nil {
@@ -205,7 +206,7 @@ func ParseFeed(u string, b []byte) (*Feed, []*Story, error) {
 	}
 
 	log.Printf("atom parse error: %s", atomerr.Error())
-	log.Printf("xml parse error: %s", rsserr.Error())
+	log.Printf("rss parse error: %s", rsserr.Error())
 	log.Printf("rdf parse error: %s", rdferr.Error())
 	return nil, nil, atomerr
 }

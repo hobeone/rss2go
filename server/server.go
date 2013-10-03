@@ -7,11 +7,12 @@ import (
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/feed_watcher"
 "log"
+_ "net/http/pprof"
 
 )
 
 func StartHttpServer(config *config.Config, feeds map[string]*feed_watcher.FeedWatcher) {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/feedz", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Hello: I have %v feeds.\n", len(feeds))
 		mk := make([]string, len(feeds))
 		i := 0

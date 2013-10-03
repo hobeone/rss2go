@@ -27,6 +27,10 @@ func NewFakeDbDispatcher(guids []string) *FakeDbDispatcher {
 	}
 }
 
+func (self *FakeDbDispatcher) GetFeedByUrl(u string) (d *db.FeedInfo, e error) {
+	return
+}
+
 func (self *FakeDbDispatcher) GetAllFeeds() ([]db.FeedInfo, error) {
 	var feed db.FeedInfo
 	feed.Name = "Test Feed"

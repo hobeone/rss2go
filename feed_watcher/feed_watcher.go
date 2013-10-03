@@ -31,7 +31,7 @@ type FeedCrawlRequest struct {
 type FeedCrawlResponse struct {
 	URI                string
 	Body               []byte
-	Feed               feed.Feed
+	Feed               *feed.Feed
 	Items              []*feed.Story
 	HttpResponseStatus string
 	Error              error
@@ -53,7 +53,7 @@ type FeedWatcher struct {
 	max_sleep_seconds int64
 	db                db.FeedDbDispatcher
 	KnownGuids        map[string]bool
-	LastCrawlResponse FeedCrawlResponse
+	LastCrawlResponse *FeedCrawlResponse
 }
 
 func NewFeedWatcher(
@@ -83,7 +83,7 @@ func NewFeedWatcher(
 		max_sleep_seconds: max_sleep,
 		db:                db,
 		KnownGuids:        guids,
-		LastCrawlResponse: FeedCrawlResponse{},
+		LastCrawlResponse: &FeedCrawlResponse{},
 	}
 }
 
@@ -198,7 +198,7 @@ func (self *FeedWatcher) PollFeed() bool {
 			return true
 		default:
 			resp := self.UpdateFeed()
-			self.LastCrawlResponse = *resp
+			self.LastCrawlResponse = resp
 			self.response_chan <- resp
 			self.Sleep(self.min_sleep_seconds)
 		}

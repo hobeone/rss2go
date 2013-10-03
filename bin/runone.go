@@ -8,7 +8,9 @@ import (
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/mail"
+	"github.com/hobeone/rss2go/server"
 	"log"
+	"time"
 )
 
 func make_cmd_runone() *commander.Command {
@@ -28,6 +30,7 @@ func make_cmd_runone() *commander.Command {
 	cmdDaemon.Flag.Bool("send_mail", true, "Actually send mail or not.")
 	cmdDaemon.Flag.Bool("db_updates", true, "Don't actually update feed info in the db.")
 	cmdDaemon.Flag.String("config_file", "", "Config file to use.")
+	cmdDaemon.Flag.Int("loops", 1, "Number of times to pool this feed. -1 == forever.")
 
 	return cmdDaemon
 }
@@ -41,6 +44,7 @@ func runOne(cmd *commander.Command, args []string) {
 	send_mail := cmd.Flag.Lookup("send_mail").Value.Get().(bool)
 	update_db := cmd.Flag.Lookup("db_updates").Value.Get().(bool)
 	ConfigFile := cmd.Flag.Lookup("config_file").Value.Get().(string)
+	loops := cmd.Flag.Lookup("loops").Value.Get().(int)
 
 	if len(ConfigFile) == 0 {
 		log.Printf("No --config_file given.  Using default: %s\n", DEFAULT_CONFIG)
@@ -72,7 +76,7 @@ func runOne(cmd *commander.Command, args []string) {
 	response_channel := make(chan *feed_watcher.FeedCrawlResponse)
 
 	// start crawler pool
-	crawler.StartCrawlerPool(1,	http_crawl_channel)
+	crawler.StartCrawlerPool(1, http_crawl_channel)
 
 	fw := feed_watcher.NewFeedWatcher(
 		*feed,
@@ -84,5 +88,19 @@ func runOne(cmd *commander.Command, args []string) {
 		10,
 		100,
 	)
-	fw.UpdateFeed()
+	feeds := make(map[string]*feed_watcher.FeedWatcher)
+	feeds[fw.FeedInfo.Url] = fw
+	go server.StartHttpServer(config, feeds)
+
+	if loops == -1 {
+		for {
+			fw.UpdateFeed()
+			time.Sleep(time.Second * time.Duration(config.Crawl.MinInterval))
+		}
+	} else {
+		for i := 0; i < loops; i++ {
+			fw.UpdateFeed()
+			time.Sleep(time.Second * time.Duration(config.Crawl.MinInterval))
+		}
+	}
 }

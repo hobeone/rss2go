@@ -66,8 +66,6 @@ func daemon(cmd *commander.Command, args []string) {
 	log.Printf("Got %d feeds to watch.\n", len(all_feeds))
 
 	go server.StartHttpServer(config, feeds)
-
-	//TODO: figure out if we still need a response_channel
 	for {
 		_ = <-response_channel
 	}
