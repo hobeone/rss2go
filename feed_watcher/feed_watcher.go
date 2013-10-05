@@ -129,7 +129,8 @@ func (self *FeedWatcher) UpdateFeed() *FeedCrawlResponse {
 		log.Printf("Error getting feed %v: %v", self.FeedInfo.Url, resp.Error)
 		return resp
 	}
-	log.Printf("Got response to crawl of %v", resp.URI)
+	log.Printf("Got response to crawl of %v of length (%d)", resp.URI,
+		len(resp.Body))
 	feed, stories, err := feed.ParseFeed(resp.URI, resp.Body)
 
 	if feed == nil || stories == nil {

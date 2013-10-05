@@ -1,18 +1,17 @@
 package feed_watcher
 
 import (
-	"fmt"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed"
 	"github.com/hobeone/rss2go/mail"
 	"io/ioutil"
+	"log"
 	"testing"
 	"time"
 )
 
 func SleepForce() {
 	Sleep = func(d time.Duration) {
-		fmt.Println("mock sleep")
 		return
 	}
 }
@@ -51,6 +50,10 @@ func (self *FakeDbDispatcher) RecordGuid(feed_id int, guid string) error {
 	return nil
 }
 
+func (self *FakeDbDispatcher) AddFeed(name string, url string) (*db.FeedInfo, error) {
+	return &db.FeedInfo{}, nil
+}
+
 func (self *FakeDbDispatcher) CheckGuidsForFeed(feed_id int, guids *[]string) (*[]string, error) {
 	return &[]string{}, nil
 }
@@ -61,6 +64,22 @@ func MakeFeedInfo(url string) db.FeedInfo {
 		Url: url,
 	}
 }
+
+type NullWriter int
+
+func (NullWriter) Write([]byte) (int, error) { return 0, nil }
+
+func DisableLogging() {
+	log.SetOutput(new(NullWriter))
+}
+
+func init() {
+	DisableLogging()
+}
+
+/*
+* Tests
+ */
 
 func TestNewFeedWatcher(t *testing.T) {
 	crawl_chan := make(chan *FeedCrawlRequest)
@@ -132,7 +151,9 @@ func TestFeedWatcherPolling(t *testing.T) {
 	if len(resp.Items) != 0 {
 		t.Errorf("Expected 0 items from the feed. Got %d", len(resp.Items))
 	}
-	fmt.Printf("KnownGUids: %#v", n.KnownGuids)
+	if len(n.KnownGuids) != 26 {
+		t.Errorf("Expected 26 known GUIDs got %d", len(n.KnownGuids))
+	}
 }
 
 func TestFeedWatcherPollingRssWithNoItemDates(t *testing.T) {
@@ -189,11 +210,6 @@ func TestFeedWatcherWithMalformedFeed(t *testing.T) {
 		50), 10, 100)
 
 	Sleep = func(d time.Duration) {
-		fmt.Println("Called mock sleep")
-		expected := time.Minute * time.Duration(1)
-		if d != expected {
-			t.Fatalf("Expected to sleep for %+v. Got %+v", expected, d)
-		}
 		return
 	}
 	go n.PollFeed()
@@ -219,10 +235,6 @@ func TestFeedWatcherWithGuidsSet(t *testing.T) {
 	u := MakeFeedInfo("http://test/test.rss")
 
 	Sleep = func(d time.Duration) {
-		expected := time.Second * time.Duration(30)
-		if d != expected {
-			t.Fatalf("Expected to sleep for %+v. Got %+v", expected, d)
-		}
 		return
 	}
 

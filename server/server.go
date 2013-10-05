@@ -1,14 +1,13 @@
 package server
 
 import (
-	"net/http"
-	"sort"
 	"fmt"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/feed_watcher"
-"log"
-_ "net/http/pprof"
-
+	"log"
+	"net/http"
+	_ "net/http/pprof"
+	"sort"
 )
 
 func StartHttpServer(config *config.Config, feeds map[string]*feed_watcher.FeedWatcher) {
@@ -16,10 +15,10 @@ func StartHttpServer(config *config.Config, feeds map[string]*feed_watcher.FeedW
 		fmt.Fprintf(w, "Hello: I have %v feeds.\n", len(feeds))
 		mk := make([]string, len(feeds))
 		i := 0
-    for k, _ := range feeds {
-        mk[i] = k
-        i++
-    }
+		for k, _ := range feeds {
+			mk[i] = k
+			i++
+		}
 		sort.Strings(mk)
 
 		for _, uri := range mk {
@@ -36,4 +35,3 @@ func StartHttpServer(config *config.Config, feeds map[string]*feed_watcher.FeedW
 	log.Printf("Starting http server on %v", config.WebServer.ListenAddress)
 	log.Fatal(http.ListenAndServe(config.WebServer.ListenAddress, nil))
 }
-

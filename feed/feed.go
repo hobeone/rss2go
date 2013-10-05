@@ -12,7 +12,6 @@ import (
 	"github.com/hobeone/rss2go/atom"
 	"github.com/hobeone/rss2go/rdf"
 	"github.com/hobeone/rss2go/rss"
-	"github.com/moovweb/gokogiri"
 	"html"
 	"log"
 	"net/url"
@@ -51,7 +50,6 @@ func ParseFeed(u string, b []byte) (*Feed, []*Story, error) {
 	f := Feed{Url: u}
 	s := []*Story{}
 
-
 	tr, err := charset.TranslatorTo("utf-8")
 	if err != nil {
 		return nil, nil, err
@@ -60,13 +58,6 @@ func ParseFeed(u string, b []byte) (*Feed, []*Story, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-
-	doc, err := gokogiri.ParseXml(b)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	b = []byte(doc.String())
 
 	a := atom.Feed{}
 	var atomerr, rsserr, rdferr error

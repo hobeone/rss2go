@@ -10,6 +10,7 @@ import (
 	"github.com/hobeone/rss2go/mail"
 	"github.com/hobeone/rss2go/server"
 	"log"
+	"net/http"
 )
 
 func make_cmd_daemon() *commander.Command {
@@ -67,6 +68,7 @@ func daemon(cmd *commander.Command, args []string) {
 
 	go server.StartHttpServer(config, feeds)
 	for {
+		http.DefaultTransport.(*http.Transport).CloseIdleConnections()
 		_ = <-response_channel
 	}
 }

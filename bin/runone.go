@@ -11,6 +11,7 @@ import (
 	"github.com/hobeone/rss2go/server"
 	"log"
 	"time"
+	"net/http"
 )
 
 func make_cmd_runone() *commander.Command {
@@ -25,7 +26,7 @@ func make_cmd_runone() *commander.Command {
 		Example:
 		runone --db_updates=false http://test/feed.rss
 		`,
-		Flag: *flag.NewFlagSet("daemon", flag.ExitOnError),
+		Flag: *flag.NewFlagSet("runone", flag.ExitOnError),
 	}
 	cmdDaemon.Flag.Bool("send_mail", true, "Actually send mail or not.")
 	cmdDaemon.Flag.Bool("db_updates", true, "Don't actually update feed info in the db.")
@@ -91,14 +92,15 @@ func runOne(cmd *commander.Command, args []string) {
 	feeds := make(map[string]*feed_watcher.FeedWatcher)
 	feeds[fw.FeedInfo.Url] = fw
 	go server.StartHttpServer(config, feeds)
-
 	if loops == -1 {
 		for {
+			http.DefaultTransport.(*http.Transport).CloseIdleConnections()
 			fw.UpdateFeed()
 			time.Sleep(time.Second * time.Duration(config.Crawl.MinInterval))
 		}
 	} else {
 		for i := 0; i < loops; i++ {
+			http.DefaultTransport.(*http.Transport).CloseIdleConnections()
 			fw.UpdateFeed()
 			time.Sleep(time.Second * time.Duration(config.Crawl.MinInterval))
 		}

@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/jpoehls/gophermail"
-	"log"
-	"net/smtp"
-	"os/exec"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/feed"
-	"github.com/moovweb/gokogiri"
+	"log"
+	"net/mail"
+	"net/smtp"
+	"os/exec"
+	"time"
 )
 
 const MTA_BINARY = "sendmail"
@@ -29,7 +30,7 @@ type MailDispatcher struct {
 	ToAddress    string
 	FromAddress  string
 
-	stubOutMail  bool
+	stubOutMail bool
 }
 
 func NewMailDispatcher(
@@ -147,14 +148,7 @@ func (self *MailDispatcher) handleMail(m *feed.Story) error {
 		return nil
 	}
 
-	content := FormatMessageBody(m)
-	msg := &gophermail.Message{
-		From:     self.FromAddress,
-		To:       []string{self.ToAddress},
-		Subject:  fmt.Sprintf("%s: %s", m.ParentFeed.Title, m.Title),
-		Body:     content, //TODO Convert to plain text
-		HTMLBody: content,
-	}
+	msg := CreateMailFromItem(self.FromAddress, self.ToAddress, m)
 
 	if self.UseLocalMTA {
 		return self.sendMailWithSendmail(msg)
@@ -163,25 +157,27 @@ func (self *MailDispatcher) handleMail(m *feed.Story) error {
 	}
 }
 
+func CreateMailFromItem(from string, to string, item *feed.Story) *gophermail.Message {
+	content := FormatMessageBody(item)
+	msg := &gophermail.Message{
+		From:     from,
+		To:       []string{to},
+		Subject:  fmt.Sprintf("%s: %s", item.ParentFeed.Title, item.Title),
+		Body:     content, //TODO Convert to plain text
+		HTMLBody: content,
+		Headers:  mail.Header{},
+	}
+	if !item.Published.IsZero() {
+		msg.Headers["Date"] = []string{item.Published.UTC().Format(time.RFC822)}
+	}
+	return msg
+}
+
 func FormatMessageBody(story *feed.Story) string {
-	// Convert content to HTML:
-	doc, err := gokogiri.ParseHtml([]byte(story.Content))
-	var content string
-	if err != nil {
-		log.Printf("Error converting mail content to HTML: %s", err.Error())
-		content = story.Content
-	} else {
-		orig_link := fmt.Sprintf(`
+	orig_link := fmt.Sprintf(`
 <div class="original_link">
 <a href="%s">%s</a>
 </div><hr>`, story.Link, story.Title)
 
-		if doc.Root() == nil {
-			doc, err = gokogiri.ParseHtml([]byte(orig_link))
-		} else {
-			doc.Root().FirstChild().AddPreviousSibling(orig_link)
-		}
-		content = doc.String()
-	}
-	return content
+	return fmt.Sprintf("%s%s", orig_link, story.Content)
 }

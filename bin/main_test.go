@@ -1,4 +1,4 @@
-package rss2go
+package main
 
 import (
 	"fmt"
@@ -7,7 +7,6 @@ import (
 	"github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/mail"
 	"github.com/hobeone/rss2go/server"
-
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -17,6 +16,18 @@ import (
 	"testing"
 	"time"
 )
+
+type NullWriter int
+
+func (NullWriter) Write([]byte) (int, error) { return 0, nil }
+
+func DisableLogging() {
+	log.SetOutput(new(NullWriter))
+}
+
+func init() {
+	DisableLogging()
+}
 
 func MakeDbFixtures(d db.DbDispatcher, local_url string) {
 
@@ -36,14 +47,12 @@ func MakeDbFixtures(d db.DbDispatcher, local_url string) {
 
 var fake_server_handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	var content []byte
-	log.Printf("Got request for %s", r.URL.Path)
 	switch {
 	case strings.HasSuffix(r.URL.Path, "test.rss"):
-		feed_resp, err := ioutil.ReadFile("testdata/ars.rss")
+		feed_resp, err := ioutil.ReadFile("../testdata/ars.rss")
 		if err != nil {
 			log.Fatalf("Error reading test feed: %s", err.Error())
 		}
-		fmt.Println("Handling test.rss")
 		content = feed_resp
 	case true:
 		content = []byte("456")
@@ -66,7 +75,9 @@ func TestEndToEndIntegration(t *testing.T) {
 	config := config.NewConfig()
 
 	os.Remove("rss2go_test.db")
-	db := db.NewDbDispatcher("rss2go_test.db", true, true)
+
+	// Set second argument to true to debug sql
+	db := db.NewDbDispatcher("rss2go_test.db", false, true)
 	MakeDbFixtures(*db, ts.URL)
 	all_feeds, err := db.GetAllFeeds()
 	fmt.Printf("Got %d feeds to watch.\n", len(all_feeds))
@@ -91,6 +102,5 @@ func TestEndToEndIntegration(t *testing.T) {
 	if len(resp.Items) != 0 {
 		t.Errorf("Expected 0 items from the feed. Got %d", len(resp.Items))
 	}
-
-	time.Sleep(1000000000000000)
+	os.Remove("rss2go_test.db")
 }

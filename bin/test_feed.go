@@ -61,10 +61,21 @@ func testFeed(cmd *commander.Command, args []string) {
 	fmt.Printf("  NextUpdate: %s\n", feed.NextUpdate)
 	fmt.Printf("  Url: %s\n", feed.Link)
 	for i, s := range stories {
-		content := mail.FormatMessageBody(s)
 		fmt.Printf("%d)  %s\n", i, s.Title)
+		fmt.Printf("  Published  %s\n", i, s.Published)
+		fmt.Printf("  Updated  %s\n", i, s.Updated)
 		fmt.Println()
-		fmt.Printf("%s\n", content)
-		fmt.Println("")
+		fmt.Printf("%s\n", s.Content)
+		fmt.Println()
+
+		fmt.Printf("Mail Message for %s:\n", s.Title)
+		fmt.Println()
+		m := mail.CreateMailFromItem("From@Address", "To@Address", s)
+		b, err := m.Bytes()
+		if err != nil {
+			fmt.Printf("Error converting %s to mail: %s\n", s.Title, err)
+			continue
+		}
+		fmt.Println(string(b[:]))
 	}
 }

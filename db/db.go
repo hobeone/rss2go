@@ -16,6 +16,7 @@ type FeedDbDispatcher interface {
 	RecordGuid(int, string) error
 	CheckGuidsForFeed(int, *[]string) (*[]string, error)
 	GetFeedByUrl(string) (*FeedInfo, error)
+	AddFeed(string, string) (*FeedInfo, error)
 }
 
 type FeedInfo struct {
@@ -78,8 +79,17 @@ func NewDbDispatcher(db_path string, verbose bool, write_updates bool) *DbDispat
 	}
 }
 
-// Not sure if I need to have just one writer but funneling everything through
-// the dispatcher for now.
+func (self *DbDispatcher) AddFeed(name string, url string) (*FeedInfo, error) {
+	self.syncMutex.Lock()
+	defer self.syncMutex.Unlock()
+	f := &FeedInfo {
+		Name: name,
+		Url: url,
+	}
+	err := self.OrmHandle.Save(f)
+	return f, err
+}
+
 func (self *DbDispatcher) GetAllFeeds() (feeds []FeedInfo, err error) {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()

@@ -43,13 +43,10 @@ func GetFeedAndMakeResponse(url string) *feed_watcher.FeedCrawlResponse {
 		resp.Error = err
 		return resp
 	}
-	if r.Body == nil {
-		log.Fatalf("got nil body for %s", url)
-	}
 	resp.HttpResponseStatus = r.Status
 	defer r.Body.Close()
 	if r.ContentLength > 0 {
-		b := make([]byte, 0, r.ContentLength)
+		b := make([]byte, r.ContentLength)
 		_, err := io.ReadFull(r.Body, b)
 		if err != nil {
 			resp.Error = fmt.Errorf("Error reading response for %s: %s", url, err)

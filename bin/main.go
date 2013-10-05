@@ -24,6 +24,7 @@ func init() {
 			make_cmd_test_feed(),
 			make_cmd_daemon(),
 			make_cmd_runone(),
+			make_cmd_addfeed(),
 		},
 		Flag: flag.NewFlagSet("rss2go", flag.ExitOnError),
 	}
