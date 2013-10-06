@@ -62,8 +62,8 @@ func testFeed(cmd *commander.Command, args []string) {
 	fmt.Printf("  Url: %s\n", feed.Link)
 	for i, s := range stories {
 		fmt.Printf("%d)  %s\n", i, s.Title)
-		fmt.Printf("  Published  %s\n", i, s.Published)
-		fmt.Printf("  Updated  %s\n", i, s.Updated)
+		fmt.Printf("  Published  %s\n", s.Published)
+		fmt.Printf("  Updated  %s\n", s.Updated)
 		fmt.Println()
 		fmt.Printf("%s\n", s.Content)
 		fmt.Println()

@@ -50,14 +50,21 @@ const FEED_ITEM_TABLE = `
 	);
 `
 
-func CreateAndOpenDb(db_path string, verbose bool) beedb.Model {
+func createAndOpenDb(db_path string, verbose bool, memory bool) beedb.Model {
 	beedb.OnDebug = verbose
 	log.Printf("Opening database %s", db_path)
-	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?mode=rwc", db_path))
+	mode := "rwc"
+	if memory {
+		mode = "memory"
+	}
+	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?mode=%s", db_path, mode))
 
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	//TODO: check if they exist first:
+	//SELECT name FROM sqlite_master WHERE type='table';
 
 	db.Exec(FEED_INFO_TABLE)
 	db.Exec(FEED_ITEM_TABLE)
@@ -67,15 +74,22 @@ func CreateAndOpenDb(db_path string, verbose bool) beedb.Model {
 }
 
 type DbDispatcher struct {
-	OrmHandle beedb.Model
-	WriteUpdates bool
+	Orm beedb.Model
+	writeUpdates bool
 	syncMutex sync.Mutex
 }
 
 func NewDbDispatcher(db_path string, verbose bool, write_updates bool) *DbDispatcher {
 	return &DbDispatcher{
-		OrmHandle: CreateAndOpenDb(db_path, verbose),
-		WriteUpdates: write_updates,
+		Orm: createAndOpenDb(db_path, verbose, false),
+		writeUpdates: write_updates,
+	}
+}
+
+func NewMemoryDbDispatcher(verbose bool, write_updates bool) *DbDispatcher {
+	return &DbDispatcher{
+		Orm: createAndOpenDb("in_memory_test", verbose, true),
+		writeUpdates: write_updates,
 	}
 }
 
@@ -86,20 +100,20 @@ func (self *DbDispatcher) AddFeed(name string, url string) (*FeedInfo, error) {
 		Name: name,
 		Url: url,
 	}
-	err := self.OrmHandle.Save(f)
+	err := self.Orm.Save(f)
 	return f, err
 }
 
 func (self *DbDispatcher) GetAllFeeds() (feeds []FeedInfo, err error) {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
-	err = self.OrmHandle.FindAll(&feeds)
+	err = self.Orm.FindAll(&feeds)
 	return
 }
 
 func (self *DbDispatcher) GetFeedByUrl(url string) (*FeedInfo, error) {
 	feed := FeedInfo{}
-	err := self.OrmHandle.Where("url = ?", url).Find(&feed)
+	err := self.Orm.Where("url = ?", url).Find(&feed)
 	return &feed, err
 }
 
@@ -109,12 +123,12 @@ func (self *DbDispatcher) GetFeedItemByGuid(guid string) (
 	//attacks.
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
-	err = self.OrmHandle.Where("guid = ?", guid).Find(&feed_item)
+	err = self.Orm.Where("guid = ?", guid).Find(&feed_item)
 	return
 }
 
 func (self *DbDispatcher) RecordGuid(feed_id int, guid string) (err error) {
-	if self.WriteUpdates {
+	if self.writeUpdates {
 		log.Printf("Adding GUID '%s' for feed %d", guid, feed_id)
 		var f FeedItem
 		f.FeedInfoId = feed_id
@@ -122,28 +136,17 @@ func (self *DbDispatcher) RecordGuid(feed_id int, guid string) (err error) {
 		self.syncMutex.Lock()
 		defer self.syncMutex.Unlock()
 
-		return self.OrmHandle.Save(&f)
+		return self.Orm.Save(&f)
 	}
 	return
 }
 
 func (self *DbDispatcher) CheckGuidsForFeed(feed_id int, guids *[]string) (*[]string, error) {
-	/*
-	s := make([]string, len(*guids))
-	args := make([]interface{}, len(*guids)+1)
-	args[0] = strconv.Itoa(feed_id)
-	for i, v := range *guids {
-		s[i] = "?"
-		args[i+1] = v
-	}
-	q := fmt.Sprintf("feed_info_id = ? AND guid IN (%s)", strings.Join(s, ","))
-	*/
-
 	var allitems []FeedItem
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 
-	err := self.OrmHandle.Where("feed_info_id=?", feed_id).GroupBy("guid").FindAll(&allitems)
+	err := self.Orm.Where("feed_info_id=?", feed_id).GroupBy("guid").FindAll(&allitems)
 	if err != nil {
 		return &[]string{}, err
 	}

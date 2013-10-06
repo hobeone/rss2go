@@ -1,12 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/mail"
-	"github.com/hobeone/rss2go/server"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -30,9 +28,6 @@ func init() {
 }
 
 func MakeDbFixtures(d db.DbDispatcher, local_url string) {
-
-	d.OrmHandle.Exec("delete from feed_info;")
-
 	all_feeds := []db.FeedInfo{
 		{
 			Name: "Testing1",
@@ -41,7 +36,7 @@ func MakeDbFixtures(d db.DbDispatcher, local_url string) {
 	}
 
 	for _, f := range all_feeds {
-		d.OrmHandle.Save(&f)
+		d.Orm.Save(&f)
 	}
 }
 
@@ -74,13 +69,11 @@ func TestEndToEndIntegration(t *testing.T) {
 
 	config := config.NewConfig()
 
-	os.Remove("rss2go_test.db")
 
-	// Set second argument to true to debug sql
-	db := db.NewDbDispatcher("rss2go_test.db", false, true)
+	// Set first argument to true to debug sql
+	db := db.NewMemoryDbDispatcher(false, true)
 	MakeDbFixtures(*db, ts.URL)
 	all_feeds, err := db.GetAllFeeds()
-	fmt.Printf("Got %d feeds to watch.\n", len(all_feeds))
 
 	if err != nil {
 		log.Fatalf("Error reading feeds: %s", err.Error())
@@ -88,10 +81,8 @@ func TestEndToEndIntegration(t *testing.T) {
 
 	mailer := mail.CreateAndStartStubMailer()
 
-	feeds, response_channel := CreateAndStartFeedWatchers(
+	_, response_channel := CreateAndStartFeedWatchers(
 		all_feeds, config, mailer, db)
-
-	go server.StartHttpServer(config, feeds)
 
 	resp := <-response_channel
 	if len(resp.Items) != 25 {

@@ -1,3 +1,18 @@
+/*
+
+FeedWatcher watches a feed.  Duh.
+
+One feed watcher watches one feed.  It doesn't actually do the crawling itself
+but will send a FeedCrawlRequest to a crawler.
+
+To watch a feed create a FeedWatcher instance and then call PollFeed() on it
+(usually in a goroutine).
+
+FeedWatcher will keep track of the GUIDs it has seen from a feed so it will
+only notify on new items.
+
+See bin/runone.go or bin/daemon.go for example usage.
+*/
 package feed_watcher
 
 import (
@@ -11,14 +26,14 @@ import (
 	"time"
 )
 
-// Allow for mocking out in test
+// Allow for mocking out in test.
 var Sleep = func(d time.Duration) {
 	time.Sleep(d)
 	return
 }
 
 //
-//FeedCrawlRequest
+// Sent to a crawler instance.
 //
 type FeedCrawlRequest struct {
 	URI          string
@@ -26,7 +41,10 @@ type FeedCrawlRequest struct {
 }
 
 //
-// FeedCrawlResponse
+// What we want back from the crawler.
+//
+// Body, Feed, Items and HttpResponseStatus are only guaranteed to be non zero
+// value if Error is non nil.
 //
 type FeedCrawlResponse struct {
 	URI                string
@@ -37,9 +55,6 @@ type FeedCrawlResponse struct {
 	Error              error
 }
 
-//
-// FEEDWATCHER
-//
 type FeedWatcher struct {
 	FeedInfo          db.FeedInfo
 	poll_now_chan     chan int
@@ -100,6 +115,8 @@ func (self *FeedWatcher) unlockPoll() bool {
 	return true
 }
 
+
+// Returns true if the FeedWatcher is Polling a feed.
 func (self *FeedWatcher) Polling() bool {
 	return self.polling
 }
@@ -117,10 +134,14 @@ func (self *FeedWatcher) unlockCrawl() (r bool) {
 	return true
 }
 
+// Returns true if the FeedWatcher is currently polling the feed (actually
+// waiting for a response from the crawler).
 func (self *FeedWatcher) Crawling() (r bool) {
 	return self.crawling
 }
 
+// Core logic to poll a feed, find new items, add those to the database, and
+// send them for mail.
 func (self *FeedWatcher) UpdateFeed() *FeedCrawlResponse {
 	log.Printf("Polling feed %v", self.FeedInfo.Url)
 	resp := self.doCrawl()
@@ -171,7 +192,7 @@ func (self *FeedWatcher) UpdateFeed() *FeedCrawlResponse {
 		if err != nil {
 			log.Printf("Error sending mail: %s", err.Error())
 		} else {
-			err := self.RecordGuid(item.Id)
+			err := self.recordGuid(item.Id)
 			if err != nil {
 				e := fmt.Errorf("Error writing guid to db: %s", err)
 				resp.Error = e
@@ -184,6 +205,7 @@ func (self *FeedWatcher) UpdateFeed() *FeedCrawlResponse {
 	return resp
 }
 
+// Designed to be called as a Goroutine.  Use UpdateFeed to just update once.
 func (self *FeedWatcher) PollFeed() bool {
 	if !self.lockPoll() {
 		log.Printf("Called PollLoop on %v when already polling. ignoring.\n",
@@ -201,18 +223,19 @@ func (self *FeedWatcher) PollFeed() bool {
 			resp := self.UpdateFeed()
 			self.LastCrawlResponse = resp
 			self.response_chan <- resp
-			self.Sleep(self.min_sleep_seconds)
+			self.sleep(self.min_sleep_seconds)
 		}
 	}
 }
 
 // Sleep for the given amount of seconds plus a upto 60 extra seconds.
-func (self *FeedWatcher) Sleep(tosleep int64) {
+func (self *FeedWatcher) sleep(tosleep int64) {
 	s := tosleep + rand.Int63n(60)
 	log.Printf("Sleeping %d seconds for %s", s, self.FeedInfo.Url)
 	Sleep(time.Second * time.Duration(s))
 }
 
+// Populate internal cache of GUIDs from the database.
 func (self *FeedWatcher) LoadGuidsFromDb(stories []*feed.Story) (map[string]bool, error) {
 	guids := make([]string, len(stories))
 	for i, v := range stories {
@@ -229,7 +252,7 @@ func (self *FeedWatcher) LoadGuidsFromDb(stories []*feed.Story) (map[string]bool
 	return ret, nil
 }
 
-func (self *FeedWatcher) RecordGuid(guid string) error {
+func (self *FeedWatcher) recordGuid(guid string) error {
 	self.KnownGuids[guid] = true
 	err := self.db.RecordGuid(self.FeedInfo.Id, guid)
 	return err
@@ -275,6 +298,7 @@ func (self *FeedWatcher) doCrawl() (r *FeedCrawlResponse) {
 	return resp
 }
 
+// Call to have a PollFeed loop exit.
 func (self *FeedWatcher) StopPoll() {
 	self.exit_now_chan <- 1
 }
