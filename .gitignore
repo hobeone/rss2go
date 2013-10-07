@@ -2,6 +2,8 @@
 *.o
 *.a
 *.so
+
+# Temp files
 *.swp
 *.db
 

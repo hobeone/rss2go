@@ -13,20 +13,20 @@ func ResetDB() {
 
 func TestFeedCreation(t *testing.T) {
 	ResetDB()
-	d := NewDbDispatcher("test.db", true, true)
+	d := NewMemoryDbDispatcher(true, true)
 
 	var feed FeedInfo
 	feed.Name = "Test Feed"
 	feed.Url = "https://testfeed.com/test"
 	feed.LastPollTime = time.Now()
-	err := d.OrmHandle.Save(&feed)
+	err := d.Orm.Save(&feed)
 	if err != nil {
 		t.Fatal("Error saving test feed.")
 	}
 
 	var fetched_feed FeedInfo
 
-	d.OrmHandle.Where(feed.Id).Find(&fetched_feed)
+	d.Orm.Where(feed.Id).Find(&fetched_feed)
 
 	if !fetched_feed.LastItemTime.IsZero() {
 		t.Error("LastItemTime should be zero when not set.")
@@ -36,7 +36,7 @@ func TestFeedCreation(t *testing.T) {
 func TestCheckRecordGuid(t *testing.T) {
 	ResetDB()
 
-	d := NewDbDispatcher("test.db", true, true)
+	d := NewMemoryDbDispatcher(true, true)
 	err := d.RecordGuid(1, "123")
 
 	if err != nil {
@@ -46,14 +46,14 @@ func TestCheckRecordGuid(t *testing.T) {
 
 func TestCheckGuidsForFeed(t *testing.T) {
 	ResetDB()
-	d := NewDbDispatcher("test.db", true, true)
+	d := NewMemoryDbDispatcher(true, true)
 
 	guids := []string{"1","2","3"}
 
 	var feed FeedItem
 	feed.FeedInfoId = 1
 	feed.Guid = "1"
-	err := d.OrmHandle.Save(&feed)
+	err := d.Orm.Save(&feed)
 	if err != nil {
 		t.Fatalf("Error saving test item: %s", err)
 	}
