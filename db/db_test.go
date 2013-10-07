@@ -3,16 +3,9 @@ package db
 import (
 	"testing"
 	"time"
-	"os"
 )
 
-func ResetDB() {
-	os.Remove("test.db")
-	return
-}
-
 func TestFeedCreation(t *testing.T) {
-	ResetDB()
 	d := NewMemoryDbDispatcher(true, true)
 
 	var feed FeedInfo
@@ -34,8 +27,6 @@ func TestFeedCreation(t *testing.T) {
 }
 
 func TestCheckRecordGuid(t *testing.T) {
-	ResetDB()
-
 	d := NewMemoryDbDispatcher(true, true)
 	err := d.RecordGuid(1, "123")
 
@@ -45,7 +36,6 @@ func TestCheckRecordGuid(t *testing.T) {
 }
 
 func TestCheckGuidsForFeed(t *testing.T) {
-	ResetDB()
 	d := NewMemoryDbDispatcher(true, true)
 
 	guids := []string{"1","2","3"}
@@ -64,5 +54,30 @@ func TestCheckGuidsForFeed(t *testing.T) {
 	}
 	if len(*known_guids) != 1 {
 		t.Fatalf("Error getting guids from db.  Expected 1, got: %#v", known_guids)
+	}
+}
+
+func TestAddAndDeleteFeed(t *testing.T) {
+	d := NewMemoryDbDispatcher(true, true)
+	feed, err := d.AddFeed("test feed", "http://test/feed.xml")
+
+	if err != nil {
+		t.Error("AddFeed shouldn't return an error")
+	}
+
+	feed, err = d.AddFeed("test feed", "http://test/feed.xml")
+
+	if err == nil {
+		t.Error("AddFeed should return an error")
+	}
+
+	err = d.RemoveFeed(feed.Url, true)
+	if err != nil {
+		t.Errorf("RemoveFeed shouldn't return an error. Got: %s", err.Error())
+	}
+
+	_, err = d.GetFeedByUrl(feed.Url)
+	if err == nil {
+		t.Errorf("Feed with url %s shouldn't exist anymore.", feed.Url)
 	}
 }

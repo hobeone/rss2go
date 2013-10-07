@@ -53,7 +53,6 @@ func addFeed(cmd *commander.Command, args []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("Config contents: %#v\n", &config)
 
 	// Override config settings
 	config.Mail.SendMail = false

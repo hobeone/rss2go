@@ -17,6 +17,7 @@ type FeedDbDispatcher interface {
 	CheckGuidsForFeed(int, *[]string) (*[]string, error)
 	GetFeedByUrl(string) (*FeedInfo, error)
 	AddFeed(string, string) (*FeedInfo, error)
+	RemoveFeed(string, bool) error
 }
 
 type FeedInfo struct {
@@ -103,6 +104,19 @@ func (self *DbDispatcher) AddFeed(name string, url string) (*FeedInfo, error) {
 	err := self.Orm.Save(f)
 	return f, err
 }
+
+func (self *DbDispatcher) RemoveFeed(url string, purge_guids bool) error {
+	self.syncMutex.Lock()
+	defer self.syncMutex.Unlock()
+	f, err := self.GetFeedByUrl(url)
+	if err != nil {
+		return err
+	}
+	_, err = self.Orm.Delete(f)
+	self.Orm.SetTable("feed_item").Where("feed_info_id = ?", f.Id).DeleteRow()
+	return err
+}
+
 
 func (self *DbDispatcher) GetAllFeeds() (feeds []FeedInfo, err error) {
 	self.syncMutex.Lock()

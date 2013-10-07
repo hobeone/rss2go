@@ -1,5 +1,8 @@
 // Mostly just lifted straight from Matt Jibson's goread app
 // github.com/mjibson/goread
+//
+// Copyright (c) 2013 Matt Jibson <matt.jibson@gmail.com>
+// 
 
 package feed
 

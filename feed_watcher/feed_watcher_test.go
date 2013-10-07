@@ -54,6 +54,10 @@ func (self *FakeDbDispatcher) AddFeed(name string, url string) (*db.FeedInfo, er
 	return &db.FeedInfo{}, nil
 }
 
+func (self *FakeDbDispatcher) RemoveFeed(url string, purge bool) error {
+	return nil
+}
+
 func (self *FakeDbDispatcher) CheckGuidsForFeed(feed_id int, guids *[]string) (*[]string, error) {
 	return &[]string{}, nil
 }
