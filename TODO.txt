@@ -1,0 +1,34 @@
+If feed returns non 200 code sleep max sleep time
+
+Log to file
+
+Feed meta information:
+- Last polled for each feed
+- Last successful poll (2XX code)
+- Last poll result
+
+Add command to show feeds:
+- which haven't been updated in a while
+- haven't been successfully scraped in a while
+
+Set next poll time based off of last poll time in DB
+
+Follow next poll data from feeds
+
+Style fixes:
+Acronyms should be same case Url -> URL
+
+
+Style Tip:
+The name of a method's receiver should be a reflection of its identity; often a
+one or two letter abbreviation of its type suffices (such as "c" or "cl" for
+"Client"). Don't use generic names such as "me", "this" or "self", identifiers
+typical of object-oriented languages that place more emphasis on methods as
+opposed to functions. The name need not be as descriptive as a that of a method
+argument, as its role is obvious and serves no documentary purpose. It can be
+very short as it will appear on almost every line of every method of the type;
+familiarity admits brevity. Be consistent, too: if you call the receiver "c" in
+one method, don't call it "cl" in another.
+
+
+

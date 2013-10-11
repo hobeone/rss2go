@@ -1,6 +1,10 @@
 package config
 
-import "github.com/BurntSushi/toml"
+import (
+	"github.com/BurntSushi/toml"
+	"os/user"
+	"strings"
+)
 
 type Config struct {
 	Mail      mailConfig
@@ -58,7 +62,13 @@ func NewConfig() *Config {
 	}
 }
 
+func replaceTildeInPath(path string) string {
+	usr, _ := user.Current()
+	dir := usr.HomeDir
+	return strings.Replace(path, "~", dir, 1)
+}
+
 func (self *Config) ReadConfig(config_path string) error {
-	_, err := toml.DecodeFile(config_path, &self)
+	_, err := toml.DecodeFile(replaceTildeInPath(config_path), &self)
 	return err
 }
