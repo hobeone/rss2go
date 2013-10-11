@@ -27,7 +27,7 @@ One gorouting for a HTTP server that exports
 
 Example usage:
 
-go run bin/*go runone --config_file config.toml --send_mail=false --loops 1 http://localhost/test.rss
+./run.sh runone --config_file config.toml --send_mail=false --loops 1 http://localhost/test.rss
 
 
 To Build a binary:
