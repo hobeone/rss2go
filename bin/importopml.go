@@ -101,7 +101,7 @@ func importOPML(cmd *commander.Command, args []string) {
 
 		wg := sync.WaitGroup{}
 		for _, feed := range new_feeds {
-			guids, err := dbh.CheckGuidsForFeed(feed.Id, &[]string{})
+			guids, err := dbh.GetGuidsForFeed(feed.Id, &[]string{})
 			if err != nil {
 				printErrorAndExit(err.Error())
 			}

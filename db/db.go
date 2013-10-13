@@ -6,32 +6,34 @@ import (
 	"github.com/astaxie/beedb"
 	_ "github.com/mattn/go-sqlite3"
 	"log"
-	"time"
 	"sync"
+	"time"
 )
 
 type FeedDbDispatcher interface {
 	GetAllFeeds() ([]FeedInfo, error)
 	GetFeedItemByGuid(string) (*FeedItem, error)
 	RecordGuid(int, string) error
-	CheckGuidsForFeed(int, *[]string) (*[]string, error)
+	GetGuidsForFeed(int, *[]string) (*[]string, error)
 	GetFeedByUrl(string) (*FeedInfo, error)
 	AddFeed(string, string) (*FeedInfo, error)
 	RemoveFeed(string, bool) error
+	UpdateFeed(*FeedInfo) error
 }
 
 type FeedInfo struct {
-	Id           int `beedb:"PK"`
-	Name         string
-	Url          string
-	LastPollTime time.Time
-	LastItemTime time.Time
+	Id            int `beedb:"PK"`
+	Name          string
+	Url           string
+	LastPollTime  time.Time
+	LastPollError string
 }
 
 type FeedItem struct {
 	Id         int `beedb:"PK"`
 	FeedInfoId int
 	Guid       string
+	AddedOn    time.Time
 }
 
 const FEED_INFO_TABLE = `
@@ -40,14 +42,15 @@ const FEED_INFO_TABLE = `
 		name text not null UNIQUE,
 		url text not null UNIQUE,
 		last_poll_time DATE NULL,
-		last_item_time DATE NULL
+		last_poll_error text NULL
 	);
 `
 const FEED_ITEM_TABLE = `
 	create table feed_item (
 		id integer not null primary key,
 		feed_info_id integer not null,
-		guid text not null
+		guid text not null,
+		added_on DATE NULL
 	);
 `
 
@@ -58,38 +61,59 @@ func createAndOpenDb(db_path string, verbose bool, memory bool) beedb.Model {
 	if memory {
 		mode = "memory"
 	}
-	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?mode=%s", db_path, mode))
+	db, err := sql.Open("sqlite3",
+		fmt.Sprintf("file:%s?mode=%s", db_path, mode))
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	//TODO: check if they exist first:
-	//SELECT name FROM sqlite_master WHERE type='table';
+	rows, err := db.Query("SELECT name FROM sqlite_master WHERE type='table';")
+	if err != nil {
+		log.Fatal("Couldn't get list of tables from database.")
+	}
+	tables := make(map[string]bool)
+	for rows.Next() {
+    var name string
+    if err := rows.Scan(&name); err != nil {
+        log.Fatal(err)
+    }
+		tables[name] = true
+	}
 
-	db.Exec(FEED_INFO_TABLE)
-	db.Exec(FEED_ITEM_TABLE)
-	// Always get error if table already exists
-
+	if _, ok := tables["feed_info"]; !ok {
+		createTable(db, FEED_INFO_TABLE)
+	}
+	if _, ok := tables["feed_item"]; !ok {
+		createTable(db, FEED_ITEM_TABLE)
+	}
 	return beedb.New(db)
 }
 
+func createTable(dbh *sql.DB, table_def string) {
+	_, err := dbh.Exec(table_def)
+	if err != nil {
+		panic(fmt.Sprintf("Error creating table: %s\nSQL: %s", err.Error(),
+			table_def))
+	}
+}
+
 type DbDispatcher struct {
-	Orm beedb.Model
+	Orm          beedb.Model
 	writeUpdates bool
-	syncMutex sync.Mutex
+	syncMutex    sync.Mutex
 }
 
 func NewDbDispatcher(db_path string, verbose bool, write_updates bool) *DbDispatcher {
 	return &DbDispatcher{
-		Orm: createAndOpenDb(db_path, verbose, false),
+		Orm:          createAndOpenDb(db_path, verbose, false),
 		writeUpdates: write_updates,
 	}
 }
 
 func NewMemoryDbDispatcher(verbose bool, write_updates bool) *DbDispatcher {
 	return &DbDispatcher{
-		Orm: createAndOpenDb("in_memory_test", verbose, true),
+		Orm:          createAndOpenDb("in_memory_test", verbose, true),
 		writeUpdates: write_updates,
 	}
 }
@@ -97,9 +121,9 @@ func NewMemoryDbDispatcher(verbose bool, write_updates bool) *DbDispatcher {
 func (self *DbDispatcher) AddFeed(name string, url string) (*FeedInfo, error) {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
-	f := &FeedInfo {
+	f := &FeedInfo{
 		Name: name,
-		Url: url,
+		Url:  url,
 	}
 	err := self.Orm.Save(f)
 	return f, err
@@ -116,7 +140,6 @@ func (self *DbDispatcher) RemoveFeed(url string, purge_guids bool) error {
 	self.Orm.SetTable("feed_item").Where("feed_info_id = ?", f.Id).DeleteRow()
 	return err
 }
-
 
 func (self *DbDispatcher) GetAllFeeds() (feeds []FeedInfo, err error) {
 	self.syncMutex.Lock()
@@ -147,6 +170,7 @@ func (self *DbDispatcher) RecordGuid(feed_id int, guid string) (err error) {
 		var f FeedItem
 		f.FeedInfoId = feed_id
 		f.Guid = guid
+		f.AddedOn = time.Now()
 		self.syncMutex.Lock()
 		defer self.syncMutex.Unlock()
 
@@ -155,7 +179,7 @@ func (self *DbDispatcher) RecordGuid(feed_id int, guid string) (err error) {
 	return
 }
 
-func (self *DbDispatcher) CheckGuidsForFeed(feed_id int, guids *[]string) (*[]string, error) {
+func (self *DbDispatcher) GetGuidsForFeed(feed_id int, guids *[]string) (*[]string, error) {
 	var allitems []FeedItem
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
@@ -170,4 +194,11 @@ func (self *DbDispatcher) CheckGuidsForFeed(feed_id int, guids *[]string) (*[]st
 		known_guids[i] = v.Guid
 	}
 	return &known_guids, nil
+}
+
+func (self *DbDispatcher) UpdateFeed(f *FeedInfo) error {
+	self.syncMutex.Lock()
+	defer self.syncMutex.Unlock()
+
+	return self.Orm.Save(f)
 }

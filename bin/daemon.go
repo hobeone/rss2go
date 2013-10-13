@@ -42,7 +42,7 @@ func daemon(cmd *commander.Command, args []string) {
 
 	mailer := mail.CreateAndStartMailer(cfg)
 
-	db := db.NewDbDispatcher(cfg.Db.Path, true, update_db)
+	db := db.NewDbDispatcher(cfg.Db.Path, false, update_db)
 
 	all_feeds, err := db.GetAllFeeds()
 	if err != nil {

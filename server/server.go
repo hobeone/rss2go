@@ -8,6 +8,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"sort"
+	"time"
 )
 
 func StartHttpServer(config *config.Config, feeds map[string]*feed_watcher.FeedWatcher) {
@@ -26,9 +27,13 @@ func StartHttpServer(config *config.Config, feeds map[string]*feed_watcher.FeedW
 			fmt.Fprintf(w, "Feed (%s)-%s polling? %t. crawling? %t\n",
 				f.FeedInfo.Name, uri, f.Polling(), f.Crawling())
 			fmt.Fprintf(w, "  Known GUIDS: %d\n", len(f.KnownGuids))
-			fmt.Fprint(w, "  Last Crawl Status:\n")
+			fmt.Fprintf(w, "  Last Crawl Status (%s):\n",
+				f.FeedInfo.LastPollTime.Local().Format(time.RFC1123))
 			fmt.Fprintf(w, "    HTTP Response: %s\n", f.LastCrawlResponse.HttpResponseStatus)
-			fmt.Fprintf(w, "    %#v\n", f.LastCrawlResponse.Error)
+			if f.FeedInfo.LastPollError != "" {
+				fmt.Fprintf(w, "    Error: %s\n", f.FeedInfo.LastPollError)
+			}
+			fmt.Fprint(w,"\n")
 		}
 	})
 

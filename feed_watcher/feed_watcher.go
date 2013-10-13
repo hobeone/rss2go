@@ -140,9 +140,21 @@ func (self *FeedWatcher) Crawling() (r bool) {
 	return self.crawling
 }
 
+func (self *FeedWatcher) UpdateFeed() *FeedCrawlResponse {
+	resp := self.updateFeed()
+	// Update DB Record
+	self.FeedInfo.LastPollTime = time.Now()
+	self.FeedInfo.LastPollError = ""
+	if resp.Error != nil {
+		self.FeedInfo.LastPollError = resp.Error.Error()
+	}
+	self.db.UpdateFeed(&self.FeedInfo)
+
+	return resp
+}
 // Core logic to poll a feed, find new items, add those to the database, and
 // send them for mail.
-func (self *FeedWatcher) UpdateFeed() *FeedCrawlResponse {
+func (self *FeedWatcher) updateFeed() *FeedCrawlResponse {
 	log.Printf("Polling feed %v", self.FeedInfo.Url)
 	resp := self.doCrawl()
 
@@ -214,6 +226,12 @@ func (self *FeedWatcher) PollFeed() bool {
 	}
 	defer self.unlockPoll()
 
+	seconds_since_last_poll := int64(time.Since(self.FeedInfo.LastPollTime).Seconds())
+	if seconds_since_last_poll < self.min_sleep_seconds {
+		log.Printf("Last poll of %s was only %d seconds ago, sleeping.",
+			self.FeedInfo.Url, seconds_since_last_poll)
+		self.sleep(self.min_sleep_seconds - seconds_since_last_poll)
+	}
 	for {
 		select {
 		case <-self.exit_now_chan:
@@ -223,7 +241,13 @@ func (self *FeedWatcher) PollFeed() bool {
 			resp := self.UpdateFeed()
 			self.LastCrawlResponse = resp
 			self.response_chan <- resp
-			self.sleep(self.min_sleep_seconds)
+			to_sleep := self.min_sleep_seconds
+			if resp.Error != nil {
+				log.Printf("Feed %s had error sleepming maxium allowed time.",
+					self.FeedInfo.Url)
+				to_sleep = self.max_sleep_seconds
+			}
+			self.sleep(to_sleep)
 		}
 	}
 }
@@ -241,9 +265,9 @@ func (self *FeedWatcher) LoadGuidsFromDb(stories []*feed.Story) (map[string]bool
 	for i, v := range stories {
 		guids[i] = v.Id
 	}
-	known, err := self.db.CheckGuidsForFeed(self.FeedInfo.Id, &guids)
+	known, err := self.db.GetGuidsForFeed(self.FeedInfo.Id, &guids)
 	if err != nil {
-		return make(map[string]bool), nil
+		return make(map[string]bool), err
 	}
 	ret := make(map[string]bool)
 	for _, v := range *known {

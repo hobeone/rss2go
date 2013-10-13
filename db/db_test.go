@@ -3,10 +3,21 @@ package db
 import (
 	"testing"
 	"time"
+	"log"
 )
 
+type NullWriter int
+func (NullWriter) Write([]byte) (int, error) { return 0, nil }
+func DisableLogging() {
+	log.SetOutput(new(NullWriter))
+}
+
+func init() {
+	DisableLogging()
+}
+
 func TestFeedCreation(t *testing.T) {
-	d := NewMemoryDbDispatcher(true, true)
+	d := NewMemoryDbDispatcher(false, true)
 
 	var feed FeedInfo
 	feed.Name = "Test Feed"
@@ -20,10 +31,6 @@ func TestFeedCreation(t *testing.T) {
 	var fetched_feed FeedInfo
 
 	d.Orm.Where(feed.Id).Find(&fetched_feed)
-
-	if !fetched_feed.LastItemTime.IsZero() {
-		t.Error("LastItemTime should be zero when not set.")
-	}
 }
 
 func TestCheckRecordGuid(t *testing.T) {
@@ -35,8 +42,8 @@ func TestCheckRecordGuid(t *testing.T) {
 	}
 }
 
-func TestCheckGuidsForFeed(t *testing.T) {
-	d := NewMemoryDbDispatcher(true, true)
+func TestGetGuidsForFeed(t *testing.T) {
+	d := NewMemoryDbDispatcher(false, true)
 
 	guids := []string{"1","2","3"}
 
@@ -48,7 +55,7 @@ func TestCheckGuidsForFeed(t *testing.T) {
 		t.Fatalf("Error saving test item: %s", err)
 	}
 
-	known_guids, err := d.CheckGuidsForFeed(1, &guids)
+	known_guids, err := d.GetGuidsForFeed(1, &guids)
 	if err != nil {
 		t.Fatalf("Error running SQL: %s", err.Error())
 	}
@@ -58,7 +65,7 @@ func TestCheckGuidsForFeed(t *testing.T) {
 }
 
 func TestAddAndDeleteFeed(t *testing.T) {
-	d := NewMemoryDbDispatcher(true, true)
+	d := NewMemoryDbDispatcher(false, true)
 	feed, err := d.AddFeed("test feed", "http://test/feed.xml")
 
 	if err != nil {
