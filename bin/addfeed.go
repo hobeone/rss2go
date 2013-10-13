@@ -3,12 +3,10 @@ package main
 import (
 	"github.com/gonuts/commander"
 	"github.com/gonuts/flag"
-	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/mail"
-	"log"
 	"fmt"
 )
 
@@ -26,7 +24,6 @@ func make_cmd_addfeed() *commander.Command {
 		`,
 		Flag: *flag.NewFlagSet("addfeed", flag.ExitOnError),
 	}
-	cmd.Flag.String("config_file", "", "Config file to use.")
 	cmd.Flag.Bool("poll_feed", false, "Get the current feed contents and add them to the database.")
 
 	return cmd
@@ -39,20 +36,9 @@ func addFeed(cmd *commander.Command, args []string) {
 	feed_name := args[0]
 	feed_url := args[1]
 
-	config_file := cmd.Flag.Lookup("config_file").Value.Get().(string)
 	poll_feed := cmd.Flag.Lookup("poll_feed").Value.Get().(bool)
 
-	if len(config_file) == 0 {
-		log.Printf("No --config_file given.  Using default: %s\n", DEFAULT_CONFIG)
-		config_file = DEFAULT_CONFIG
-	}
-
-	log.Printf("Got config file: %s\n", config_file)
-	config := config.NewConfig()
-	err := config.ReadConfig(config_file)
-	if err != nil {
-		log.Fatal(err)
-	}
+	config := loadConfig(g_cmd.Flag.Lookup("config_file").Value.Get().(string))
 
 	// Override config settings
 	config.Mail.SendMail = false
@@ -62,7 +48,7 @@ func addFeed(cmd *commander.Command, args []string) {
 
 	db := db.NewDbDispatcher(config.Db.Path, true, true)
 
-	_, err = db.AddFeed(feed_name, feed_url)
+	_, err := db.AddFeed(feed_name, feed_url)
 	if err != nil {
 		printErrorAndExit(err.Error())
 	}

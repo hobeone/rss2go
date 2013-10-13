@@ -26,7 +26,6 @@ func make_cmd_daemon() *commander.Command {
 	}
 	cmdDaemon.Flag.Bool("send_mail", true, "Actually send mail or not.")
 	cmdDaemon.Flag.Bool("db_updates", true, "Don't actually update feed info in the db.")
-	cmdDaemon.Flag.String("config_file", "", "Config file to use.")
 
 	return cmdDaemon
 }
@@ -34,39 +33,27 @@ func make_cmd_daemon() *commander.Command {
 func daemon(cmd *commander.Command, args []string) {
 	send_mail := cmd.Flag.Lookup("send_mail").Value.Get().(bool)
 	update_db := cmd.Flag.Lookup("db_updates").Value.Get().(bool)
-	ConfigFile := cmd.Flag.Lookup("config_file").Value.Get().(string)
 
-	if len(ConfigFile) == 0 {
-		log.Printf("No --config_file given.  Using default: %s\n", DEFAULT_CONFIG)
-		ConfigFile = DEFAULT_CONFIG
-	}
-
-	log.Printf("Got config file: %s\n", ConfigFile)
-	config := config.NewConfig()
-	err := config.ReadConfig(ConfigFile)
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Printf("Config contents: %#v\n", &config)
+	cfg := loadConfig(g_cmd.Flag.Lookup("config_file").Value.Get().(string))
 
 	// Override config settings from flags:
-	config.Mail.SendMail = send_mail
-	config.Db.UpdateDb = update_db
+	cfg.Mail.SendMail = send_mail
+	cfg.Db.UpdateDb = update_db
 
-	mailer := mail.CreateAndStartMailer(config)
+	mailer := mail.CreateAndStartMailer(cfg)
 
-	db := db.NewDbDispatcher(config.Db.Path, true, update_db)
+	db := db.NewDbDispatcher(cfg.Db.Path, true, update_db)
 
 	all_feeds, err := db.GetAllFeeds()
 	if err != nil {
 		log.Fatal(err.Error())
 	}
 	feeds, response_channel := CreateAndStartFeedWatchers(
-		all_feeds, config, mailer, db)
+		all_feeds, cfg, mailer, db)
 
 	log.Printf("Got %d feeds to watch.\n", len(all_feeds))
 
-	go server.StartHttpServer(config, feeds)
+	go server.StartHttpServer(cfg, feeds)
 	for {
 		http.DefaultTransport.(*http.Transport).CloseIdleConnections()
 		_ = <-response_channel
@@ -79,7 +66,7 @@ func startPollers(
 	response_channel chan *feed_watcher.FeedCrawlResponse,
 	mail_chan chan *mail.MailRequest,
 	db db.FeedDbDispatcher,
-	config *config.Config,
+	cfg *config.Config,
 ) map[string]*feed_watcher.FeedWatcher {
 	// make feeds unique
 	feeds := make(map[string]*feed_watcher.FeedWatcher)
@@ -96,8 +83,8 @@ func startPollers(
 			mail_chan,
 			db,
 			[]string{},
-			config.Crawl.MinInterval,
-			config.Crawl.MaxInterval,
+			cfg.Crawl.MinInterval,
+			cfg.Crawl.MaxInterval,
 		)
 		go feeds[f.Url].PollFeed()
 	}
@@ -106,7 +93,7 @@ func startPollers(
 
 func CreateAndStartFeedWatchers(
 	feeds []db.FeedInfo,
-	config *config.Config,
+	cfg *config.Config,
 	mailer *mail.MailDispatcher,
 	db *db.DbDispatcher,
 ) (map[string]*feed_watcher.FeedWatcher,
@@ -118,7 +105,7 @@ func CreateAndStartFeedWatchers(
 
 	// start crawler pool
 	crawler.StartCrawlerPool(
-		config.Crawl.MaxCrawlers,
+		cfg.Crawl.MaxCrawlers,
 		http_crawl_channel)
 
 	// Start Polling
@@ -128,7 +115,6 @@ func CreateAndStartFeedWatchers(
 		response_channel,
 		mailer.OutgoingMail,
 		db,
-		config,
+		cfg,
 	), response_channel
 }
-

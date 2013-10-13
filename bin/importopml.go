@@ -45,21 +45,19 @@ func importOPML(cmd *commander.Command, args []string) {
 	}
 	opml_file := args[0]
 
-	config_file := cmd.Flag.Lookup("config_file").Value.Get().(string)
 	update_feeds := cmd.Flag.Lookup("update_feeds").Value.Get().(bool)
-
-	config := loadConfig(config_file)
+	cfg := loadConfig(g_cmd.Flag.Lookup("config_file").Value.Get().(string))
 
 	// Override config settings
-	config.Mail.SendMail = false
-	config.Db.UpdateDb = true
+	cfg.Mail.SendMail = false
+	cfg.Db.UpdateDb = true
 
 	mailer := mail.CreateAndStartStubMailer()
-	dbh := db.NewDbDispatcher(config.Db.Path, true, true)
+	dbh := db.NewDbDispatcher(cfg.Db.Path, false, true)
 
 	fr, err := ioutil.ReadFile(opml_file)
 	if err != nil {
-		log.Fatal("Error reading OPML file: %s", err.Error())
+		log.Fatalf("Error reading OPML file: %s", err.Error())
 	}
 	o := opml.Opml{}
 	d := xml.NewDecoder(bytes.NewReader(fr))
@@ -67,7 +65,7 @@ func importOPML(cmd *commander.Command, args []string) {
 	d.Strict = false
 
 	if err := d.Decode(&o); err != nil {
-		log.Fatal("opml error: %v", err.Error())
+		log.Fatalf("opml error: %v", err.Error())
 	}
 	feeds := make(map[string]string)
 	var proc func(outlines []*opml.OpmlOutline)
@@ -99,7 +97,7 @@ func importOPML(cmd *commander.Command, args []string) {
 	if len(new_feeds) > 0 && update_feeds {
 		http_crawl_channel := make(chan *feed_watcher.FeedCrawlRequest)
 		response_channel := make(chan *feed_watcher.FeedCrawlResponse)
-		crawler.StartCrawlerPool(config.Crawl.MaxCrawlers, http_crawl_channel)
+		crawler.StartCrawlerPool(cfg.Crawl.MaxCrawlers, http_crawl_channel)
 
 		wg := sync.WaitGroup{}
 		for _, feed := range new_feeds {

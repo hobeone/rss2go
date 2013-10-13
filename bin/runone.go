@@ -3,13 +3,11 @@ package main
 import (
 	"github.com/gonuts/commander"
 	"github.com/gonuts/flag"
-	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/mail"
 	"github.com/hobeone/rss2go/server"
-	"log"
 	"time"
 	"net/http"
 )
@@ -44,29 +42,17 @@ func runOne(cmd *commander.Command, args []string) {
 
 	send_mail := cmd.Flag.Lookup("send_mail").Value.Get().(bool)
 	update_db := cmd.Flag.Lookup("db_updates").Value.Get().(bool)
-	ConfigFile := cmd.Flag.Lookup("config_file").Value.Get().(string)
 	loops := cmd.Flag.Lookup("loops").Value.Get().(int)
 
-	if len(ConfigFile) == 0 {
-		log.Printf("No --config_file given.  Using default: %s\n", DEFAULT_CONFIG)
-		ConfigFile = DEFAULT_CONFIG
-	}
-
-	log.Printf("Got config file: %s\n", ConfigFile)
-	config := config.NewConfig()
-	err := config.ReadConfig(ConfigFile)
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Printf("Config contents: %#v\n", &config)
+	cfg := loadConfig(g_cmd.Flag.Lookup("config_file").Value.Get().(string))
 
 	// Override config settings from flags:
-	config.Mail.SendMail = send_mail
-	config.Db.UpdateDb = update_db
+	cfg.Mail.SendMail = send_mail
+	cfg.Db.UpdateDb = update_db
 
-	mailer := mail.CreateAndStartMailer(config)
+	mailer := mail.CreateAndStartMailer(cfg)
 
-	db := db.NewDbDispatcher(config.Db.Path, true, update_db)
+	db := db.NewDbDispatcher(cfg.Db.Path, true, update_db)
 
 	feed, err := db.GetFeedByUrl(feed_url)
 	if err != nil {
@@ -91,18 +77,18 @@ func runOne(cmd *commander.Command, args []string) {
 	)
 	feeds := make(map[string]*feed_watcher.FeedWatcher)
 	feeds[fw.FeedInfo.Url] = fw
-	go server.StartHttpServer(config, feeds)
+	go server.StartHttpServer(cfg, feeds)
 	if loops == -1 {
 		for {
 			http.DefaultTransport.(*http.Transport).CloseIdleConnections()
 			fw.UpdateFeed()
-			time.Sleep(time.Second * time.Duration(config.Crawl.MinInterval))
+			time.Sleep(time.Second * time.Duration(cfg.Crawl.MinInterval))
 		}
 	} else {
 		for i := 0; i < loops; i++ {
 			http.DefaultTransport.(*http.Transport).CloseIdleConnections()
 			fw.UpdateFeed()
-			time.Sleep(time.Second * time.Duration(config.Crawl.MinInterval))
+			time.Sleep(time.Second * time.Duration(cfg.Crawl.MinInterval))
 		}
 	}
 }

@@ -3,9 +3,7 @@ package main
 import (
 	"github.com/gonuts/commander"
 	"github.com/gonuts/flag"
-	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
-	"log"
 	"fmt"
 )
 
@@ -22,27 +20,13 @@ func make_cmd_listfeeds() *commander.Command {
 		`,
 		Flag: *flag.NewFlagSet("listfeeds", flag.ExitOnError),
 	}
-	cmd.Flag.String("config_file", "", "Config file to use.")
-
 	return cmd
 }
 
 func listFeed(cmd *commander.Command, args []string) {
-	config_file := cmd.Flag.Lookup("config_file").Value.Get().(string)
+	cfg := loadConfig(g_cmd.Flag.Lookup("config_file").Value.Get().(string))
 
-	if len(config_file) == 0 {
-		log.Printf("No --config_file given.  Using default: %s\n", DEFAULT_CONFIG)
-		config_file = DEFAULT_CONFIG
-	}
-
-	log.Printf("Got config file: %s\n", config_file)
-	config := config.NewConfig()
-	err := config.ReadConfig(config_file)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	db := db.NewDbDispatcher(config.Db.Path, false, true)
+	db := db.NewDbDispatcher(cfg.Db.Path, false, true)
 
 	feeds, err := db.GetAllFeeds()
 

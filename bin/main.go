@@ -18,7 +18,8 @@ func printErrorAndExit(err_string string) {
 
 func loadConfig(config_file string) *config.Config {
 	if len(config_file) == 0 {
-		log.Printf("No --config_file given.  Using default: %s\n", DEFAULT_CONFIG)
+		log.Printf("No --config_file given.  Using default: %s\n",
+			DEFAULT_CONFIG)
 		config_file = DEFAULT_CONFIG
 	}
 
@@ -47,6 +48,7 @@ func init() {
 		},
 		Flag: flag.NewFlagSet("rss2go", flag.ExitOnError),
 	}
+	g_cmd.Flag.String("config_file", "", "Config file to use.")
 }
 
 func main() {

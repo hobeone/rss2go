@@ -7,7 +7,6 @@ import (
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/feed"
 	"github.com/hobeone/rss2go/mail"
-	"os"
 	"io/ioutil"
 )
 
@@ -25,33 +24,28 @@ func make_cmd_test_feed() *commander.Command {
 		`,
 		Flag: *flag.NewFlagSet("test_feed", flag.ExitOnError),
 	}
-	cmd.Flag.String("config_file", "", "Config file to use.")
 
 	return cmd
 }
 
 func testFeed(cmd *commander.Command, args []string) {
 	if len(args) < 1 {
-		fmt.Fprintf(os.Stderr, "**error**: Need to provide a url to crawl.\n")
-		os.Exit(1)
+		printErrorAndExit("Need to provide a url to crawl.\n")
 	}
 	url := args[0]
 	resp, err := crawler.GetFeed(url)
 	if err != nil {
-		fmt.Printf("Error getting feed: %s", err)
-		os.Exit(1)
+		printErrorAndExit(err.Error())
 	}
 	body, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
-		fmt.Printf("Error reading feed: %s", err)
-		os.Exit(1)
+		printErrorAndExit(err.Error())
 	}
 
-	feed, stories, err:= feed.ParseFeed(url, body)
+	feed, stories, err := feed.ParseFeed(url, body)
 	if err != nil {
-		fmt.Printf("Error  parsingfeed: %s", err)
-		os.Exit(1)
+		printErrorAndExit(err.Error())
 	}
 
 	fmt.Printf("Found %d items in feed:\n", len(stories))
