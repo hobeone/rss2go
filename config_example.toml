@@ -14,3 +14,5 @@ maxInterval = 3600
 
 [db]
 path = "foo.db"
+verbose = false
+UpdateDb = true

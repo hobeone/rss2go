@@ -38,15 +38,15 @@ func addFeed(cmd *commander.Command, args []string) {
 
 	poll_feed := cmd.Flag.Lookup("poll_feed").Value.Get().(bool)
 
-	config := loadConfig(g_cmd.Flag.Lookup("config_file").Value.Get().(string))
+	cfg := loadConfig(g_cmd.Flag.Lookup("config_file").Value.Get().(string))
 
 	// Override config settings
-	config.Mail.SendMail = false
-	config.Db.UpdateDb = true
+	cfg.Mail.SendMail = false
+	cfg.Db.UpdateDb = true
 
-	mailer := mail.CreateAndStartMailer(config)
+	mailer := mail.CreateAndStartMailer(cfg)
 
-	db := db.NewDbDispatcher(config.Db.Path, true, true)
+	db := db.NewDbDispatcher(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 
 	_, err := db.AddFeed(feed_name, feed_url)
 	if err != nil {

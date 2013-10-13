@@ -38,7 +38,7 @@ func removeFeed(cmd *commander.Command, args []string) {
 	cfg.Mail.SendMail = false
 	cfg.Db.UpdateDb = true
 
-	db := db.NewDbDispatcher(cfg.Db.Path, true, true)
+	db := db.NewDbDispatcher(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 
 	err := db.RemoveFeed(feed_url, purge_feed)
 	if err != nil {

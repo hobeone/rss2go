@@ -25,9 +25,7 @@ func make_cmd_listfeeds() *commander.Command {
 
 func listFeed(cmd *commander.Command, args []string) {
 	cfg := loadConfig(g_cmd.Flag.Lookup("config_file").Value.Get().(string))
-
-	db := db.NewDbDispatcher(cfg.Db.Path, false, true)
-
+	db := db.NewDbDispatcher(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 	feeds, err := db.GetAllFeeds()
 
 	if err != nil {

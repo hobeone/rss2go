@@ -31,6 +31,7 @@ type mailConfig struct {
 
 type dbConfig struct {
 	Path     string
+	Verbose  bool // turn on verbose db logging
 	UpdateDb bool // if we should update db items during crawl
 }
 

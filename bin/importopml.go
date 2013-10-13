@@ -53,7 +53,7 @@ func importOPML(cmd *commander.Command, args []string) {
 	cfg.Db.UpdateDb = true
 
 	mailer := mail.CreateAndStartStubMailer()
-	dbh := db.NewDbDispatcher(cfg.Db.Path, false, true)
+	dbh := db.NewDbDispatcher(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 
 	fr, err := ioutil.ReadFile(opml_file)
 	if err != nil {

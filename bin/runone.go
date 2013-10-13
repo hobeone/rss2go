@@ -52,7 +52,7 @@ func runOne(cmd *commander.Command, args []string) {
 
 	mailer := mail.CreateAndStartMailer(cfg)
 
-	db := db.NewDbDispatcher(cfg.Db.Path, true, update_db)
+	db := db.NewDbDispatcher(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 
 	feed, err := db.GetFeedByUrl(feed_url)
 	if err != nil {
