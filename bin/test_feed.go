@@ -2,16 +2,16 @@ package main
 
 import (
 	"fmt"
-	"github.com/gonuts/commander"
-	"github.com/gonuts/flag"
 	"github.com/hobeone/rss2go/crawler"
+	"github.com/hobeone/rss2go/flagutil"
 	"github.com/hobeone/rss2go/feed"
 	"github.com/hobeone/rss2go/mail"
 	"io/ioutil"
+	"flag"
 )
 
-func make_cmd_test_feed() *commander.Command {
-	cmd := &commander.Command{
+func make_cmd_test_feed() *flagutil.Command {
+	cmd := &flagutil.Command{
 		Run:       testFeed,
 		UsageLine: "test_feed",
 		Short:     "Crawl and try to parse a feed from the command line.",
@@ -28,7 +28,7 @@ func make_cmd_test_feed() *commander.Command {
 	return cmd
 }
 
-func testFeed(cmd *commander.Command, args []string) {
+func testFeed(cmd *flagutil.Command, args []string) {
 	if len(args) < 1 {
 		printErrorAndExit("Need to provide a url to crawl.\n")
 	}

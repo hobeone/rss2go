@@ -1,17 +1,17 @@
 package main
 
 import (
-	"github.com/gonuts/commander"
-	"github.com/gonuts/flag"
 	"github.com/hobeone/rss2go/crawler"
+	"github.com/hobeone/rss2go/flagutil"
+	"flag"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/mail"
 	"fmt"
 )
 
-func make_cmd_addfeed() *commander.Command {
-	cmd := &commander.Command{
+func make_cmd_addfeed() *flagutil.Command {
+	cmd := &flagutil.Command{
 		Run:       addFeed,
 		UsageLine: "addfeed FeedName FeedUrl",
 		Short:     "Add a feed to the database.",
@@ -25,20 +25,21 @@ func make_cmd_addfeed() *commander.Command {
 		Flag: *flag.NewFlagSet("addfeed", flag.ExitOnError),
 	}
 	cmd.Flag.Bool("poll_feed", false, "Get the current feed contents and add them to the database.")
+	cmd.Flag.String("config_file", default_config, "Config file to use.")
 
 	return cmd
 }
 
-func addFeed(cmd *commander.Command, args []string) {
+func addFeed(cmd *flagutil.Command, args []string) {
 	if len(args) < 2 {
 		printErrorAndExit("Must supply feed name and url")
 	}
 	feed_name := args[0]
 	feed_url := args[1]
 
-	poll_feed := cmd.Flag.Lookup("poll_feed").Value.Get().(bool)
+	poll_feed := cmd.Flag.Lookup("poll_feed").Value.(flag.Getter).Get().(bool)
 
-	cfg := loadConfig(g_cmd.Flag.Lookup("config_file").Value.Get().(string))
+	cfg := loadConfig(cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
 
 	// Override config settings
 	cfg.Mail.SendMail = false

@@ -5,12 +5,12 @@ import (
 	"code.google.com/p/go-charset/charset"
 	_ "code.google.com/p/go-charset/data"
 	"encoding/xml"
+	"flag"
 	"fmt"
-	"github.com/gonuts/commander"
-	"github.com/gonuts/flag"
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
+	"github.com/hobeone/rss2go/flagutil"
 	"github.com/hobeone/rss2go/mail"
 	"github.com/hobeone/rss2go/opml"
 	"github.com/mattn/go-sqlite3"
@@ -19,8 +19,8 @@ import (
 	"sync"
 )
 
-func make_cmd_importopml() *commander.Command {
-	cmd := &commander.Command{
+func make_cmd_importopml() *flagutil.Command {
+	cmd := &flagutil.Command{
 		Run:       importOPML,
 		UsageLine: "importopml opmlfile",
 		Short:     "Import all feeds from an opml file.",
@@ -33,20 +33,20 @@ func make_cmd_importopml() *commander.Command {
 		`,
 		Flag: *flag.NewFlagSet("importopml", flag.ExitOnError),
 	}
-	cmd.Flag.String("config_file", "", "Config file to use.")
-	cmd.Flag.Bool("update_feeds", false, "Get the current feed contents and add them to the database.")
-
+	cmd.Flag.Bool("update_feeds", false,
+		"Get the current feed contents and add them to the database.")
+	cmd.Flag.String("config_file", default_config, "Config file to use.")
 	return cmd
 }
 
-func importOPML(cmd *commander.Command, args []string) {
+func importOPML(cmd *flagutil.Command, args []string) {
 	if len(args) < 1 {
 		printErrorAndExit("Must supply filename to import.")
 	}
 	opml_file := args[0]
 
-	update_feeds := cmd.Flag.Lookup("update_feeds").Value.Get().(bool)
-	cfg := loadConfig(g_cmd.Flag.Lookup("config_file").Value.Get().(string))
+	update_feeds := cmd.Flag.Lookup("update_feeds").Value.(flag.Getter).Get().(bool)
+	cfg := loadConfig(cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
 
 	// Override config settings
 	cfg.Mail.SendMail = false

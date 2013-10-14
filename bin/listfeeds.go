@@ -1,14 +1,14 @@
 package main
 
 import (
-	"github.com/gonuts/commander"
-	"github.com/gonuts/flag"
-	"github.com/hobeone/rss2go/db"
 	"fmt"
+	"flag"
+	"github.com/hobeone/rss2go/db"
+	"github.com/hobeone/rss2go/flagutil"
 )
 
-func make_cmd_listfeeds() *commander.Command {
-	cmd := &commander.Command{
+func make_cmd_listfeeds() *flagutil.Command {
+	cmd := &flagutil.Command{
 		Run:       listFeed,
 		UsageLine: "listfeeds",
 		Short:     "List all the feeds in the database.",
@@ -23,8 +23,8 @@ func make_cmd_listfeeds() *commander.Command {
 	return cmd
 }
 
-func listFeed(cmd *commander.Command, args []string) {
-	cfg := loadConfig(g_cmd.Flag.Lookup("config_file").Value.Get().(string))
+func listFeed(cmd *flagutil.Command, args []string) {
+	cfg := loadConfig(cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
 	db := db.NewDbDispatcher(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 	feeds, err := db.GetAllFeeds()
 

@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/gonuts/commander"
-	"github.com/gonuts/flag"
 	"github.com/hobeone/rss2go/config"
+	"github.com/hobeone/rss2go/flagutil"
+	"flag"
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
@@ -13,8 +13,8 @@ import (
 	"net/http"
 )
 
-func make_cmd_daemon() *commander.Command {
-	cmdDaemon := &commander.Command{
+func make_cmd_daemon() *flagutil.Command {
+	cmd := &flagutil.Command{
 		Run:       daemon,
 		UsageLine: "daemon",
 		Short:     "Start a daemon to collect feeds and mail items.",
@@ -24,17 +24,18 @@ func make_cmd_daemon() *commander.Command {
 		`,
 		Flag: *flag.NewFlagSet("daemon", flag.ExitOnError),
 	}
-	cmdDaemon.Flag.Bool("send_mail", true, "Actually send mail or not.")
-	cmdDaemon.Flag.Bool("db_updates", true, "Don't actually update feed info in the db.")
+	cmd.Flag.Bool("send_mail", true, "Actually send mail or not.")
+	cmd.Flag.Bool("db_updates", true, "Don't actually update feed info in the db.")
 
-	return cmdDaemon
+	cmd.Flag.String("config_file", default_config, "Config file to use.")
+	return cmd
 }
 
-func daemon(cmd *commander.Command, args []string) {
-	send_mail := cmd.Flag.Lookup("send_mail").Value.Get().(bool)
-	update_db := cmd.Flag.Lookup("db_updates").Value.Get().(bool)
+func daemon(cmd *flagutil.Command, args []string) {
+	send_mail := cmd.Flag.Lookup("send_mail").Value.(flag.Getter).Get().(bool)
+	update_db := cmd.Flag.Lookup("db_updates").Value.(flag.Getter).Get().(bool)
 
-	cfg := loadConfig(g_cmd.Flag.Lookup("config_file").Value.Get().(string))
+	cfg := loadConfig(cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
 
 	// Override config settings from flags:
 	cfg.Mail.SendMail = send_mail
@@ -45,6 +46,7 @@ func daemon(cmd *commander.Command, args []string) {
 	db := db.NewDbDispatcher(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 
 	all_feeds, err := db.GetAllFeeds()
+
 	if err != nil {
 		log.Fatal(err.Error())
 	}

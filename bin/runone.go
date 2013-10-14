@@ -1,19 +1,19 @@
 package main
 
 import (
-	"github.com/gonuts/commander"
-	"github.com/gonuts/flag"
+	"flag"
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
+	"github.com/hobeone/rss2go/flagutil"
 	"github.com/hobeone/rss2go/mail"
 	"github.com/hobeone/rss2go/server"
-	"time"
 	"net/http"
+	"time"
 )
 
-func make_cmd_runone() *commander.Command {
-	cmdDaemon := &commander.Command{
+func make_cmd_runone() *flagutil.Command {
+	cmd := &flagutil.Command{
 		Run:       runOne,
 		UsageLine: "runone",
 		Short:     "Crawl a feed and mail new items.",
@@ -26,25 +26,25 @@ func make_cmd_runone() *commander.Command {
 		`,
 		Flag: *flag.NewFlagSet("runone", flag.ExitOnError),
 	}
-	cmdDaemon.Flag.Bool("send_mail", true, "Actually send mail or not.")
-	cmdDaemon.Flag.Bool("db_updates", true, "Don't actually update feed info in the db.")
-	cmdDaemon.Flag.String("config_file", "", "Config file to use.")
-	cmdDaemon.Flag.Int("loops", 1, "Number of times to pool this feed. -1 == forever.")
+	cmd.Flag.Bool("send_mail", true, "Actually send mail or not.")
+	cmd.Flag.Bool("db_updates", true, "Don't actually update feed info in the db.")
+	cmd.Flag.String("config_file", "", "Config file to use.")
+	cmd.Flag.Int("loops", 1, "Number of times to pool this feed. -1 == forever.")
 
-	return cmdDaemon
+	return cmd
 }
 
-func runOne(cmd *commander.Command, args []string) {
+func runOne(cmd *flagutil.Command, args []string) {
 	if len(args) < 1 {
 		printErrorAndExit("No url given to crawl")
 	}
 	feed_url := args[0]
 
-	send_mail := cmd.Flag.Lookup("send_mail").Value.Get().(bool)
-	update_db := cmd.Flag.Lookup("db_updates").Value.Get().(bool)
-	loops := cmd.Flag.Lookup("loops").Value.Get().(int)
+	send_mail := cmd.Flag.Lookup("send_mail").Value.(flag.Getter).Get().(bool)
+	update_db := cmd.Flag.Lookup("db_updates").Value.(flag.Getter).Get().(bool)
+	loops := cmd.Flag.Lookup("loops").Value.(flag.Getter).Get().(int)
 
-	cfg := loadConfig(g_cmd.Flag.Lookup("config_file").Value.Get().(string))
+	cfg := loadConfig(cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
 
 	// Override config settings from flags:
 	cfg.Mail.SendMail = send_mail
