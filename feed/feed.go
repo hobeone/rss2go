@@ -16,7 +16,7 @@ import (
 	"github.com/hobeone/rss2go/rdf"
 	"github.com/hobeone/rss2go/rss"
 	"html"
-	"log"
+	"github.com/golang/glog"
 	"net/url"
 	"strings"
 	"time"
@@ -141,7 +141,7 @@ func parseRss(u string, b []byte) (*Feed, []*Story, error){
 	if t, err := parseDate(&f, r.LastBuildDate, r.PubDate); err == nil {
 		f.Updated = t
 	} else {
-		log.Printf("no rss feed date: %v", f.Link)
+		glog.Infof("no rss feed date: %v", f.Link)
 	}
 
 	for _, i := range r.Items {
@@ -247,7 +247,7 @@ func ParseFeed(u string, b []byte) (*Feed, []*Story, error) {
 
 	err = fmt.Errorf("Error parsing feed. Couldn't find ATOM, RSS or RDF feed. ATOM Error: %s, RSS Error: %s, RDF Error: %s\n", atomerr, rsserr, rdferr)
 
-	log.Print(err.Error())
+	glog.Info(err.Error())
 	return nil, nil, err
 }
 
@@ -288,7 +288,7 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 	}
 	base, err := url.Parse(f.Link)
 	if err != nil {
-		log.Printf("unable to parse link: %v", f.Link)
+		glog.Infof("unable to parse link: %v", f.Link)
 	}
 
 	for _, s := range ss {
@@ -310,7 +310,7 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 			} else if s.Title != "" {
 				s.Id = s.Title
 			} else {
-				log.Printf("story has no id: %v", s)
+				glog.Infof("story has no id: %v", s)
 				return nil, nil, fmt.Errorf("story has no id: %v", s)
 			}
 		}
@@ -325,7 +325,7 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 			if err == nil {
 				s.Link = link.String()
 			} else {
-				log.Printf("unable to resolve link: %v", s.Link)
+				glog.Infof("unable to resolve link: %v", s.Link)
 			}
 		}
 		su, serr := url.Parse(s.Link)

@@ -6,7 +6,7 @@ import (
 	"github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/mail"
 	"io/ioutil"
-	"log"
+	"github.com/golang/glog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,18 +14,6 @@ import (
 	"testing"
 	"time"
 )
-
-type NullWriter int
-
-func (NullWriter) Write([]byte) (int, error) { return 0, nil }
-
-func DisableLogging() {
-	log.SetOutput(new(NullWriter))
-}
-
-func init() {
-	DisableLogging()
-}
 
 func MakeDbFixtures(d db.DbDispatcher, local_url string) {
 	all_feeds := []db.FeedInfo{
@@ -46,7 +34,7 @@ var fake_server_handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.R
 	case strings.HasSuffix(r.URL.Path, "test.rss"):
 		feed_resp, err := ioutil.ReadFile("../testdata/ars.rss")
 		if err != nil {
-			log.Fatalf("Error reading test feed: %s", err.Error())
+			glog.Fatalf("Error reading test feed: %s", err.Error())
 		}
 		content = feed_resp
 	case true:
@@ -62,7 +50,7 @@ func TestEndToEndIntegration(t *testing.T) {
 
 	// Override the sleep function
 	feed_watcher.Sleep = func(d time.Duration) {
-		log.Printf("Call to mock sleep, sleeping for just 1 second.")
+		glog.Infof("Call to mock sleep, sleeping for just 1 second.")
 		time.Sleep(time.Second * time.Duration(1))
 		return
 	}
@@ -76,7 +64,7 @@ func TestEndToEndIntegration(t *testing.T) {
 	all_feeds, err := db.GetAllFeeds()
 
 	if err != nil {
-		log.Fatalf("Error reading feeds: %s", err.Error())
+		glog.Fatalf("Error reading feeds: %s", err.Error())
 	}
 
 	mailer := mail.CreateAndStartStubMailer()

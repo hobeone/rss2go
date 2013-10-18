@@ -9,7 +9,7 @@ import (
 	"github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/mail"
 	"github.com/hobeone/rss2go/server"
-	"log"
+	"github.com/golang/glog"
 	"net/http"
 )
 
@@ -48,12 +48,12 @@ func daemon(cmd *flagutil.Command, args []string) {
 	all_feeds, err := db.GetAllFeeds()
 
 	if err != nil {
-		log.Fatal(err.Error())
+		glog.Fatal(err.Error())
 	}
 	feeds, response_channel := CreateAndStartFeedWatchers(
 		all_feeds, cfg, mailer, db)
 
-	log.Printf("Got %d feeds to watch.\n", len(all_feeds))
+	glog.Infof("Got %d feeds to watch.\n", len(all_feeds))
 
 	go server.StartHttpServer(cfg, feeds)
 	for {
@@ -74,7 +74,7 @@ func startPollers(
 	feeds := make(map[string]*feed_watcher.FeedWatcher)
 	for _, f := range all_feeds {
 		if _, ok := feeds[f.Url]; ok {
-			log.Printf("Found duplicate feed: %s", f.Url)
+			glog.Infof("Found duplicate feed: %s", f.Url)
 			continue
 		}
 

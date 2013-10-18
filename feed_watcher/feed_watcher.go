@@ -21,7 +21,7 @@ import (
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed"
 	"github.com/hobeone/rss2go/mail"
-	"log"
+	"github.com/golang/glog"
 	"math/rand"
 	"time"
 )
@@ -155,24 +155,24 @@ func (self *FeedWatcher) UpdateFeed() *FeedCrawlResponse {
 // Core logic to poll a feed, find new items, add those to the database, and
 // send them for mail.
 func (self *FeedWatcher) updateFeed() *FeedCrawlResponse {
-	log.Printf("Polling feed %v", self.FeedInfo.Url)
+	glog.Infof("Polling feed %v", self.FeedInfo.Url)
 	resp := self.doCrawl()
 
 	if resp.Error != nil {
-		log.Printf("Error getting feed %v: %v", self.FeedInfo.Url, resp.Error)
+		glog.Infof("Error getting feed %v: %v", self.FeedInfo.Url, resp.Error)
 		return resp
 	}
-	log.Printf("Got response to crawl of %v of length (%d)", resp.URI,
+	glog.Infof("Got response to crawl of %v of length (%d)", resp.URI,
 		len(resp.Body))
 	feed, stories, err := feed.ParseFeed(resp.URI, resp.Body)
 
 	if feed == nil || stories == nil {
 		if err != nil {
-			log.Printf("Error parsing response from %s: %#v", resp.URI, err)
+			glog.Infof("Error parsing response from %s: %#v", resp.URI, err)
 			resp.Error = err
 		} else {
 			e := fmt.Errorf("No items found in %s", resp.URI)
-			log.Print(e)
+			glog.Info(e)
 			resp.Error = e
 		}
 		return resp
@@ -187,30 +187,30 @@ func (self *FeedWatcher) updateFeed() *FeedCrawlResponse {
 		self.KnownGuids, err = self.LoadGuidsFromDb(stories)
 		if err != nil {
 			e := fmt.Errorf("Error getting Guids from DB: %s", err)
-			log.Print(e)
+			glog.Info(e)
 			resp.Error = e
 			return resp
 		}
-		log.Printf("Loaded %d known guids for Feed %s.",
+		glog.Infof("Loaded %d known guids for Feed %s.",
 			len(self.KnownGuids), self.FeedInfo.Url)
 	}
 
 	resp.Items = self.filterNewItems(stories, self.KnownGuids)
 
-	log.Printf("Feed %s has new %d items", feed.Title, len(resp.Items))
+	glog.Infof("Feed %s has new %d items", feed.Title, len(resp.Items))
 	for _, item := range resp.Items {
-		log.Printf("New Story: %s, sending for mail.", item.Title)
+		glog.Infof("New Story: %s, sending for mail.", item.Title)
 		err := self.sendMail(item)
 		if err != nil {
-			log.Printf("Error sending mail: %s", err.Error())
+			glog.Infof("Error sending mail: %s", err.Error())
 		} else {
 			err := self.recordGuid(item.Id)
 			if err != nil {
 				e := fmt.Errorf("Error writing guid to db: %s", err)
 				resp.Error = e
-				log.Print(e)
+				glog.Info(e)
 			} else {
-				log.Printf("Added guid %s for feed %s", item.Id, self.FeedInfo.Url)
+				glog.Infof("Added guid %s for feed %s", item.Id, self.FeedInfo.Url)
 			}
 		}
 	}
@@ -220,7 +220,7 @@ func (self *FeedWatcher) updateFeed() *FeedCrawlResponse {
 // Designed to be called as a Goroutine.  Use UpdateFeed to just update once.
 func (self *FeedWatcher) PollFeed() bool {
 	if !self.lockPoll() {
-		log.Printf("Called PollLoop on %v when already polling. ignoring.\n",
+		glog.Infof("Called PollLoop on %v when already polling. ignoring.\n",
 			self.FeedInfo.Url)
 		return false
 	}
@@ -228,14 +228,14 @@ func (self *FeedWatcher) PollFeed() bool {
 
 	seconds_since_last_poll := int64(time.Since(self.FeedInfo.LastPollTime).Seconds())
 	if seconds_since_last_poll < self.min_sleep_seconds {
-		log.Printf("Last poll of %s was only %d seconds ago, sleeping.",
+		glog.Infof("Last poll of %s was only %d seconds ago, sleeping.",
 			self.FeedInfo.Url, seconds_since_last_poll)
 		self.sleep(self.min_sleep_seconds - seconds_since_last_poll)
 	}
 	for {
 		select {
 		case <-self.exit_now_chan:
-			log.Printf("Stopping poll of %v", self.FeedInfo.Url)
+			glog.Infof("Stopping poll of %v", self.FeedInfo.Url)
 			return true
 		default:
 			resp := self.UpdateFeed()
@@ -243,7 +243,7 @@ func (self *FeedWatcher) PollFeed() bool {
 			self.response_chan <- resp
 			to_sleep := self.min_sleep_seconds
 			if resp.Error != nil {
-				log.Printf("Feed %s had error sleepming maxium allowed time.",
+				glog.Infof("Feed %s had error sleepming maxium allowed time.",
 					self.FeedInfo.Url)
 				to_sleep = self.max_sleep_seconds
 			}
@@ -255,7 +255,7 @@ func (self *FeedWatcher) PollFeed() bool {
 // Sleep for the given amount of seconds plus a upto 60 extra seconds.
 func (self *FeedWatcher) sleep(tosleep int64) {
 	s := tosleep + rand.Int63n(60)
-	log.Printf("Sleeping %d seconds for %s", s, self.FeedInfo.Url)
+	glog.Infof("Sleeping %d seconds for %s", s, self.FeedInfo.Url)
 	Sleep(time.Second * time.Duration(s))
 }
 
@@ -283,7 +283,7 @@ func (self *FeedWatcher) recordGuid(guid string) error {
 }
 
 func (self *FeedWatcher) filterNewItems(stories []*feed.Story, guids map[string]bool) []*feed.Story {
-	log.Printf("Filtering stories we already know about.")
+	glog.Infof("Filtering stories we already know about.")
 	new_stories := []*feed.Story{}
 	for _, story := range stories {
 		if _, found := self.KnownGuids[story.Id]; !found {

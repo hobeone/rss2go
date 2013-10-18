@@ -3,18 +3,7 @@ package db
 import (
 	"testing"
 	"time"
-	"log"
 )
-
-type NullWriter int
-func (NullWriter) Write([]byte) (int, error) { return 0, nil }
-func DisableLogging() {
-	log.SetOutput(new(NullWriter))
-}
-
-func init() {
-	DisableLogging()
-}
 
 func TestFeedCreation(t *testing.T) {
 	d := NewMemoryDbDispatcher(false, true)

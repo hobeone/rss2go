@@ -6,13 +6,13 @@ import (
 	"github.com/hobeone/rss2go/httpclient"
 	"io"
 	"io/ioutil"
-	"log"
+	"github.com/golang/glog"
 	"net/http"
 	"time"
 )
 
 func GetFeed(url string) (*http.Response, error) {
-	log.Printf("Crawling %v", url)
+	glog.Infof("Crawling %v", url)
 
 	// Defaults to 1 second for connect and read
 	connectTimeout := (5 * time.Second)
@@ -22,12 +22,12 @@ func GetFeed(url string) (*http.Response, error) {
 	r, err := httpClient.Get(url)
 
 	if err != nil {
-		log.Printf("Error getting %s: %s", url, err)
+		glog.Infof("Error getting %s: %s", url, err)
 		return r, err
 	}
 	if r.StatusCode != http.StatusOK {
 		err = fmt.Errorf("Feed %s returned a non 200 status code: %s", url, r.Status)
-		log.Print(err)
+		glog.Info(err)
 		return r, err
 	}
 	return r, nil

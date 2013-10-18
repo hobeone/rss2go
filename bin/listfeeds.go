@@ -20,6 +20,7 @@ func make_cmd_listfeeds() *flagutil.Command {
 		`,
 		Flag: *flag.NewFlagSet("listfeeds", flag.ExitOnError),
 	}
+	cmd.Flag.String("config_file", default_config, "Config file to use.")
 	return cmd
 }
 

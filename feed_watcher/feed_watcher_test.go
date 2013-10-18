@@ -5,7 +5,6 @@ import (
 	"github.com/hobeone/rss2go/feed"
 	"github.com/hobeone/rss2go/mail"
 	"io/ioutil"
-	"log"
 	"testing"
 	"time"
 )
@@ -22,16 +21,6 @@ func loadTestFixtures(dbh *db.DbDispatcher) []*db.FeedInfo {
 		panic(err.Error())
 	}
 	return []*db.FeedInfo{feed}
-}
-
-type NullWriter int
-
-func (NullWriter) Write([]byte) (int, error) { return 0, nil }
-func DisableLogging() {
-	log.SetOutput(new(NullWriter))
-}
-func init() {
-	DisableLogging()
 }
 
 /*
@@ -254,7 +243,6 @@ func TestFeedWatcherWithTooRecentLastPoll(t *testing.T) {
 
 	sleep_calls := 0
 	Sleep = func(d time.Duration) {
-		log.Print("Called fake sleep.")
 		sleep_calls++
 		return
 	}

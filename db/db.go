@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/astaxie/beedb"
 	_ "github.com/mattn/go-sqlite3"
-	"log"
+	"github.com/golang/glog"
 	"sync"
 	"time"
 )
@@ -56,7 +56,7 @@ const FEED_ITEM_TABLE = `
 
 func createAndOpenDb(db_path string, verbose bool, memory bool) beedb.Model {
 	beedb.OnDebug = verbose
-	log.Printf("Opening database %s", db_path)
+	glog.Infof("Opening database %s", db_path)
 	mode := "rwc"
 	if memory {
 		mode = "memory"
@@ -65,18 +65,18 @@ func createAndOpenDb(db_path string, verbose bool, memory bool) beedb.Model {
 		fmt.Sprintf("file:%s?mode=%s", db_path, mode))
 
 	if err != nil {
-		log.Fatal(err)
+		glog.Fatal(err)
 	}
 
 	rows, err := db.Query("SELECT name FROM sqlite_master WHERE type='table';")
 	if err != nil {
-		log.Fatal("Couldn't get list of tables from database.")
+		glog.Fatal("Couldn't get list of tables from database.")
 	}
 	tables := make(map[string]bool)
 	for rows.Next() {
     var name string
     if err := rows.Scan(&name); err != nil {
-        log.Fatal(err)
+        glog.Fatal(err)
     }
 		tables[name] = true
 	}
@@ -166,7 +166,7 @@ func (self *DbDispatcher) GetFeedItemByGuid(guid string) (
 
 func (self *DbDispatcher) RecordGuid(feed_id int, guid string) (err error) {
 	if self.writeUpdates {
-		log.Printf("Adding GUID '%s' for feed %d", guid, feed_id)
+		glog.Infof("Adding GUID '%s' for feed %d", guid, feed_id)
 		var f FeedItem
 		f.FeedInfoId = feed_id
 		f.Guid = guid
@@ -188,7 +188,7 @@ func (self *DbDispatcher) GetGuidsForFeed(feed_id int, guids *[]string) (*[]stri
 	if err != nil {
 		return &[]string{}, err
 	}
-	log.Printf("Got %d results for guids.", len(allitems))
+	glog.Infof("Got %d results for guids.", len(allitems))
 	known_guids := make([]string, len(allitems))
 	for i, v := range allitems {
 		known_guids[i] = v.Guid

@@ -15,7 +15,7 @@ import (
 	"github.com/hobeone/rss2go/opml"
 	"github.com/mattn/go-sqlite3"
 	"io/ioutil"
-	"log"
+	"github.com/golang/glog"
 	"sync"
 )
 
@@ -57,7 +57,7 @@ func importOPML(cmd *flagutil.Command, args []string) {
 
 	fr, err := ioutil.ReadFile(opml_file)
 	if err != nil {
-		log.Fatalf("Error reading OPML file: %s", err.Error())
+		glog.Fatalf("Error reading OPML file: %s", err.Error())
 	}
 	o := opml.Opml{}
 	d := xml.NewDecoder(bytes.NewReader(fr))
@@ -65,7 +65,7 @@ func importOPML(cmd *flagutil.Command, args []string) {
 	d.Strict = false
 
 	if err := d.Decode(&o); err != nil {
-		log.Fatalf("opml error: %v", err.Error())
+		glog.Fatalf("opml error: %v", err.Error())
 	}
 	feeds := make(map[string]string)
 	var proc func(outlines []*opml.OpmlOutline)

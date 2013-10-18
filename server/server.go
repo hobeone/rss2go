@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/feed_watcher"
-	"log"
+	"github.com/golang/glog"
 	"net/http"
 	_ "net/http/pprof"
 	"sort"
@@ -37,6 +37,6 @@ func StartHttpServer(config *config.Config, feeds map[string]*feed_watcher.FeedW
 		}
 	})
 
-	log.Printf("Starting http server on %v", config.WebServer.ListenAddress)
-	log.Fatal(http.ListenAndServe(config.WebServer.ListenAddress, nil))
+	glog.Infof("Starting http server on %v", config.WebServer.ListenAddress)
+	glog.Fatal(http.ListenAndServe(config.WebServer.ListenAddress, nil))
 }

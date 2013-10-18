@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/hobeone/rss2go/feed_watcher"
 	"io/ioutil"
-	"log"
+	"github.com/golang/glog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -66,7 +66,7 @@ var fake_server_handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.R
 	case strings.HasSuffix(r.URL.Path, "ars.rss"):
 		feed_resp, err := ioutil.ReadFile("../testdata/ars.rss")
 		if err != nil {
-			log.Fatalf("Error reading test feed: %s", err.Error())
+			glog.Fatalf("Error reading test feed: %s", err.Error())
 		}
 		content = feed_resp
 	case strings.HasSuffix(r.URL.Path, "error.rss"):

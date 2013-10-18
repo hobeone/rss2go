@@ -3,10 +3,10 @@ package mail
 import (
 	"bytes"
 	"fmt"
-	"github.com/jpoehls/gophermail"
+	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/feed"
-	"log"
+	"github.com/jpoehls/gophermail"
 	"net/mail"
 	"net/smtp"
 	"os/exec"
@@ -51,7 +51,7 @@ func NewMailDispatcher(
 		if err != nil {
 			panic(fmt.Sprintf("Couldn't find specified MTA: %s", err.Error()))
 		} else {
-			log.Printf("Found %s at %s.", mta_binary_name, c)
+			glog.Infof("Found %s at %s.", mta_binary_name, c)
 		}
 		mta_binary_name = c
 	}
@@ -85,10 +85,10 @@ func CreateAndStartMailer(config *config.Config) *MailDispatcher {
 		config.Mail.SmtpPassword,
 	)
 	if !config.Mail.SendMail {
-		log.Print("Setting dry run as configured.")
+		glog.Info("Setting dry run as configured.")
 		mailer.SetDryRun(true)
 	}
-	log.Printf("Created new mailer: %#v", mailer)
+	glog.Infof("Created new mailer: %#v", mailer)
 	go mailer.DispatchLoop()
 	return mailer
 }
@@ -122,7 +122,7 @@ func (self *MailDispatcher) sendMailWithSendmail(
 		return fmt.Errorf("Error running command %#v: %s",
 			cmd.Args, err)
 	}
-	log.Printf("Successfully sent mail: %s", msg.Subject)
+	glog.Infof("Successfully sent mail: %s", msg.Subject)
 	return nil
 }
 

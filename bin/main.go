@@ -1,12 +1,12 @@
 package main
 
 import (
+	"flag"
 	"fmt"
+	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/flagutil"
 	"os"
-	"log"
-	"flag"
 )
 
 const default_config = "~/.config/rss2go/config.toml"
@@ -18,16 +18,16 @@ func printErrorAndExit(err_string string) {
 
 func loadConfig(config_file string) *config.Config {
 	if len(config_file) == 0 {
-		log.Printf("No --config_file given.  Using default: %s\n",
+		glog.Infof("No --config_file given.  Using default: %s\n",
 			default_config)
 		config_file = default_config
 	}
 
-	log.Printf("Got config file: %s\n", config_file)
+	glog.Infof("Got config file: %s\n", config_file)
 	config := config.NewConfig()
 	err := config.ReadConfig(config_file)
 	if err != nil {
-		log.Fatal(err)
+		glog.Fatal(err)
 	}
 	return config
 }
@@ -42,6 +42,8 @@ func main() {
 		make_cmd_listfeeds(),
 		make_cmd_importopml(),
 	)
+
+	defer glog.Flush()
 
 	flag.Set("logtostderr", "true")
 
