@@ -41,6 +41,7 @@ func main() {
 		make_cmd_removefeed(),
 		make_cmd_listfeeds(),
 		make_cmd_importopml(),
+		make_cmd_badfeeds(),
 	)
 
 	defer glog.Flush()

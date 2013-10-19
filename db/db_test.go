@@ -23,7 +23,7 @@ func TestFeedCreation(t *testing.T) {
 }
 
 func TestCheckRecordGuid(t *testing.T) {
-	d := NewMemoryDbDispatcher(true, true)
+	d := NewMemoryDbDispatcher(false, true)
 	err := d.RecordGuid(1, "123")
 
 	if err != nil {
@@ -34,7 +34,7 @@ func TestCheckRecordGuid(t *testing.T) {
 func TestGetGuidsForFeed(t *testing.T) {
 	d := NewMemoryDbDispatcher(false, true)
 
-	guids := []string{"1","2","3"}
+	guids := []string{"1", "2", "3"}
 
 	var feed FeedItem
 	feed.FeedInfoId = 1
@@ -75,5 +75,30 @@ func TestAddAndDeleteFeed(t *testing.T) {
 	_, err = d.GetFeedByUrl(feed.Url)
 	if err == nil {
 		t.Errorf("Feed with url %s shouldn't exist anymore.", feed.Url)
+	}
+}
+
+func TestGetStaleFeeds(t *testing.T) {
+	d := NewMemoryDbDispatcher(false, true)
+
+	feed1, _ := d.AddFeed("test1", "http://foo.bar/")
+	feed2, _ := d.AddFeed("test2", "http://foo.baz/")
+	d.RecordGuid(feed1.Id, "foobar")
+	d.RecordGuid(feed2.Id, "foobaz")
+	guid, err := d.GetFeedItemByGuid("foobar")
+	if err != nil {
+		t.Fatalf("Error getting guid: %s", err.Error())
+	}
+	guid.AddedOn = *new(time.Time)
+	d.Orm.Save(guid)
+
+	f, err := d.GetStaleFeeds()
+	if err != nil {
+		t.Errorf("Error getting stale feeds: %s", err.Error())
+	}
+
+	exp := "http://foo.bar/"
+	if f[0].Url != exp {
+		t.Error("Expected stale feed url of %s, instead got %s", exp, f[0].Url)
 	}
 }

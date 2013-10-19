@@ -1,17 +1,6 @@
-If feed returns non 200 code sleep max sleep time
 
-Log to file
-
-Feed meta information:
-- Last polled for each feed
-- Last successful poll (2XX code)
-- Last poll result
-
-Add command to show feeds:
 - which haven't been updated in a while
 - haven't been successfully scraped in a while
-
-Set next poll time based off of last poll time in DB
 
 Follow next poll data from feeds
 

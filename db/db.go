@@ -50,11 +50,11 @@ const FEED_ITEM_TABLE = `
 		id integer not null primary key,
 		feed_info_id integer not null,
 		guid text not null,
-		added_on DATE NULL
+		added_on DATE not NULL
 	);
 `
 
-func createAndOpenDb(db_path string, verbose bool, memory bool) beedb.Model {
+func createAndOpenDb(db_path string, verbose bool, memory bool) (*sql.DB, beedb.Model) {
 	beedb.OnDebug = verbose
 	glog.Infof("Opening database %s", db_path)
 	mode := "rwc"
@@ -87,7 +87,7 @@ func createAndOpenDb(db_path string, verbose bool, memory bool) beedb.Model {
 	if _, ok := tables["feed_item"]; !ok {
 		createTable(db, FEED_ITEM_TABLE)
 	}
-	return beedb.New(db)
+	return db, beedb.New(db)
 }
 
 func createTable(dbh *sql.DB, table_def string) {
@@ -100,22 +100,26 @@ func createTable(dbh *sql.DB, table_def string) {
 
 type DbDispatcher struct {
 	Orm          beedb.Model
+	dbh					 *sql.DB
 	writeUpdates bool
 	syncMutex    sync.Mutex
 }
 
 func NewDbDispatcher(db_path string, verbose bool, write_updates bool) *DbDispatcher {
-	return &DbDispatcher{
-		Orm:          createAndOpenDb(db_path, verbose, false),
+	d := &DbDispatcher{
 		writeUpdates: write_updates,
 	}
+	d.dbh, d.Orm = createAndOpenDb(db_path, verbose, false)
+	return d
 }
 
 func NewMemoryDbDispatcher(verbose bool, write_updates bool) *DbDispatcher {
-	return &DbDispatcher{
-		Orm:          createAndOpenDb("in_memory_test", verbose, true),
+	d := &DbDispatcher{
 		writeUpdates: write_updates,
 	}
+	d.dbh, d.Orm = createAndOpenDb("in_memory_test", verbose, true)
+	return d
+
 }
 
 func (self *DbDispatcher) AddFeed(name string, url string) (*FeedInfo, error) {
@@ -148,20 +152,63 @@ func (self *DbDispatcher) GetAllFeeds() (feeds []FeedInfo, err error) {
 	return
 }
 
+func (self *DbDispatcher) GetFeedsWithErrors() (feeds []FeedInfo, err error) {
+	self.syncMutex.Lock()
+	defer self.syncMutex.Unlock()
+
+	err = self.Orm.Where(
+		"last_poll_error IS NOT NULL and last_poll_error <> ''").FindAll(&feeds)
+
+	return
+}
+
+func (self *DbDispatcher) GetStaleFeeds() (feeds []FeedInfo, err error) {
+	self.syncMutex.Lock()
+	defer self.syncMutex.Unlock()
+
+	rows, err := self.dbh.Query(`
+	select feed_info.name, feed_info.url, feed_info.last_poll_time, feed_info.last_poll_error, r.MaxTime FROM (SELECT feed_info_id, MAX(added_on) as MaxTime FROM feed_item GROUP BY feed_info_id) r, feed_info INNER JOIN feed_item f ON f.feed_info_id = r.feed_info_id AND f.added_on = r.MaxTime AND r.MaxTime < datetime('now','-14 days') AND f.feed_info_id = feed_info.id group by f.feed_info_id;
+	`)
+	if err != nil {
+		return
+	}
+	for rows.Next() {
+    var name,url,last_poll_error, last_poll_time, max_time string
+    err = rows.Scan(&name, &url, &last_poll_time, &last_poll_error, &max_time);
+		if err != nil {
+        return
+    }
+    ftime, err := time.Parse("2006-01-02 15:04:05", max_time)
+		if err != nil {
+			return nil, err
+		}
+		// Sorta hacky: set LastPollTime to time of last item seen, rather than
+		// last time feed was polled.
+		feeds = append(feeds, FeedInfo{
+			Name: name,
+			Url: url,
+			LastPollTime: ftime,
+			LastPollError: last_poll_error,
+		})
+	}
+
+	return
+}
+
 func (self *DbDispatcher) GetFeedByUrl(url string) (*FeedInfo, error) {
 	feed := FeedInfo{}
 	err := self.Orm.Where("url = ?", url).Find(&feed)
 	return &feed, err
 }
 
-func (self *DbDispatcher) GetFeedItemByGuid(guid string) (
-	feed_item *FeedItem, err error) {
+func (self *DbDispatcher) GetFeedItemByGuid(guid string) (*FeedItem, error) {
 	//TODO: see if beedb will handle this correctly and protect against injection
 	//attacks.
+	fi := FeedItem{}
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
-	err = self.Orm.Where("guid = ?", guid).Find(&feed_item)
-	return
+	err := self.Orm.Where("guid = ?", guid).Find(&fi)
+	return &fi, err
 }
 
 func (self *DbDispatcher) RecordGuid(feed_id int, guid string) (err error) {
