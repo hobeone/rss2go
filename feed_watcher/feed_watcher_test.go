@@ -190,6 +190,22 @@ func TestFeedWatcherWithMalformedFeed(t *testing.T) {
 	}
 }
 
+func TestFeedWithBadEntity(t *testing.T) {
+	d := db.NewMemoryDbDispatcher(false, true)
+	fixtures := loadTestFixtures(d)
+	u := *fixtures[0]
+
+	feed_resp, err := ioutil.ReadFile("../testdata/bad_entity.rss")
+	if err != nil {
+		t.Fatal("Error reading test feed.")
+	}
+	_, _, err = feed.ParseFeed(u.Url, feed_resp)
+
+	if err != nil {
+		t.Error("Feed should be able to parse feeds with unescaped entities")
+	}
+}
+
 func TestFeedWatcherWithGuidsSet(t *testing.T) {
 	crawl_chan := make(chan *FeedCrawlRequest)
 	resp_chan := make(chan *FeedCrawlResponse)

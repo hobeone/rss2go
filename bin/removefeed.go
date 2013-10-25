@@ -10,14 +10,14 @@ import (
 func make_cmd_removefeed() *flagutil.Command {
 	cmd := &flagutil.Command{
 		Run:       removeFeed,
-		UsageLine: "removefeed FeedUrl",
-		Short:     "Remove a feed from the database.",
+		UsageLine: "removefeed URL, URL, ...",
+		Short:     "Remove feeds from the database.",
 		Long: `
 Remove a feed URL from the database and optionally purge it's state
 from the database.
 
 Example:
-removefeed --purge_feed http://test/feed.rss
+removefeed --purge_feed=false http://test/feed.rss http://test/other.rss
 		`,
 		Flag: *flag.NewFlagSet("removefeed", flag.ExitOnError),
 	}
@@ -29,9 +29,8 @@ removefeed --purge_feed http://test/feed.rss
 
 func removeFeed(cmd *flagutil.Command, args []string) {
 	if len(args) < 1 {
-		printErrorAndExit("Must supply feed name and url")
+		printErrorAndExit("Must supply at least one feed url to remove")
 	}
-	feed_url := args[0]
 
 	cfg := loadConfig(cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
 	purge_feed := cmd.Flag.Lookup("purge_feed").Value.(flag.Getter).Get().(bool)
@@ -41,10 +40,16 @@ func removeFeed(cmd *flagutil.Command, args []string) {
 
 	db := db.NewDbDispatcher(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 
-	err := db.RemoveFeed(feed_url, purge_feed)
-	if err != nil {
-		printErrorAndExit(err.Error())
+	had_error := false
+	for _, feed_url := range args {
+		err := db.RemoveFeed(feed_url, purge_feed)
+		if err != nil {
+			fmt.Println(err.Error())
+			had_error = true
+		}
+		fmt.Printf("Removed feed %s.\n", feed_url)
 	}
-
-	fmt.Printf("Removed feed %s.\n", feed_url)
+	if had_error {
+		printErrorAndExit("Error trying to remove one or more feeds")
+	}
 }

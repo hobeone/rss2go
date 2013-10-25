@@ -54,6 +54,7 @@ func parseAtom(u string, b []byte) (*Feed, []*Story, error){
 	var fb, eb *url.URL
 
 	xml_decoder := xml.NewDecoder(bytes.NewReader(b))
+	xml_decoder.Strict = false
 	xml_decoder.CharsetReader = charset.NewReader
 	err := xml_decoder.Decode(&a)
 	if err != nil {
@@ -123,6 +124,7 @@ func parseRss(u string, b []byte) (*Feed, []*Story, error){
 	r := rss.Rss{}
 
 	d := xml.NewDecoder(bytes.NewReader(b))
+	d.Strict = false
 	d.CharsetReader = charset.NewReader
 	d.DefaultSpace = "DefaultSpace"
 
@@ -182,6 +184,7 @@ func parseRdf(u string, b []byte) (*Feed, []*Story, error) {
 
 	d := xml.NewDecoder(bytes.NewReader(b))
 	d.CharsetReader = charset.NewReader
+	d.Strict = false
 	err := d.Decode(&rd)
 	if err != nil {
 		return nil, nil, err

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom">
+<channel><generator>http://textpattern.com/?v=4.0.8</generator>
+<title>Test Feed Title</title>
+<link>http://test/</link>
+<atom:link href="http://test/test" rel="self" type="application/rss+xml" />
+
+<pubDate>Sun, 13 Oct 2013 00:05:10 GMT</pubDate>
+
+<item><title>Bad entity: &</title>
+<description>testing</description>
+<link>http://test/test</link>
+<pubDate>Wed, 10 Jul 2013 11:20:44 GMT</pubDate>
+<dc:creator>Test User</dc:creator>
+<guid isPermaLink="false">tag:testing_guid</guid>
+</item>
+</channel>
+</rss>
