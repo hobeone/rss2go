@@ -103,8 +103,8 @@ func TestFeedWatcherPolling(t *testing.T) {
 	if len(resp.Items) != 0 {
 		t.Errorf("Expected 0 items from the feed. Got %d", len(resp.Items))
 	}
-	if len(n.KnownGuids) != 26 {
-		t.Errorf("Expected 26 known GUIDs got %d", len(n.KnownGuids))
+	if len(n.KnownGuids) != 25 {
+		t.Errorf("Expected 25 known GUIDs got %d", len(n.KnownGuids))
 	}
 }
 

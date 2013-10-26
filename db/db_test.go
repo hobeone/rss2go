@@ -31,25 +31,39 @@ func TestCheckRecordGuid(t *testing.T) {
 	}
 }
 
-func TestGetGuidsForFeed(t *testing.T) {
+func TestGetMostRecentGuidsForFeed(t *testing.T) {
 	d := NewMemoryDbDispatcher(false, true)
+	feed_id := 1
+	d.RecordGuid(feed_id, "123")
+	d.RecordGuid(feed_id, "1234")
+	d.RecordGuid(feed_id, "12345")
 
-	guids := []string{"1", "2", "3"}
+	max_guids_to_fetch := 2
+	guids, err := d.GetMostRecentGuidsForFeed(feed_id, max_guids_to_fetch)
 
-	var feed FeedItem
-	feed.FeedInfoId = 1
-	feed.Guid = "1"
-	err := d.Orm.Save(&feed)
 	if err != nil {
-		t.Fatalf("Error saving test item: %s", err)
+		t.Error(err.Error())
 	}
 
-	known_guids, err := d.GetGuidsForFeed(1, &guids)
-	if err != nil {
-		t.Fatalf("Error running SQL: %s", err.Error())
+	if len(guids) != 2 {
+		t.Errorf("Expecting to get 2 guids.  Got %d", len(guids))
 	}
-	if len(*known_guids) != 1 {
-		t.Fatalf("Error getting guids from db.  Expected 1, got: %#v", known_guids)
+
+	if guids[0] != "12345" {
+		t.Errorf("Expecting 12345 as first guid got %s", guids[0])
+	}
+
+	if guids[1] != "1234" {
+		t.Errorf("Expecting 1234 as second guid got %s", guids[1])
+	}
+
+	guids, err = d.GetMostRecentGuidsForFeed(feed_id, -1)
+
+	if err != nil {
+		t.Error(err.Error())
+	}
+	if len(guids) != 3 {
+		t.Errorf("Expecting to get 3 guids.  Got %d", len(guids))
 	}
 }
 
@@ -78,6 +92,24 @@ func TestAddAndDeleteFeed(t *testing.T) {
 	}
 }
 
+func testGetFeedItemByGuid(t *testing.T) {
+	d := NewMemoryDbDispatcher(false, true)
+
+	feed1, _ := d.AddFeed("test1", "http://foo.bar/")
+	feed2, _ := d.AddFeed("test2", "http://foo.baz/")
+	d.RecordGuid(feed1.Id, "foobar")
+	d.RecordGuid(feed2.Id, "foobaz")
+	d.RecordGuid(feed2.Id, "foobar")
+	guid, err := d.GetFeedItemByGuid(feed1.Id, "foobar")
+	if err != nil {
+		t.Fatalf("Error getting guid: %s", err.Error())
+	}
+	if guid.FeedInfoId != 1 {
+		t.Fatalf("Error getting guid: %s", err.Error())
+	}
+
+}
+
 func TestGetStaleFeeds(t *testing.T) {
 	d := NewMemoryDbDispatcher(false, true)
 
@@ -85,7 +117,7 @@ func TestGetStaleFeeds(t *testing.T) {
 	feed2, _ := d.AddFeed("test2", "http://foo.baz/")
 	d.RecordGuid(feed1.Id, "foobar")
 	d.RecordGuid(feed2.Id, "foobaz")
-	guid, err := d.GetFeedItemByGuid("foobar")
+	guid, err := d.GetFeedItemByGuid(feed1.Id, "foobar")
 	if err != nil {
 		t.Fatalf("Error getting guid: %s", err.Error())
 	}

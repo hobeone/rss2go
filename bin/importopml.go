@@ -101,7 +101,7 @@ func importOPML(cmd *flagutil.Command, args []string) {
 
 		wg := sync.WaitGroup{}
 		for _, feed := range new_feeds {
-			guids, err := dbh.GetGuidsForFeed(feed.Id, &[]string{})
+			guids, err := dbh.GetMostRecentGuidsForFeed(feed.Id, -1)
 			if err != nil {
 				printErrorAndExit(err.Error())
 			}
@@ -112,7 +112,7 @@ func importOPML(cmd *flagutil.Command, args []string) {
 				response_channel,
 				mailer.OutgoingMail,
 				dbh,
-				*guids,
+				guids,
 				10,
 				100,
 			)

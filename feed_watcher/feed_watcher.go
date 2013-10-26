@@ -24,6 +24,7 @@ import (
 	"github.com/golang/glog"
 	"math/rand"
 	"time"
+	"math"
 )
 
 // Allow for mocking out in test.
@@ -152,6 +153,7 @@ func (self *FeedWatcher) UpdateFeed() *FeedCrawlResponse {
 
 	return resp
 }
+
 // Core logic to poll a feed, find new items, add those to the database, and
 // send them for mail.
 func (self *FeedWatcher) updateFeed() *FeedCrawlResponse {
@@ -178,13 +180,26 @@ func (self *FeedWatcher) updateFeed() *FeedCrawlResponse {
 		return resp
 	}
 
+	/*
+	* Load most recent X * 1.1 Guids from Db
+	* Filter New Stories
+	* Send New Stories for mailing
+	*  Add sent guid to list
+	* prune Guids back to X * 1.1
+	*/
+
 	// If we don't know about any GUIDs for this feed we haven't been
 	// initalized yet.  Check the GUIDs in the feed we just read and see if
 	// they exist in the DB.  That should be the maximum we should need to
 	// load into memory.
+
+	guids_to_load := int(math.Ceil(float64(len(stories)) * 1.1))
+
+	glog.Infof("Got %d stories from feed %s.", len(stories), self.FeedInfo.Url)
+
 	if len(self.KnownGuids) == 0 {
 		var err error
-		self.KnownGuids, err = self.LoadGuidsFromDb(stories)
+		self.KnownGuids, err = self.LoadGuidsFromDb(guids_to_load)
 		if err != nil {
 			e := fmt.Errorf("Error getting Guids from DB: %s", err)
 			glog.Info(e)
@@ -196,8 +211,8 @@ func (self *FeedWatcher) updateFeed() *FeedCrawlResponse {
 	}
 
 	resp.Items = self.filterNewItems(stories, self.KnownGuids)
-
 	glog.Infof("Feed %s has new %d items", feed.Title, len(resp.Items))
+
 	for _, item := range resp.Items {
 		glog.Infof("New Story: %s, sending for mail.", item.Title)
 		err := self.sendMail(item)
@@ -214,6 +229,18 @@ func (self *FeedWatcher) updateFeed() *FeedCrawlResponse {
 			}
 		}
 	}
+
+	// Prune guids we know about back down to X * 1.1 but only if there were new
+	// items otherwise it would be noop.
+	if len(resp.Items) > 0 {
+		self.KnownGuids, err = self.LoadGuidsFromDb(guids_to_load)
+		if err != nil {
+			e := fmt.Errorf("Error getting Guids from DB: %s", err)
+			glog.Info(e)
+			resp.Error = e
+		}
+	}
+
 	return resp
 }
 
@@ -259,18 +286,15 @@ func (self *FeedWatcher) sleep(tosleep int64) {
 	Sleep(time.Second * time.Duration(s))
 }
 
-// Populate internal cache of GUIDs from the database.
-func (self *FeedWatcher) LoadGuidsFromDb(stories []*feed.Story) (map[string]bool, error) {
-	guids := make([]string, len(stories))
-	for i, v := range stories {
-		guids[i] = v.Id
-	}
-	known, err := self.db.GetGuidsForFeed(self.FeedInfo.Id, &guids)
+// Populate internal cache of GUIDs by getting the most recent GUIDs it knows
+// about.  To retrieve all GUIDs set max to -1.
+func (self *FeedWatcher) LoadGuidsFromDb(max int) (map[string]bool, error) {
+	guids, err := self.db.GetMostRecentGuidsForFeed(self.FeedInfo.Id, max)
 	if err != nil {
-		return make(map[string]bool), err
+		return nil, err
 	}
 	ret := make(map[string]bool)
-	for _, v := range *known {
+	for _, v := range guids {
 		ret[v] = true
 	}
 	return ret, nil
@@ -294,6 +318,13 @@ func (self *FeedWatcher) filterNewItems(stories []*feed.Story, guids map[string]
 }
 
 func (self *FeedWatcher) sendMail(item *feed.Story) error {
+	_, err := self.db.GetFeedItemByGuid(self.FeedInfo.Id, item.Id)
+	// Guid found, so sending would be a duplicate.
+	if err == nil {
+		glog.Warningf("Tried to send duplicate GUID: %s for feed %s", item.Id, self.FeedInfo.Url)
+		return nil
+	}
+
 	req := &mail.MailRequest{
 		Item:       item,
 		ResultChan: make(chan error),

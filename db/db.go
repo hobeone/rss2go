@@ -4,17 +4,17 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/astaxie/beedb"
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/golang/glog"
+	_ "github.com/mattn/go-sqlite3"
 	"sync"
 	"time"
 )
 
 type FeedDbDispatcher interface {
 	GetAllFeeds() ([]FeedInfo, error)
-	GetFeedItemByGuid(string) (*FeedItem, error)
+	GetFeedItemByGuid(int, string) (*FeedItem, error)
 	RecordGuid(int, string) error
-	GetGuidsForFeed(int, *[]string) (*[]string, error)
+	GetMostRecentGuidsForFeed(int, int) ([]string, error)
 	GetFeedByUrl(string) (*FeedInfo, error)
 	AddFeed(string, string) (*FeedInfo, error)
 	RemoveFeed(string, bool) error
@@ -74,10 +74,10 @@ func createAndOpenDb(db_path string, verbose bool, memory bool) (*sql.DB, beedb.
 	}
 	tables := make(map[string]bool)
 	for rows.Next() {
-    var name string
-    if err := rows.Scan(&name); err != nil {
-        glog.Fatal(err)
-    }
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			glog.Fatal(err)
+		}
 		tables[name] = true
 	}
 
@@ -100,7 +100,7 @@ func createTable(dbh *sql.DB, table_def string) {
 
 type DbDispatcher struct {
 	Orm          beedb.Model
-	dbh					 *sql.DB
+	dbh          *sql.DB
 	writeUpdates bool
 	syncMutex    sync.Mutex
 }
@@ -119,7 +119,6 @@ func NewMemoryDbDispatcher(verbose bool, write_updates bool) *DbDispatcher {
 	}
 	d.dbh, d.Orm = createAndOpenDb("in_memory_test", verbose, true)
 	return d
-
 }
 
 func (self *DbDispatcher) AddFeed(name string, url string) (*FeedInfo, error) {
@@ -173,21 +172,21 @@ func (self *DbDispatcher) GetStaleFeeds() (feeds []FeedInfo, err error) {
 		return
 	}
 	for rows.Next() {
-    var name,url,last_poll_error, last_poll_time, max_time string
-    err = rows.Scan(&name, &url, &last_poll_time, &last_poll_error, &max_time);
+		var name, url, last_poll_error, last_poll_time, max_time string
+		err = rows.Scan(&name, &url, &last_poll_time, &last_poll_error, &max_time)
 		if err != nil {
-        return
-    }
-    ftime, err := time.Parse("2006-01-02 15:04:05", max_time)
+			return
+		}
+		ftime, err := time.Parse("2006-01-02 15:04:05", max_time)
 		if err != nil {
 			return nil, err
 		}
 		// Sorta hacky: set LastPollTime to time of last item seen, rather than
 		// last time feed was polled.
 		feeds = append(feeds, FeedInfo{
-			Name: name,
-			Url: url,
-			LastPollTime: ftime,
+			Name:          name,
+			Url:           url,
+			LastPollTime:  ftime,
 			LastPollError: last_poll_error,
 		})
 	}
@@ -201,13 +200,13 @@ func (self *DbDispatcher) GetFeedByUrl(url string) (*FeedInfo, error) {
 	return &feed, err
 }
 
-func (self *DbDispatcher) GetFeedItemByGuid(guid string) (*FeedItem, error) {
+func (self *DbDispatcher) GetFeedItemByGuid(f_id int, guid string) (*FeedItem, error) {
 	//TODO: see if beedb will handle this correctly and protect against injection
 	//attacks.
 	fi := FeedItem{}
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
-	err := self.Orm.Where("guid = ?", guid).Find(&fi)
+	err := self.Orm.Where("feed_info_id = ? AND guid = ?", f_id, guid).Find(&fi)
 	return &fi, err
 }
 
@@ -226,21 +225,23 @@ func (self *DbDispatcher) RecordGuid(feed_id int, guid string) (err error) {
 	return
 }
 
-func (self *DbDispatcher) GetGuidsForFeed(feed_id int, guids *[]string) (*[]string, error) {
-	var allitems []FeedItem
+// Retrieves the most recent GUIDs for a given feed up to max.  GUIDs are
+// returned ordered with the most recent first.
+func (self *DbDispatcher) GetMostRecentGuidsForFeed(f_id int, max int) ([]string, error) {
+	var items []FeedItem
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 
-	err := self.Orm.Where("feed_info_id=?", feed_id).GroupBy("guid").FindAll(&allitems)
+	err := self.Orm.Where("feed_info_id=?", f_id).GroupBy("guid").OrderBy("added_on DESC").Limit(max).FindAll(&items)
 	if err != nil {
-		return &[]string{}, err
+		return []string{}, err
 	}
-	glog.Infof("Got %d results for guids.", len(allitems))
-	known_guids := make([]string, len(allitems))
-	for i, v := range allitems {
+	glog.Infof("Got last %d guids for feed_id: %d.", len(items), f_id)
+	known_guids := make([]string, len(items))
+	for i, v := range items {
 		known_guids[i] = v.Guid
 	}
-	return &known_guids, nil
+	return known_guids, nil
 }
 
 func (self *DbDispatcher) UpdateFeed(f *FeedInfo) error {
