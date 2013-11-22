@@ -1,11 +1,11 @@
 [mail]
 sendmail = true
 smtp = false
-from_address = "rss2go@example.net"
-to_address = "example@gmail.com"
-smtp_server = "mail.gmail.com"
-smtp_username = "example_user@gmail.com"
-smtp_password = "example_password"
+fromAddress = "rss2go@example.net"
+toAddress = "example@gmail.com"
+smtpServer = "mail.gmail.com"
+smtpUsername = "example_user@gmail.com"
+smtpPassword = "example_password"
 
 [crawl]
 maxCrawlers = 10
@@ -13,6 +13,6 @@ minInterval = 300
 maxInterval = 3600
 
 [db]
-path = "foo.db"
+path = "/path/to/rss2go.db"
 verbose = false
 UpdateDb = true

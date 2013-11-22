@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"github.com/BurntSushi/toml"
 	"os/user"
 	"strings"
@@ -44,6 +45,8 @@ type feedsConfig struct {
 	Urls []string
 }
 
+const MissingToAddressError = "Config Error: ToAddress must be defined."
+
 func NewConfig() *Config {
 	return &Config{
 		Mail: mailConfig{
@@ -71,5 +74,11 @@ func replaceTildeInPath(path string) string {
 
 func (self *Config) ReadConfig(config_path string) error {
 	_, err := toml.DecodeFile(replaceTildeInPath(config_path), &self)
-	return err
+	if err != nil {
+		return err
+	}
+	if self.Mail.ToAddress == "" {
+		return fmt.Errorf(MissingToAddressError)
+	}
+	return nil
 }
