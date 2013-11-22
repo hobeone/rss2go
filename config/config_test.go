@@ -45,7 +45,7 @@ func TestToAddressMustBeDefined(t *testing.T) {
 	if err == nil {
 		t.Fatal("No error on config with invalid ToAddress")
 	} else {
-		if err.Error() != "Config Error: ToAddress must be defined." {
+		if err.Error() != MissingToAddressError {
 			t.Fatal("Expected error on undefined ToAddress. Got: %s", err.Error)
 		}
 	}
