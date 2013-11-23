@@ -70,7 +70,7 @@ func createAndOpenDb(db_path string, verbose bool, memory bool) (*sql.DB, beedb.
 
 	rows, err := db.Query("SELECT name FROM sqlite_master WHERE type='table';")
 	if err != nil {
-		glog.Fatal("Couldn't get list of tables from database.")
+		glog.Fatalf("Couldn't get list of tables from database: %s", err.Error())
 	}
 	tables := make(map[string]bool)
 	for rows.Next() {

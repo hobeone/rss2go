@@ -1,13 +1,13 @@
 package main
 
 import (
-	"github.com/hobeone/rss2go/crawler"
-	"github.com/hobeone/rss2go/flagutil"
 	"flag"
+	"fmt"
+	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
+	"github.com/hobeone/rss2go/flagutil"
 	"github.com/hobeone/rss2go/mail"
-	"fmt"
 )
 
 func make_cmd_addfeed() *flagutil.Command {
