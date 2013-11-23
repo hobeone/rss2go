@@ -1,3 +1,12 @@
+// Wrap mail sending functionality.
+//
+// Can send either by calling a local sendmail binary or connecting to a SMTP
+// server.
+//
+// Designed to run as a goroutine and centralize mail sending.
+//
+// TODO: add mail batching support
+
 package mail
 
 import (

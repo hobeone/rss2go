@@ -107,7 +107,6 @@ func testGetFeedItemByGuid(t *testing.T) {
 	if guid.FeedInfoId != 1 {
 		t.Fatalf("Error getting guid: %s", err.Error())
 	}
-
 }
 
 func TestGetStaleFeeds(t *testing.T) {
