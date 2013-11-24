@@ -1,4 +1,4 @@
-package main
+package commands
 
 import (
 	"bytes"
@@ -19,7 +19,7 @@ import (
 	"sync"
 )
 
-func make_cmd_importopml() *flagutil.Command {
+func MakeCmdImportOpml() *flagutil.Command {
 	cmd := &flagutil.Command{
 		Run:       importOPML,
 		UsageLine: "importopml opmlfile",
@@ -41,7 +41,7 @@ func make_cmd_importopml() *flagutil.Command {
 
 func importOPML(cmd *flagutil.Command, args []string) {
 	if len(args) < 1 {
-		printErrorAndExit("Must supply filename to import.")
+		PrintErrorAndExit("Must supply filename to import.")
 	}
 	opml_file := args[0]
 
@@ -88,7 +88,7 @@ func importOPML(cmd *flagutil.Command, args []string) {
 				fmt.Printf("Feed %s already exists in database, skipping.\n", k)
 				continue
 			} else {
-				printErrorAndExit(err.Error())
+				PrintErrorAndExit(err.Error())
 			}
 		}
 		new_feeds = append(new_feeds, feed)
@@ -103,7 +103,7 @@ func importOPML(cmd *flagutil.Command, args []string) {
 		for _, feed := range new_feeds {
 			guids, err := dbh.GetMostRecentGuidsForFeed(feed.Id, -1)
 			if err != nil {
-				printErrorAndExit(err.Error())
+				PrintErrorAndExit(err.Error())
 			}
 
 			fw := feed_watcher.NewFeedWatcher(

@@ -1,4 +1,4 @@
-package main
+package commands
 
 import (
 	"flag"
@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-func make_cmd_runone() *flagutil.Command {
+func MakeCmdRunOne() *flagutil.Command {
 	cmd := &flagutil.Command{
 		Run:       runOne,
 		UsageLine: "runone",
@@ -36,7 +36,7 @@ func make_cmd_runone() *flagutil.Command {
 
 func runOne(cmd *flagutil.Command, args []string) {
 	if len(args) < 1 {
-		printErrorAndExit("No url given to crawl")
+		PrintErrorAndExit("No url given to crawl")
 	}
 	feed_url := args[0]
 
@@ -56,7 +56,7 @@ func runOne(cmd *flagutil.Command, args []string) {
 
 	feed, err := db.GetFeedByUrl(feed_url)
 	if err != nil {
-		printErrorAndExit(err.Error())
+		PrintErrorAndExit(err.Error())
 	}
 
 	http_crawl_channel := make(chan *feed_watcher.FeedCrawlRequest)

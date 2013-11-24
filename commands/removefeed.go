@@ -1,4 +1,4 @@
-package main
+package commands
 
 import (
 	"github.com/hobeone/rss2go/db"
@@ -7,7 +7,7 @@ import (
 	"flag"
 )
 
-func make_cmd_removefeed() *flagutil.Command {
+func MakeCmdRemoveFeed() *flagutil.Command {
 	cmd := &flagutil.Command{
 		Run:       removeFeed,
 		UsageLine: "removefeed URL, URL, ...",
@@ -29,7 +29,7 @@ removefeed --purge_feed=false http://test/feed.rss http://test/other.rss
 
 func removeFeed(cmd *flagutil.Command, args []string) {
 	if len(args) < 1 {
-		printErrorAndExit("Must supply at least one feed url to remove")
+		PrintErrorAndExit("Must supply at least one feed url to remove")
 	}
 
 	cfg := loadConfig(cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
@@ -50,6 +50,6 @@ func removeFeed(cmd *flagutil.Command, args []string) {
 		fmt.Printf("Removed feed %s.\n", feed_url)
 	}
 	if had_error {
-		printErrorAndExit("Error trying to remove one or more feeds")
+		PrintErrorAndExit("Error trying to remove one or more feeds")
 	}
 }

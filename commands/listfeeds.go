@@ -1,4 +1,4 @@
-package main
+package commands
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"github.com/hobeone/rss2go/flagutil"
 )
 
-func make_cmd_listfeeds() *flagutil.Command {
+func MakeCmdListFeeds() *flagutil.Command {
 	cmd := &flagutil.Command{
 		Run:       listFeed,
 		UsageLine: "listfeeds",
@@ -30,7 +30,7 @@ func listFeed(cmd *flagutil.Command, args []string) {
 	feeds, err := db.GetAllFeeds()
 
 	if err != nil {
-		printErrorAndExit(err.Error())
+		PrintErrorAndExit(err.Error())
 	}
 
 	fmt.Printf("Found %d feeds in the database:\n", len(feeds))

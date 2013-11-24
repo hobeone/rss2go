@@ -1,4 +1,4 @@
-package main
+package commands
 
 import (
 	"github.com/hobeone/rss2go/config"
@@ -13,7 +13,7 @@ import (
 	"net/http"
 )
 
-func make_cmd_daemon() *flagutil.Command {
+func MakeCmdDaemon() *flagutil.Command {
 	cmd := &flagutil.Command{
 		Run:       daemon,
 		UsageLine: "daemon",

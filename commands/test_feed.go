@@ -1,4 +1,4 @@
-package main
+package commands
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	"flag"
 )
 
-func make_cmd_test_feed() *flagutil.Command {
+func MakeCmdTestFeed() *flagutil.Command {
 	cmd := &flagutil.Command{
 		Run:       testFeed,
 		UsageLine: "test_feed",
@@ -30,22 +30,22 @@ func make_cmd_test_feed() *flagutil.Command {
 
 func testFeed(cmd *flagutil.Command, args []string) {
 	if len(args) < 1 {
-		printErrorAndExit("Need to provide a url to crawl.\n")
+		PrintErrorAndExit("Need to provide a url to crawl.\n")
 	}
 	url := args[0]
 	resp, err := crawler.GetFeed(url)
 	if err != nil {
-		printErrorAndExit(err.Error())
+		PrintErrorAndExit(err.Error())
 	}
 	body, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
-		printErrorAndExit(err.Error())
+		PrintErrorAndExit(err.Error())
 	}
 
 	feed, stories, err := feed.ParseFeed(url, body)
 	if err != nil {
-		printErrorAndExit(err.Error())
+		PrintErrorAndExit(err.Error())
 	}
 
 	fmt.Printf("Found %d items in feed:\n", len(stories))

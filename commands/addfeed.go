@@ -1,4 +1,4 @@
-package main
+package commands
 
 import (
 	"flag"
@@ -10,7 +10,7 @@ import (
 	"github.com/hobeone/rss2go/mail"
 )
 
-func make_cmd_addfeed() *flagutil.Command {
+func MakeCmdAddFeed() *flagutil.Command {
 	cmd := &flagutil.Command{
 		Run:       addFeed,
 		UsageLine: "addfeed FeedName FeedUrl",
@@ -32,7 +32,7 @@ func make_cmd_addfeed() *flagutil.Command {
 
 func addFeed(cmd *flagutil.Command, args []string) {
 	if len(args) < 2 {
-		printErrorAndExit("Must supply feed name and url")
+		PrintErrorAndExit("Must supply feed name and url")
 	}
 	feed_name := args[0]
 	feed_url := args[1]
@@ -51,7 +51,7 @@ func addFeed(cmd *flagutil.Command, args []string) {
 
 	_, err := db.AddFeed(feed_name, feed_url)
 	if err != nil {
-		printErrorAndExit(err.Error())
+		PrintErrorAndExit(err.Error())
 	}
 
 	fmt.Printf("Added feed %s at url %s\n", feed_name, feed_url)
@@ -59,7 +59,7 @@ func addFeed(cmd *flagutil.Command, args []string) {
 	if poll_feed {
 		feed, err := db.GetFeedByUrl(feed_url)
 		if err != nil {
-			printErrorAndExit(err.Error())
+			PrintErrorAndExit(err.Error())
 		}
 
 		http_crawl_channel := make(chan *feed_watcher.FeedCrawlRequest)

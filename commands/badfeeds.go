@@ -1,4 +1,4 @@
-package main
+package commands
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"github.com/hobeone/rss2go/flagutil"
 )
 
-func make_cmd_badfeeds() *flagutil.Command {
+func MakeCmdBadFeeds() *flagutil.Command {
 	cmd := &flagutil.Command{
 		Run:       badFeeds,
 		UsageLine: "badfeeds",
@@ -31,7 +31,7 @@ func badFeeds(cmd *flagutil.Command, args []string) {
 
 	feeds, err := db.GetFeedsWithErrors()
 	if err != nil {
-		printErrorAndExit(err.Error())
+		PrintErrorAndExit(err.Error())
 	}
 	fmt.Println("Feeds With Errors:")
 	for _, f := range feeds {
@@ -43,7 +43,7 @@ func badFeeds(cmd *flagutil.Command, args []string) {
 	fmt.Println()
 	feeds, err = db.GetStaleFeeds()
 	if err != nil {
-		printErrorAndExit(err.Error())
+		PrintErrorAndExit(err.Error())
 	}
 
 	fmt.Println("Feeds With No Updates for 2 Weeks:")
