@@ -1,12 +1,13 @@
 package main
 
 import (
+	"github.com/golang/glog"
+	"github.com/hobeone/rss2go/commands"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/mail"
 	"io/ioutil"
-	"github.com/golang/glog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -32,7 +33,7 @@ var fake_server_handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.R
 	var content []byte
 	switch {
 	case strings.HasSuffix(r.URL.Path, "test.rss"):
-		feed_resp, err := ioutil.ReadFile("../testdata/ars.rss")
+		feed_resp, err := ioutil.ReadFile("testdata/ars.rss")
 		if err != nil {
 			glog.Fatalf("Error reading test feed: %s", err.Error())
 		}
@@ -57,7 +58,6 @@ func TestEndToEndIntegration(t *testing.T) {
 
 	config := config.NewConfig()
 
-
 	// Set first argument to true to debug sql
 	db := db.NewMemoryDbDispatcher(false, true)
 	MakeDbFixtures(*db, ts.URL)
@@ -69,7 +69,7 @@ func TestEndToEndIntegration(t *testing.T) {
 
 	mailer := mail.CreateAndStartStubMailer()
 
-	_, response_channel := CreateAndStartFeedWatchers(
+	_, response_channel := commands.CreateAndStartFeedWatchers(
 		all_feeds, config, mailer, db)
 
 	resp := <-response_channel
