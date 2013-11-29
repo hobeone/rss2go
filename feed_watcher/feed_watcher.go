@@ -355,5 +355,7 @@ func (self *FeedWatcher) doCrawl() (r *FeedCrawlResponse) {
 
 // Call to have a PollFeed loop exit.
 func (self *FeedWatcher) StopPoll() {
-	self.exit_now_chan <- 1
+	if self.Polling() {
+		self.exit_now_chan <- 1
+	}
 }

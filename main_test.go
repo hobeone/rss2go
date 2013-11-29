@@ -69,7 +69,7 @@ func TestEndToEndIntegration(t *testing.T) {
 
 	mailer := mail.CreateAndStartStubMailer()
 
-	_, response_channel := commands.CreateAndStartFeedWatchers(
+	_, _, response_channel := commands.CreateAndStartFeedWatchers(
 		all_feeds, config, mailer, db)
 
 	resp := <-response_channel
