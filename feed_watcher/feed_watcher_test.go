@@ -8,10 +8,9 @@ import (
 	"testing"
 	"time"
 )
-
-func SleepForce() {
-	Sleep = func(d time.Duration) {
-		return
+func OverrideAfter() {
+	After = func(d time.Duration) <-chan time.Time {
+		return time.After(time.Duration(0))
 	}
 }
 
@@ -70,7 +69,7 @@ func TestFeedWatcherPolling(t *testing.T) {
 	u := *fixtures[0]
 	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, d, make([]string, 50), 10, 100)
 
-	SleepForce()
+	OverrideAfter()
 	go n.PollFeed()
 	req := <-crawl_chan
 	if req.URI != u.Url {
@@ -118,7 +117,7 @@ func TestFeedWatcherPollingRssWithNoItemDates(t *testing.T) {
 	n := NewFeedWatcher(
 		feed, crawl_chan, resp_chan, mail_chan, d, make([]string, 50), 10, 100)
 
-	SleepForce()
+	OverrideAfter()
 	go n.PollFeed()
 	req := <-crawl_chan
 	if req.URI != feed.Url {
@@ -164,9 +163,7 @@ func TestFeedWatcherWithMalformedFeed(t *testing.T) {
 	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, d, make([]string,
 		50), 10, 100)
 
-	Sleep = func(d time.Duration) {
-		return
-	}
+	OverrideAfter()
 	go n.PollFeed()
 	req := <-crawl_chan
 
@@ -214,9 +211,7 @@ func TestFeedWatcherWithGuidsSet(t *testing.T) {
 	fixtures := loadTestFixtures(d)
 	u := *fixtures[0]
 
-	Sleep = func(d time.Duration) {
-		return
-	}
+	OverrideAfter()
 
 	feed_resp, err := ioutil.ReadFile("../testdata/ars.rss")
 	if err != nil {
@@ -257,10 +252,10 @@ func TestFeedWatcherWithTooRecentLastPoll(t *testing.T) {
 		t.Fatal("Error reading test feed.")
 	}
 
-	sleep_calls := 0
-	Sleep = func(d time.Duration) {
-		sleep_calls++
-		return
+	after_calls := 0
+	After = func(d time.Duration) <-chan time.Time {
+		after_calls++
+		return time.After(time.Duration(0))
 	}
 
 	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, d, []string{}, 30, 100)
@@ -274,7 +269,7 @@ func TestFeedWatcherWithTooRecentLastPoll(t *testing.T) {
 	}
 	_ = <-resp_chan
 
-	if sleep_calls != 2 {
-		t.Error("Sleep not called exactly twice.")
+	if after_calls != 2 {
+		t.Error("After not called exactly twice.")
 	}
 }

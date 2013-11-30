@@ -9,7 +9,7 @@ import (
 	"github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/flagutil"
 	"github.com/hobeone/rss2go/mail"
-	"github.com/hobeone/rss2go/server"
+	"github.com/hobeone/rss2go/webui"
 	"net/http"
 	"time"
 )
@@ -77,14 +77,16 @@ func feedDbUpdate(dbh db.FeedDbDispatcher,
 	}
 	if len(feeds_to_start) > 0 {
 		glog.Infof("Adding %d feeds to watch.\n", len(feeds_to_start))
-		startPollers(
+		for k, v := range startPollers(
 			feeds_to_start,
 			crawl_chan,
 			resp_chan,
 			mail_chan,
 			dbh,
 			cfg,
-		)
+		) {
+			feeds[k] = v
+		}
 	}
 }
 
@@ -113,13 +115,14 @@ func daemon(cmd *flagutil.Command, args []string) {
 
 	glog.Infof("Got %d feeds to watch.\n", len(all_feeds))
 
-	go server.StartHttpServer(cfg, feeds)
 	// make interval come from cfg
 	// TODO: desperately in need of refactoring
-	go feedDbUpdateLoop(db, cfg, crawl_chan, resp_chan, mailer.OutgoingMail, feeds, time.Second*60)
+	go feedDbUpdateLoop(db, cfg, crawl_chan, resp_chan, mailer.OutgoingMail,
+		feeds, time.Second*1)
 
 	// TODO: Add signal handler to reload config?
 
+	go webui.RunWebUi(cfg, feeds)
 	for {
 		http.DefaultTransport.(*http.Transport).CloseIdleConnections()
 		_ = <-resp_chan

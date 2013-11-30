@@ -1,10 +1,10 @@
 package commands
 
 import (
+	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/mail"
-	"github.com/hobeone/rss2go/config"
 	"testing"
 	"time"
 )
@@ -42,7 +42,11 @@ func TestConfigUpdater(t *testing.T) {
 
 	feedDbUpdate(dbh, cfg, crawl_chan, resp_chan, mail_chan, feeds)
 
-	if len(feeds) > 0 {
+	if len(feeds) != 1 {
 		t.Errorf("Expected no feed entries after updater runs.")
+	}
+
+	if _, ok := feeds[feed.Url]; !ok {
+		t.Errorf("Expected %s in feed map.", feed.Url)
 	}
 }

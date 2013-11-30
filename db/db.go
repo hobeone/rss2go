@@ -171,6 +171,7 @@ func (self *DbDispatcher) GetStaleFeeds() (feeds []FeedInfo, err error) {
 	if err != nil {
 		return
 	}
+	defer rows.Close()
 	for rows.Next() {
 		var name, url, last_poll_error, last_poll_time, max_time string
 		err = rows.Scan(&name, &url, &last_poll_time, &last_poll_error, &max_time)

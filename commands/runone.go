@@ -7,7 +7,6 @@ import (
 	"github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/flagutil"
 	"github.com/hobeone/rss2go/mail"
-	"github.com/hobeone/rss2go/server"
 	"net/http"
 	"time"
 )
@@ -77,7 +76,6 @@ func runOne(cmd *flagutil.Command, args []string) {
 	)
 	feeds := make(map[string]*feed_watcher.FeedWatcher)
 	feeds[fw.FeedInfo.Url] = fw
-	go server.StartHttpServer(cfg, feeds)
 	if loops == -1 {
 		for {
 			http.DefaultTransport.(*http.Transport).CloseIdleConnections()

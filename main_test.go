@@ -50,10 +50,9 @@ func TestEndToEndIntegration(t *testing.T) {
 	defer ts.Close()
 
 	// Override the sleep function
-	feed_watcher.Sleep = func(d time.Duration) {
-		glog.Infof("Call to mock sleep, sleeping for just 1 second.")
-		time.Sleep(time.Second * time.Duration(1))
-		return
+	feed_watcher.After = func(d time.Duration) <-chan time.Time {
+		glog.Infof("Call to mock After, waiting for just 1 second.")
+		return time.After(time.Second * time.Duration(1))
 	}
 
 	config := config.NewConfig()

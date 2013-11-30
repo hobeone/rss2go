@@ -28,9 +28,8 @@ import (
 )
 
 // Allow for mocking out in test.
-var Sleep = func(d time.Duration) {
-	time.Sleep(d)
-	return
+var After = func(d time.Duration) <-chan time.Time {
+	return time.After(d)
 }
 
 //
@@ -65,8 +64,8 @@ type FeedWatcher struct {
 	mailer_chan       chan *mail.MailRequest
 	polling           bool // make sure only one PollFeed at a time
 	crawling          bool // make sure only one crawl outstanding at a time
-	min_sleep_seconds int64
-	max_sleep_seconds int64
+	min_sleep_seconds time.Duration
+	max_sleep_seconds time.Duration
 	db                db.FeedDbDispatcher
 	KnownGuids        map[string]bool
 	LastCrawlResponse *FeedCrawlResponse
@@ -95,8 +94,8 @@ func NewFeedWatcher(
 		mailer_chan:       mail_channel,
 		polling:           false,
 		crawling:          false,
-		min_sleep_seconds: min_sleep,
-		max_sleep_seconds: max_sleep,
+		min_sleep_seconds: time.Duration(min_sleep) * time.Second,
+		max_sleep_seconds: time.Duration(max_sleep) * time.Second,
 		db:                db,
 		KnownGuids:        guids,
 		LastCrawlResponse: &FeedCrawlResponse{},
@@ -253,37 +252,37 @@ func (self *FeedWatcher) PollFeed() bool {
 	}
 	defer self.unlockPoll()
 
-	seconds_since_last_poll := int64(time.Since(self.FeedInfo.LastPollTime).Seconds())
-	if seconds_since_last_poll < self.min_sleep_seconds {
-		glog.Infof("Last poll of %s was only %d seconds ago, sleeping.",
-			self.FeedInfo.Url, seconds_since_last_poll)
-		self.sleep(self.min_sleep_seconds - seconds_since_last_poll)
+	seconds_since_last_poll := time.Since(self.FeedInfo.LastPollTime).Seconds()
+	to_sleep := time.Duration(0) * time.Second
+	if seconds_since_last_poll < self.min_sleep_seconds.Seconds() {
+		to_sleep = self.min_sleep_seconds - time.Duration(seconds_since_last_poll) * time.Second
+		glog.Infof("Last poll of %s was only %d seconds ago, waiting at least %v.",
+			self.FeedInfo.Url, int64(seconds_since_last_poll), to_sleep)
 	}
 	for {
 		select {
 		case <-self.exit_now_chan:
 			glog.Infof("Stopping poll of %v", self.FeedInfo.Url)
 			return true
-		default:
+		case <-self.afterWithJitter(to_sleep):
 			resp := self.UpdateFeed()
 			self.LastCrawlResponse = resp
 			self.response_chan <- resp
-			to_sleep := self.min_sleep_seconds
+			to_sleep = self.min_sleep_seconds
 			if resp.Error != nil {
-				glog.Infof("Feed %s had error sleepming maxium allowed time.",
-					self.FeedInfo.Url)
 				to_sleep = self.max_sleep_seconds
+				glog.Infof("Feed %s had error. Waiting maxium allowed time.",
+					self.FeedInfo.Url)
 			}
-			self.sleep(to_sleep)
 		}
 	}
 }
 
-// Sleep for the given amount of seconds plus a upto 60 extra seconds.
-func (self *FeedWatcher) sleep(tosleep int64) {
-	s := tosleep + rand.Int63n(60)
-	glog.Infof("Sleeping %d seconds for %s", s, self.FeedInfo.Url)
-	Sleep(time.Second * time.Duration(s))
+// call time.After for the given amount of seconds plus a up to 60 extra seconds.
+func (self *FeedWatcher) afterWithJitter(d time.Duration) <-chan time.Time {
+	s := d + time.Duration(rand.Int63n(60)) * time.Second
+	glog.Infof("Waiting %v until next poll of %s", s, self.FeedInfo.Url)
+	return After(s)
 }
 
 // Populate internal cache of GUIDs by getting the most recent GUIDs it knows

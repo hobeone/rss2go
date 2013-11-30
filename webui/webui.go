@@ -1,18 +1,19 @@
-package server
+package webui
 
 import (
 	"fmt"
+	"github.com/codegangsta/martini"
+	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/feed_watcher"
-	"github.com/golang/glog"
 	"net/http"
-	_ "net/http/pprof"
 	"sort"
 	"time"
 )
 
-func StartHttpServer(config *config.Config, feeds map[string]*feed_watcher.FeedWatcher) {
-	http.HandleFunc("/feedz", func(w http.ResponseWriter, r *http.Request) {
+func RunWebUi(config *config.Config, feeds map[string]*feed_watcher.FeedWatcher) {
+	m := martini.Classic()
+	m.Get("/feedz", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Hello: I have %v feeds.\n", len(feeds))
 		mk := make([]string, len(feeds))
 		i := 0
@@ -23,9 +24,10 @@ func StartHttpServer(config *config.Config, feeds map[string]*feed_watcher.FeedW
 		sort.Strings(mk)
 
 		for _, uri := range mk {
-			f := feeds[uri]
-			fmt.Fprintf(w, "Feed (%s)-%s polling? %t. crawling? %t\n",
-				f.FeedInfo.Name, uri, f.Polling(), f.Crawling())
+			f := (feeds)[uri]
+			fmt.Fprintf(w, "Feed (%s)-%s\n", f.FeedInfo.Name, uri)
+			fmt.Fprintf(w, "  Polling? %t\n", f.Polling())
+			fmt.Fprintf(w, "  Crawling? %t\n", f.Crawling())
 			fmt.Fprintf(w, "  Known GUIDS: %d\n", len(f.KnownGuids))
 			fmt.Fprintf(w, "  Last Crawl Status (%s):\n",
 				f.FeedInfo.LastPollTime.Local().Format(time.RFC1123))
@@ -33,10 +35,8 @@ func StartHttpServer(config *config.Config, feeds map[string]*feed_watcher.FeedW
 			if f.FeedInfo.LastPollError != "" {
 				fmt.Fprintf(w, "    Error: %s\n", f.FeedInfo.LastPollError)
 			}
-			fmt.Fprint(w,"\n")
+			fmt.Fprint(w, "\n")
 		}
 	})
-
-	glog.Infof("Starting http server on %v", config.WebServer.ListenAddress)
-	glog.Fatal(http.ListenAndServe(config.WebServer.ListenAddress, nil))
+	glog.Fatal(http.ListenAndServe(config.WebServer.ListenAddress, m))
 }
