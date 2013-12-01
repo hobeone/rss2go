@@ -35,7 +35,7 @@ func TestNewFeedWatcher(t *testing.T) {
 	u := *fixtures[0]
 
 	n := NewFeedWatcher(
-		u, crawl_chan, resp_chan, mail_chan, d, make([]string, 50), 10, 100)
+		u, crawl_chan, resp_chan, mail_chan, d, []string{}, 10, 100)
 	if n.polling == true {
 		t.Error("polling attribute set is true")
 	}
@@ -235,7 +235,19 @@ func TestFeedWatcherWithGuidsSet(t *testing.T) {
 	if len(resp.Items) != 0 {
 		t.Errorf("Expected 0 items from the feed but got %d.", len(resp.Items))
 	}
-	// TODO: add a second poll with an updated feed that will return new items.
+	// Second poll with an new items.
+	n.KnownGuids = map[string]bool{}
+	req = <-crawl_chan
+
+	req.ResponseChan <- &FeedCrawlResponse{
+		URI:   u.Url,
+		Body:  feed_resp,
+		Error: nil,
+	}
+	resp = <-resp_chan
+	if len(resp.Items) != 25 {
+		t.Errorf("Expected 25 items from the feed but got %d.", len(resp.Items))
+	}
 }
 
 func TestFeedWatcherWithTooRecentLastPoll(t *testing.T) {

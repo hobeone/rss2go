@@ -1,5 +1,3 @@
-Get SMTP sending working
-
 Follow next poll data from feeds
 
 Signal HUP reload
@@ -8,8 +6,3 @@ Signal HUP reload
 - what happens when polling stops during a crawl? Does the channel still exist
   to pick up the response?
 - On goroutine return objects should be freed?
-
-
-
-Style fixes:
-Acronyms should be same case Url -> URL
