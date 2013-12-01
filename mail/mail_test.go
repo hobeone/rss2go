@@ -77,3 +77,28 @@ func TestObjectCreation(t *testing.T) {
 		"",
 	)
 }
+/*
+func TestSendMailWithSMTP(t *testing.T) {
+	md := NewMailDispatcher(
+		"test@gmail.com",
+		"test@gmail.com",
+		false,
+		"",
+		"smtp.gmail.com:587",
+		"test@gmail.com",
+		"testpassword",
+	)
+
+	msg := &gophermail.Message{
+		From:     "test@gmail.com",
+		To:       []string{"test@gmail.com"},
+		Subject:  "Testing subject",
+		Body:     "Test Body",
+	}
+
+	err := md.sendMailWithSmtp(msg)
+	if err != nil {
+		t.Errorf("Error sending mail %s\n", err.Error())
+	}
+}
+*/

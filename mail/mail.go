@@ -19,6 +19,7 @@ import (
 	"net/mail"
 	"net/smtp"
 	"os/exec"
+	"strings"
 	"time"
 )
 
@@ -136,7 +137,8 @@ func (self *MailDispatcher) sendMailWithSendmail(
 }
 
 func (self *MailDispatcher) sendMailWithSmtp(msg *gophermail.Message) error {
-	a := smtp.PlainAuth("", self.SmtpUsername, self.SmtpPassword, self.SmtpServer)
+	server_parts := strings.SplitN(self.SmtpServer, ":", 2)
+	a := smtp.PlainAuth("", self.SmtpUsername, self.SmtpPassword, server_parts[0])
 	err := gophermail.SendMail(self.SmtpServer, a, msg)
 
 	if err != nil {
