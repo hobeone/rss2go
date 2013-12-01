@@ -31,9 +31,11 @@ type mailConfig struct {
 }
 
 type dbConfig struct {
-	Path     string
-	Verbose  bool // turn on verbose db logging
-	UpdateDb bool // if we should update db items during crawl
+	Path          string
+	Verbose       bool   // turn on verbose db logging
+	UpdateDb      bool   // if we should update db items during crawl
+	WatchInterval int64  // how often to check for new or deleted feeds
+	Type          string // file or memory (for testing)
 }
 
 type crawlConfig struct {
@@ -63,7 +65,24 @@ func NewConfig() *Config {
 		WebServer: webConfig{
 			ListenAddress: "localhost:7000",
 		},
+		Db: dbConfig{
+			Verbose:       true,
+			UpdateDb:      true,
+			WatchInterval: 60,
+			Type:          "file",
+		},
 	}
+}
+
+func NewTestConfig() *Config {
+	c := NewConfig()
+	c.Mail.ToAddress = "fake@localhost"
+	c.Mail.UseSendmail = false
+	c.Mail.UseSmtp = false
+	c.Mail.SendMail = false
+	c.Db.Type = "memory"
+	c.Db.Verbose = false
+	return c
 }
 
 func replaceTildeInPath(path string) string {

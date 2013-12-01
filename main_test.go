@@ -6,11 +6,9 @@ import (
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
-	"github.com/hobeone/rss2go/mail"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -55,30 +53,27 @@ func TestEndToEndIntegration(t *testing.T) {
 		return time.After(time.Second * time.Duration(1))
 	}
 
-	config := config.NewConfig()
+	cfg := config.NewConfig()
+	cfg.Mail.ToAddress = "fake@localhost"
 
-	// Set first argument to true to debug sql
-	db := db.NewMemoryDbDispatcher(false, true)
-	MakeDbFixtures(*db, ts.URL)
-	all_feeds, err := db.GetAllFeeds()
+	d := commands.NewDaemon(cfg)
+	d.Dbh = db.NewMemoryDbDispatcher(false, true)
+	MakeDbFixtures(*d.Dbh, ts.URL)
+	all_feeds, err := d.Dbh.GetAllFeeds()
 
 	if err != nil {
 		glog.Fatalf("Error reading feeds: %s", err.Error())
 	}
 
-	mailer := mail.CreateAndStartStubMailer()
+	d.CreateAndStartFeedWatchers(all_feeds)
 
-	_, _, response_channel := commands.CreateAndStartFeedWatchers(
-		all_feeds, config, mailer, db)
-
-	resp := <-response_channel
+	resp := <-d.RespChan
 	if len(resp.Items) != 25 {
 		t.Errorf("Expected 25 items from the feed. Got %d", len(resp.Items))
 	}
 
-	resp = <-response_channel
+	resp = <-d.RespChan
 	if len(resp.Items) != 0 {
 		t.Errorf("Expected 0 items from the feed. Got %d", len(resp.Items))
 	}
-	os.Remove("rss2go_test.db")
 }

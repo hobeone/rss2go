@@ -10,13 +10,12 @@ import (
 	"github.com/hobeone/rss2go/flagutil"
 	"github.com/hobeone/rss2go/mail"
 	"github.com/hobeone/rss2go/webui"
-	"net/http"
 	"time"
 )
 
 func MakeCmdDaemon() *flagutil.Command {
 	cmd := &flagutil.Command{
-		Run:       daemon,
+		Run:       runDaemon,
 		UsageLine: "daemon",
 		Short:     "Start a daemon to collect feeds and mail items.",
 		Long: `
@@ -32,27 +31,48 @@ func MakeCmdDaemon() *flagutil.Command {
 	return cmd
 }
 
-// Watch the db config and update feeds based on removal or addition of feeds
-func feedDbUpdateLoop(dbh db.FeedDbDispatcher,
-	cfg *config.Config,
-	crawl_chan chan *feed_watcher.FeedCrawlRequest,
-	resp_chan chan *feed_watcher.FeedCrawlResponse,
-	mail_chan chan *mail.MailRequest,
-	feeds map[string]*feed_watcher.FeedWatcher,
-	interval time.Duration) {
-	for {
-		time.Sleep(interval)
-		feedDbUpdate(dbh, cfg, crawl_chan, resp_chan, mail_chan, feeds)
+type Daemon struct {
+	Config    *config.Config
+	CrawlChan chan *feed_watcher.FeedCrawlRequest
+	RespChan  chan *feed_watcher.FeedCrawlResponse
+	MailChan  chan *mail.MailRequest
+	Feeds     map[string]*feed_watcher.FeedWatcher
+	Dbh       *db.DbDispatcher
+}
+
+func NewDaemon(cfg *config.Config) *Daemon {
+	var dbh *db.DbDispatcher
+	if cfg.Db.Type == "memory" {
+		dbh = db.NewMemoryDbDispatcher(cfg.Db.Verbose, cfg.Db.UpdateDb)
+	} else {
+		dbh = db.NewDbDispatcher(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
+	}
+	cc := make(chan *feed_watcher.FeedCrawlRequest)
+	rc := make(chan *feed_watcher.FeedCrawlResponse)
+	mc := mail.CreateAndStartMailer(cfg).OutgoingMail
+
+	return &Daemon{
+		Config:    cfg,
+		CrawlChan: cc,
+		RespChan:  rc,
+		MailChan:  mc,
+		Dbh:       dbh,
+		Feeds:     make(map[string]*feed_watcher.FeedWatcher),
 	}
 }
 
-func feedDbUpdate(dbh db.FeedDbDispatcher,
-	cfg *config.Config,
-	crawl_chan chan *feed_watcher.FeedCrawlRequest,
-	resp_chan chan *feed_watcher.FeedCrawlResponse,
-	mail_chan chan *mail.MailRequest,
-	feeds map[string]*feed_watcher.FeedWatcher) {
-	db_feeds, err := dbh.GetAllFeeds()
+// Watch the db config and update feeds based on removal or addition of feeds
+func (d *Daemon) feedDbUpdateLoop() {
+	ival := time.Duration(d.Config.Db.WatchInterval) * time.Second
+	glog.Errorf("Watching the db for changed feeds every %v\n", ival)
+	for {
+		time.Sleep(ival)
+		d.feedDbUpdate()
+	}
+}
+
+func (d *Daemon) feedDbUpdate() {
+	db_feeds, err := d.Dbh.GetAllFeeds()
 	if err != nil {
 		glog.Errorf("Error getting feeds from db: %s\n", err.Error)
 		return
@@ -61,36 +81,57 @@ func feedDbUpdate(dbh db.FeedDbDispatcher,
 	for _, fi := range db_feeds {
 		all_feeds[fi.Url] = fi
 	}
-	for k, v := range feeds {
+	for k, v := range d.Feeds {
 		if _, ok := all_feeds[k]; !ok {
-			glog.Errorf("Feed %s removed from db. Stopping poll.\n", k)
+			glog.Infof("Feed %s removed from db. Stopping poll.\n", k)
 			v.StopPoll()
-			delete(feeds, k)
+			delete(d.Feeds, k)
 		}
 	}
 	feeds_to_start := make([]db.FeedInfo, 0)
 	for k, v := range all_feeds {
-		if _, ok := feeds[k]; !ok {
+		if _, ok := d.Feeds[k]; !ok {
 			feeds_to_start = append(feeds_to_start, v)
 			glog.Infof("Feed %s added to db. Adding to queue to start.\n", k)
 		}
 	}
 	if len(feeds_to_start) > 0 {
 		glog.Infof("Adding %d feeds to watch.\n", len(feeds_to_start))
-		for k, v := range startPollers(
-			feeds_to_start,
-			crawl_chan,
-			resp_chan,
-			mail_chan,
-			dbh,
-			cfg,
-		) {
-			feeds[k] = v
-		}
+		d.startPollers(feeds_to_start)
 	}
 }
 
-func daemon(cmd *flagutil.Command, args []string) {
+func (d *Daemon) startPollers(new_feeds []db.FeedInfo) {
+	// make feeds unique
+	for _, f := range new_feeds {
+		if _, ok := d.Feeds[f.Url]; ok {
+			glog.Infof("Found duplicate feed: %s", f.Url)
+			continue
+		}
+
+		d.Feeds[f.Url] = feed_watcher.NewFeedWatcher(
+			f,
+			d.CrawlChan,
+			d.RespChan,
+			d.MailChan,
+			d.Dbh,
+			[]string{},
+			d.Config.Crawl.MinInterval,
+			d.Config.Crawl.MaxInterval,
+		)
+		go d.Feeds[f.Url].PollFeed()
+	}
+}
+
+func (d *Daemon) CreateAndStartFeedWatchers(feeds []db.FeedInfo) {
+	// start crawler pool
+	crawler.StartCrawlerPool(d.Config.Crawl.MaxCrawlers, d.CrawlChan)
+
+	// Start Polling
+	d.startPollers(feeds)
+}
+
+func runDaemon(cmd *flagutil.Command, args []string) {
 	send_mail := cmd.Flag.Lookup("send_mail").Value.(flag.Getter).Get().(bool)
 	update_db := cmd.Flag.Lookup("db_updates").Value.(flag.Getter).Get().(bool)
 
@@ -101,90 +142,23 @@ func daemon(cmd *flagutil.Command, args []string) {
 	cfg.Mail.SendMail = send_mail
 	cfg.Db.UpdateDb = update_db
 
-	mailer := mail.CreateAndStartMailer(cfg)
+	d := NewDaemon(cfg)
 
-	db := db.NewDbDispatcher(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
-
-	all_feeds, err := db.GetAllFeeds()
+	all_feeds, err := d.Dbh.GetAllFeeds()
 
 	if err != nil {
 		glog.Fatal(err.Error())
 	}
-	feeds, crawl_chan, resp_chan := CreateAndStartFeedWatchers(
-		all_feeds, cfg, mailer, db)
+	d.CreateAndStartFeedWatchers(all_feeds)
 
 	glog.Infof("Got %d feeds to watch.\n", len(all_feeds))
 
-	// make interval come from cfg
-	// TODO: desperately in need of refactoring
-	go feedDbUpdateLoop(db, cfg, crawl_chan, resp_chan, mailer.OutgoingMail,
-		feeds, time.Second*1)
+	go d.feedDbUpdateLoop()
 
-	// TODO: Add signal handler to reload config?
-
-	go webui.RunWebUi(cfg, feeds)
+	go webui.RunWebUi(d.Config, d.Feeds)
 	for {
-		http.DefaultTransport.(*http.Transport).CloseIdleConnections()
-		_ = <-resp_chan
+		_ = <-d.RespChan
 	}
 }
 
-func startPollers(
-	all_feeds []db.FeedInfo,
-	http_crawl_channel chan *feed_watcher.FeedCrawlRequest,
-	response_channel chan *feed_watcher.FeedCrawlResponse,
-	mail_chan chan *mail.MailRequest,
-	db db.FeedDbDispatcher,
-	cfg *config.Config,
-) map[string]*feed_watcher.FeedWatcher {
-	// make feeds unique
-	feeds := make(map[string]*feed_watcher.FeedWatcher)
-	for _, f := range all_feeds {
-		if _, ok := feeds[f.Url]; ok {
-			glog.Infof("Found duplicate feed: %s", f.Url)
-			continue
-		}
 
-		feeds[f.Url] = feed_watcher.NewFeedWatcher(
-			f,
-			http_crawl_channel,
-			response_channel,
-			mail_chan,
-			db,
-			[]string{},
-			cfg.Crawl.MinInterval,
-			cfg.Crawl.MaxInterval,
-		)
-		go feeds[f.Url].PollFeed()
-	}
-	return feeds
-}
-
-func CreateAndStartFeedWatchers(
-	feeds []db.FeedInfo,
-	cfg *config.Config,
-	mailer *mail.MailDispatcher,
-	db *db.DbDispatcher,
-) (map[string]*feed_watcher.FeedWatcher,
-	chan *feed_watcher.FeedCrawlRequest,
-	chan *feed_watcher.FeedCrawlResponse) {
-	// Start Crawlers
-	// Http pool channel
-	crawl_channel := make(chan *feed_watcher.FeedCrawlRequest)
-	response_channel := make(chan *feed_watcher.FeedCrawlResponse)
-
-	// start crawler pool
-	crawler.StartCrawlerPool(
-		cfg.Crawl.MaxCrawlers,
-		crawl_channel)
-
-	// Start Polling
-	return startPollers(
-		feeds,
-		crawl_channel,
-		response_channel,
-		mailer.OutgoingMail,
-		db,
-		cfg,
-	), crawl_channel, response_channel
-}
