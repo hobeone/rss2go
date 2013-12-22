@@ -37,16 +37,3 @@ func TestDefaultsGetOverridden(t *testing.T) {
 		t.Fatal("Expected c.Mail.UseSmtp to be true")
 	}
 }
-
-func TestToAddressMustBeDefined(t *testing.T) {
-	c := NewConfig()
-	path := "../testdata/configs/no_toaddress_config.toml"
-	err := c.ReadConfig(path)
-	if err == nil {
-		t.Fatal("No error on config with invalid ToAddress")
-	} else {
-		if err.Error() != MissingToAddressError {
-			t.Fatal("Expected error on undefined ToAddress. Got: %s", err.Error)
-		}
-	}
-}

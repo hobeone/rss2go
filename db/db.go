@@ -413,8 +413,9 @@ func (self *DbDispatcher) GetUsersFeeds(u *User) ([]FeedInfo, error) {
   var all []FeedInfo
 
   err := self.Orm.SetTable("feed_info").
-    Join("LEFT", "user_feed", "feed_info.id=user_feed.feed_id").
+    Join("INNER", "user_feed", "feed_info.id=user_feed.feed_id").
     Select("feed_info.id,feed_info.name,feed_info.url").
+		GroupBy("feed_info.id").
     FindAll(&all)
 
   return all, err

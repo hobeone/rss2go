@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"github.com/BurntSushi/toml"
 	"os/user"
 	"strings"
@@ -26,7 +25,6 @@ type mailConfig struct {
 	SmtpServer   string
 	SmtpUsername string
 	SmtpPassword string
-	ToAddress    string
 	FromAddress  string
 }
 
@@ -76,7 +74,6 @@ func NewConfig() *Config {
 
 func NewTestConfig() *Config {
 	c := NewConfig()
-	c.Mail.ToAddress = "fake@localhost"
 	c.Mail.UseSendmail = false
 	c.Mail.UseSmtp = false
 	c.Mail.SendMail = false
@@ -95,9 +92,6 @@ func (self *Config) ReadConfig(config_path string) error {
 	_, err := toml.DecodeFile(replaceTildeInPath(config_path), &self)
 	if err != nil {
 		return err
-	}
-	if self.Mail.ToAddress == "" {
-		return fmt.Errorf(MissingToAddressError)
 	}
 	return nil
 }
