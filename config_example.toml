@@ -1,8 +1,8 @@
 [mail]
 sendmail = true
 smtp = false
+mtaPath = "sendmail"
 fromAddress = "rss2go@example.net"
-toAddress = "example@gmail.com"
 smtpServer = "mail.gmail.com"
 smtpUsername = "example_user@gmail.com"
 smtpPassword = "example_password"

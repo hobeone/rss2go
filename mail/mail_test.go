@@ -1,104 +1,96 @@
 package mail
 
 import (
-	"testing"
-	"github.com/jpoehls/gophermail"
+  "github.com/hobeone/rss2go/db"
+  "github.com/hobeone/rss2go/feed"
+  "github.com/jpoehls/gophermail"
+  "testing"
 )
 
-func TestSendMailWithSendmail(t *testing.T) {
-	d := NewMailDispatcher(
-		"test@test.com",
-		"recipient@test.com",
-		true,
-		"/bin/true",
-		"",
-		"",
-		"",
-	)
-
-	msg := &gophermail.Message{
-		From:     "from@example.com",
-		To:       []string{"to@example.com"},
-		Subject:  "Testing subject",
-		Body:     "Test Body",
-	}
-
-	result := d.sendMailWithSendmail(msg)
-
-	if result != nil {
-		t.Error("Sending to /bin/true should always work.")
-	}
-
-
-	d = NewMailDispatcher(
-		"test@test.com",
-		"recipient@test.com",
-		true,
-		"/bin/false",
-		"",
-		"",
-		"",
-	)
-	result = d.sendMailWithSendmail(msg)
-
-	if result == nil {
-		t.Error("Sending to /bin/false should always fail.")
-	}
+type MockedMailer struct {
+  Called int
 }
 
-func TestObjectCreation(t *testing.T) {
-	d := NewMailDispatcher(
-		"test@test.com",
-		"recipient@test.com",
-		false,
-		"",
-		"localhost:25",
-		"testuser",
-		"testpass",
-	)
-
-	if d.MtaBinary != MTA_BINARY {
-		t.Error("NewMailDispatcher should set the MTA to the default when given and empty string.")
-	}
-
-	defer func() {
-		if err := recover(); err == nil {
-			t.Error("NewMailDispatcher should fail on non existing MTA path.")
-		}
-	}()
-
-	d = NewMailDispatcher(
-		"test@test.com",
-		"recipient@test.com",
-		true,
-		"/notexist",
-		"",
-		"",
-		"",
-	)
+func (m *MockedMailer) SendMail(msg *gophermail.Message) error {
+  m.Called++
+  return nil
 }
-/*
-func TestSendMailWithSMTP(t *testing.T) {
-	md := NewMailDispatcher(
-		"test@gmail.com",
-		"test@gmail.com",
-		false,
-		"",
-		"smtp.gmail.com:587",
-		"test@gmail.com",
-		"testpassword",
-	)
 
-	msg := &gophermail.Message{
-		From:     "test@gmail.com",
-		To:       []string{"test@gmail.com"},
-		Subject:  "Testing subject",
-		Body:     "Test Body",
-	}
+func TestSendToUsersWithNoMailSender(t *testing.T) {
+  s := &feed.Story{}
 
-	err := md.sendMailWithSmtp(msg)
-	if err != nil {
-		t.Errorf("Error sending mail %s\n", err.Error())
-	}
+  md := &MailDispatcher{}
+  err := md.sendToUsers(s)
+
+  if err == nil {
+    t.Errorf("Sending mail with no MailSender should be an error.")
+  }
 }
-*/
+
+func TestSendToUsers(t *testing.T) {
+  dbh := db.NewMemoryDbDispatcher(false, false)
+  feed1, err := dbh.AddFeed("test1", "http://foo.bar/")
+  if err != nil {
+    t.Fatalf("Error creating test feed: %s", err)
+  }
+
+  user1, err := dbh.AddUser("name", "email@example.com")
+  if err != nil {
+    t.Fatalf("Error creating test user: %s", err)
+  }
+  user2, err := dbh.AddUser("nam2", "email2@example.com")
+  if err != nil {
+    t.Fatalf("Error creating test user: %s", err)
+  }
+
+  err = dbh.AddFeedsToUser(user1, []string{feed1.Url})
+  if err != nil {
+    t.Fatalf("Error adding feeds to user: %s", err)
+  }
+  err = dbh.AddFeedsToUser(user2, []string{feed1.Url})
+  if err != nil {
+    t.Fatalf("Error adding feeds to user: %s", err)
+  }
+
+  mm := new(MockedMailer)
+  md := NewMailDispatcher(
+    dbh,
+    "recipient@test.com",
+    mm,
+  )
+
+  f := &feed.Feed{
+    Url: feed1.Url,
+  }
+  s := &feed.Story{
+    Feed: f,
+  }
+  err = md.sendToUsers(s)
+  if err != nil {
+    t.Fatalf("Error sending to users: %s", err)
+  }
+  if mm.Called != 2 {
+    t.Fatalf("Expected 2 calls to the mailer, got %d", mm.Called)
+  }
+}
+
+func TestLocalMTASender(t *testing.T) {
+  msg := &gophermail.Message{
+    From:    "from@example.com",
+    To:      []string{"to@example.com"},
+    Subject: "Testing subject",
+    Body:    "Test Body",
+  }
+
+  mta := NewLocalMTASender("/bin/true")
+  err := mta.SendMail(msg)
+  if err != nil {
+    t.Fatalf("Error sending mail with /bin/true which should always work.")
+  }
+
+  mta = NewLocalMTASender("/bin/false")
+  err = mta.SendMail(msg)
+  if err == nil {
+    t.Fatalf("Sending mail with /bin/false which should always work.")
+  }
+}

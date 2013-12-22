@@ -45,11 +45,11 @@ func addFeed(cmd *flagutil.Command, args []string) {
 	cfg.Mail.SendMail = false
 	cfg.Db.UpdateDb = true
 
-	mailer := mail.CreateAndStartMailer(cfg)
+	dbh := db.NewDbDispatcher(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 
-	db := db.NewDbDispatcher(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
+	mailer := mail.CreateAndStartMailer(dbh, cfg)
 
-	_, err := db.AddFeed(feed_name, feed_url)
+	_, err := dbh.AddFeed(feed_name, feed_url)
 	if err != nil {
 		PrintErrorAndExit(err.Error())
 	}
@@ -57,7 +57,7 @@ func addFeed(cmd *flagutil.Command, args []string) {
 	fmt.Printf("Added feed %s at url %s\n", feed_name, feed_url)
 
 	if poll_feed {
-		feed, err := db.GetFeedByUrl(feed_url)
+		feed, err := dbh.GetFeedByUrl(feed_url)
 		if err != nil {
 			PrintErrorAndExit(err.Error())
 		}
@@ -73,7 +73,7 @@ func addFeed(cmd *flagutil.Command, args []string) {
 			http_crawl_channel,
 			response_channel,
 			mailer.OutgoingMail,
-			db,
+			dbh,
 			[]string{},
 			10,
 			100,

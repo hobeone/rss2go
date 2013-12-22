@@ -10,185 +10,204 @@
 package mail
 
 import (
-	"bytes"
-	"fmt"
-	"github.com/golang/glog"
-	"github.com/hobeone/rss2go/config"
-	"github.com/hobeone/rss2go/feed"
-	"github.com/jpoehls/gophermail"
-	"net/mail"
-	"net/smtp"
-	"os/exec"
-	"strings"
-	"time"
+  "bytes"
+  "fmt"
+  "github.com/golang/glog"
+  "github.com/hobeone/rss2go/config"
+  "github.com/hobeone/rss2go/db"
+  "github.com/hobeone/rss2go/feed"
+  "github.com/jpoehls/gophermail"
+  "net/mail"
+  "net/smtp"
+  "os/exec"
+  "strings"
+  "time"
 )
 
 const MTA_BINARY = "sendmail"
 
 type MailRequest struct {
-	Item       *feed.Story
-	ResultChan chan error
+  Item       *feed.Story
+  ResultChan chan error
+}
+
+type MailSender interface {
+  SendMail(*gophermail.Message) error
+}
+
+type LocalMTASender struct {
+  MTAPath string
+}
+
+func (self *LocalMTASender) SendMail(msg *gophermail.Message) error {
+  cmd := exec.Command(self.MTAPath, "-t")
+
+  msgBytes, err := msg.Bytes()
+  if err != nil {
+    return fmt.Errorf(
+      "Error converting message to text: %s", err.Error())
+  }
+  cmd.Stdin = bytes.NewReader(msgBytes)
+
+  _, err = cmd.CombinedOutput()
+  if err != nil {
+    return fmt.Errorf("Error running command %#v: %s",
+      cmd.Args, err)
+  }
+  glog.Infof("Successfully sent mail: %s to %v", msg.Subject, msg.To)
+  return nil
+}
+
+func NewLocalMTASender(mta_path string) MailSender {
+  if mta_path == "" {
+    mta_path = MTA_BINARY
+  }
+
+  c, err := exec.LookPath(mta_path)
+  if err != nil {
+    panic(fmt.Sprintf("Couldn't find specified MTA: %s", err.Error()))
+  } else {
+    glog.Infof("Found %s at %s.", mta_path, c)
+  }
+  mta_path = c
+
+  return &LocalMTASender{
+    MTAPath: mta_path,
+  }
+}
+
+type SMTPSender struct {
+  SmtpServer   string
+  SmtpUsername string
+  SmtpPassword string
+}
+
+func (self *SMTPSender) SendMail(msg *gophermail.Message) error {
+  server_parts := strings.SplitN(self.SmtpServer, ":", 2)
+  a := smtp.PlainAuth("", self.SmtpUsername, self.SmtpPassword, server_parts[0])
+  err := gophermail.SendMail(self.SmtpServer, a, msg)
+
+  if err != nil {
+    return fmt.Errorf("Error sending mail: %s\n", err.Error())
+  }
+  return nil
+}
+
+func NewSMTPSender(server string, username string, password string) MailSender {
+  return &SMTPSender{}
 }
 
 type MailDispatcher struct {
-	OutgoingMail chan *MailRequest
-	UseLocalMTA  bool
-	MtaBinary    string
-	SmtpServer   string
-	SmtpUsername string
-	SmtpPassword string
-	ToAddress    string
-	FromAddress  string
-
-	stubOutMail bool
+  OutgoingMail chan *MailRequest
+  Dbh          *db.DbDispatcher
+  FromAddress  string
+  MailSender   MailSender
 }
 
-func NewMailDispatcher(
-	to_address string,
-	from_address string,
-	use_local_mta bool,
-	mta_binary_name string,
-	smtp_server string,
-	smtp_username string,
-	smtp_password string) *MailDispatcher {
-
-	if mta_binary_name == "" {
-		mta_binary_name = MTA_BINARY
-	}
-
-	if use_local_mta {
-		c, err := exec.LookPath(mta_binary_name)
-		if err != nil {
-			panic(fmt.Sprintf("Couldn't find specified MTA: %s", err.Error()))
-		} else {
-			glog.Infof("Found %s at %s.", mta_binary_name, c)
-		}
-		mta_binary_name = c
-	}
-
-	if to_address == "" {
-		panic("to_address can't be blank.")
-	}
-
-	return &MailDispatcher{
-		OutgoingMail: make(chan *MailRequest),
-		ToAddress:    to_address,
-		FromAddress:  from_address,
-		UseLocalMTA:  use_local_mta,
-		MtaBinary:    mta_binary_name,
-		SmtpServer:   smtp_server,
-		SmtpUsername: smtp_username,
-		SmtpPassword: smtp_password,
-		stubOutMail:  false,
-	}
+func NewMailDispatcher(dbh *db.DbDispatcher, from_address string, sender MailSender) *MailDispatcher {
+  return &MailDispatcher{
+    OutgoingMail: make(chan *MailRequest),
+    Dbh:          dbh,
+    FromAddress:  from_address,
+    MailSender:   sender,
+  }
 }
 
-func CreateAndStartMailer(config *config.Config) *MailDispatcher {
-	// Start Mailer
-	mailer := NewMailDispatcher(
-		config.Mail.ToAddress,
-		config.Mail.FromAddress,
-		config.Mail.UseSendmail,
-		config.Mail.MtaPath,
-		config.Mail.SmtpServer,
-		config.Mail.SmtpUsername,
-		config.Mail.SmtpPassword,
-	)
-	if !config.Mail.SendMail {
-		glog.Info("Setting dry run as configured.")
-		mailer.SetDryRun(true)
-	}
-	glog.Infof("Created new mailer: %#v", mailer)
-	go mailer.DispatchLoop()
-	return mailer
+type NullMailSender struct{}
+
+func (self *NullMailSender) SendMail(m *gophermail.Message) error {
+  glog.Infof("NullMailer faked sending mail: %s to %v", m.Subject, m.To)
+  return nil
+}
+
+func CreateAndStartMailer(dbh *db.DbDispatcher, config *config.Config) *MailDispatcher {
+  // Create mail sender
+  var sender MailSender
+
+  if !config.Mail.SendMail {
+    glog.Info("Using null mail sender as configured.")
+    sender = &NullMailSender{}
+  } else if config.Mail.MtaPath != "" {
+    sender = NewLocalMTASender(config.Mail.MtaPath)
+  } else if config.Mail.SmtpServer != "" {
+    sender = NewSMTPSender(config.Mail.SmtpServer, config.Mail.SmtpUsername, config.Mail.SmtpPassword)
+  } else {
+    panic(fmt.Sprint("No mail sending capability defined in config."))
+  }
+
+  // Start Mailer
+  mailer := NewMailDispatcher(
+    dbh,
+    config.Mail.FromAddress,
+    sender,
+  )
+  glog.Infof("Created new mailer: %#v", mailer)
+  go mailer.DispatchLoop()
+  return mailer
 }
 
 func CreateAndStartStubMailer() *MailDispatcher {
-	// Start Mailer
-	mailer := NewMailDispatcher(
-		"to@exmaple.com", "from@example.com", false, "", "", "", "")
-	mailer.SetDryRun(true)
-	go mailer.DispatchLoop()
-	return mailer
-}
-
-func (self *MailDispatcher) SetDryRun(v bool) {
-	self.stubOutMail = v
-}
-
-func (self *MailDispatcher) sendMailWithSendmail(
-	msg *gophermail.Message) error {
-	cmd := exec.Command(self.MtaBinary, "-t")
-
-	msgBytes, err := msg.Bytes()
-	if err != nil {
-		return fmt.Errorf(
-			"Error converting message to text: %s", err.Error())
-	}
-	cmd.Stdin = bytes.NewReader(msgBytes)
-
-	_, err = cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("Error running command %#v: %s",
-			cmd.Args, err)
-	}
-	glog.Infof("Successfully sent mail: %s", msg.Subject)
-	return nil
-}
-
-func (self *MailDispatcher) sendMailWithSmtp(msg *gophermail.Message) error {
-	server_parts := strings.SplitN(self.SmtpServer, ":", 2)
-	a := smtp.PlainAuth("", self.SmtpUsername, self.SmtpPassword, server_parts[0])
-	err := gophermail.SendMail(self.SmtpServer, a, msg)
-
-	if err != nil {
-		return fmt.Errorf("Error sending mail: %s\n", err.Error())
-	}
-	return nil
+  // Start Mailer
+  mailer := NewMailDispatcher(
+    db.NewMemoryDbDispatcher(false, false),
+    "from@example.com",
+    &NullMailSender{},
+  )
+  go mailer.DispatchLoop()
+  return mailer
 }
 
 func (self *MailDispatcher) DispatchLoop() {
-	for {
-		request := <-self.OutgoingMail
-		request.ResultChan <- self.handleMail(request.Item)
-	}
+  for {
+    request := <-self.OutgoingMail
+    request.ResultChan <- self.sendToUsers(request.Item)
+  }
 }
 
-func (self *MailDispatcher) handleMail(m *feed.Story) error {
-	if self.stubOutMail {
-		return nil
-	}
+func (self *MailDispatcher) getUsersForFeed(feed_url string) (u []db.User, err error) {
+  return self.Dbh.GetFeedUsers(feed_url)
+}
 
-	msg := CreateMailFromItem(self.FromAddress, self.ToAddress, m)
-
-	if self.UseLocalMTA {
-		return self.sendMailWithSendmail(msg)
-	} else {
-		return self.sendMailWithSmtp(msg)
-	}
+func (self *MailDispatcher) sendToUsers(m *feed.Story) error {
+  if self.MailSender == nil {
+    return fmt.Errorf("No MailSender set, can not send mail.")
+  }
+  // email addresses subscribed to this feed -> []*db.User
+  users, err := self.getUsersForFeed(m.Feed.Url)
+  if err != nil {
+    return err
+  }
+  for _, u := range users {
+    msg := CreateMailFromItem(self.FromAddress, u.Email, m)
+    err = self.MailSender.SendMail(msg)
+    if err != nil {
+      return err
+    }
+  }
+  return nil
 }
 
 func CreateMailFromItem(from string, to string, item *feed.Story) *gophermail.Message {
-	content := FormatMessageBody(item)
-	msg := &gophermail.Message{
-		From:     from,
-		To:       []string{to},
-		Subject:  fmt.Sprintf("%s: %s", item.ParentFeed.Title, item.Title),
-		Body:     content, //TODO Convert to plain text
-		HTMLBody: content,
-		Headers:  mail.Header{},
-	}
-	if !item.Published.IsZero() {
-		msg.Headers["Date"] = []string{item.Published.UTC().Format(time.RFC822)}
-	}
-	return msg
+  content := FormatMessageBody(item)
+  msg := &gophermail.Message{
+    From:     from,
+    To:       []string{to},
+    Subject:  fmt.Sprintf("%s: %s", item.Feed.Title, item.Title),
+    Body:     content, //TODO Convert to plain text
+    HTMLBody: content,
+    Headers:  mail.Header{},
+  }
+  if !item.Published.IsZero() {
+    msg.Headers["Date"] = []string{item.Published.UTC().Format(time.RFC822)}
+  }
+  return msg
 }
 
 func FormatMessageBody(story *feed.Story) string {
-	orig_link := fmt.Sprintf(`
+  orig_link := fmt.Sprintf(`
 <div class="original_link">
 <a href="%s">%s</a>
 </div><hr>`, story.Link, story.Title)
 
-	return fmt.Sprintf("%s%s", orig_link, story.Content)
+  return fmt.Sprintf("%s%s", orig_link, story.Content)
 }

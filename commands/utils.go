@@ -2,15 +2,15 @@ package commands
 
 import (
 	"fmt"
-	"os"
-	"github.com/hobeone/rss2go/config"
 	"github.com/golang/glog"
-
+	"github.com/hobeone/rss2go/config"
+	"os"
+	"testing"
 )
 
 const default_config = "~/.config/rss2go/config.toml"
 
-func PrintErrorAndExit(err_string string) {
+var PrintErrorAndExit = func(err_string string) {
 	fmt.Fprintf(os.Stderr, "ERROR: %s.\n", err_string)
 	os.Exit(1)
 }
@@ -29,4 +29,23 @@ func loadConfig(config_file string) *config.Config {
 		glog.Fatal(err)
 	}
 	return config
+}
+
+// Used by tests
+func overrideExit() {
+	PrintErrorAndExit = func(err_string string) {
+		panic(err_string)
+	}
+}
+
+func assertNoPanic(t *testing.T, err string) {
+	if r := recover(); r != nil {
+		t.Fatalf("%s: %s", err, r)
+	}
+}
+
+func assertPanic(t *testing.T, err string) {
+	if r := recover(); r == nil {
+		t.Fatalf("%s", err)
+	}
 }
