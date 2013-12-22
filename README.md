@@ -34,7 +34,9 @@ cp config_example.toml ~/.config/rss2go/config.toml
 Edit ~/.config/rss2go/config.toml to have the right addresses and paths in it.
 
 ./rss2go addfeed "FeedName" 'http://feed/url.atom'
+
 ./rss2go adduser yourname your@email 'http://feed/url.atom'
+
 ./rss2go runone --send_mail=false http://localhost/test.rss
 
 
