@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 )
+
 func OverrideAfter() {
 	After = func(d time.Duration) <-chan time.Time {
 		return time.After(time.Duration(0))

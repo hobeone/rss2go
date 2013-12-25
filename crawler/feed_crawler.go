@@ -2,11 +2,11 @@ package crawler
 
 import (
 	"fmt"
+	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/httpclient"
 	"io"
 	"io/ioutil"
-	"github.com/golang/glog"
 	"net/http"
 	"time"
 )

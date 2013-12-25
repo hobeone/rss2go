@@ -2,9 +2,9 @@ package crawler
 
 import (
 	"fmt"
+	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/feed_watcher"
 	"io/ioutil"
-	"github.com/golang/glog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -32,7 +32,7 @@ func TestFeedCrawler(t *testing.T) {
 
 	if resp.Error != nil {
 		t.Errorf("Response had an error when it shouldn't have: %s",
-		resp.Error.Error())
+			resp.Error.Error())
 	}
 }
 

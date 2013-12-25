@@ -6,17 +6,16 @@ import (
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/flagutil"
-
 )
 
 type RemoveUserCommand struct {
 	Config *config.Config
-	Dbh *db.DbDispatcher
+	Dbh    *db.DbDispatcher
 }
 
 func MakeCmdRemoveUser() *flagutil.Command {
-	cmd := &flagutil.Command {
-		Run: runRemoveUser,
+	cmd := &flagutil.Command{
+		Run:       runRemoveUser,
 		UsageLine: "removeuser email@address",
 		Short:     "Remove a user from rss2go",
 		Long: `
@@ -34,10 +33,10 @@ func MakeCmdRemoveUser() *flagutil.Command {
 }
 
 func runRemoveUser(cmd *flagutil.Command, args []string) {
-  if len(args) < 1 {
-    PrintErrorAndExit("Must give an email address to remove")
-  }
-  user_email := args[0]
+	if len(args) < 1 {
+		PrintErrorAndExit("Must give an email address to remove")
+	}
+	user_email := args[0]
 
 	cfg := loadConfig(cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
 	ru := NewRemoveUserCommand(cfg)
@@ -45,16 +44,16 @@ func runRemoveUser(cmd *flagutil.Command, args []string) {
 }
 
 func NewRemoveUserCommand(cfg *config.Config) *RemoveUserCommand {
-  var dbh *db.DbDispatcher
-  if cfg.Db.Type == "memory" {
-    dbh = db.NewMemoryDbDispatcher(cfg.Db.Verbose, cfg.Db.UpdateDb)
-  } else {
-    dbh = db.NewDbDispatcher(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
-  }
+	var dbh *db.DbDispatcher
+	if cfg.Db.Type == "memory" {
+		dbh = db.NewMemoryDbDispatcher(cfg.Db.Verbose, cfg.Db.UpdateDb)
+	} else {
+		dbh = db.NewDbDispatcher(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
+	}
 
 	return &RemoveUserCommand{
 		Config: cfg,
-		Dbh: dbh,
+		Dbh:    dbh,
 	}
 }
 

@@ -1,13 +1,13 @@
 package commands
 
 import (
+	"flag"
 	"fmt"
 	"github.com/hobeone/rss2go/crawler"
-	"github.com/hobeone/rss2go/flagutil"
 	"github.com/hobeone/rss2go/feed"
+	"github.com/hobeone/rss2go/flagutil"
 	"github.com/hobeone/rss2go/mail"
 	"io/ioutil"
-	"flag"
 )
 
 func MakeCmdTestFeed() *flagutil.Command {

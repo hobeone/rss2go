@@ -1,10 +1,10 @@
 package commands
 
 import (
+	"flag"
+	"fmt"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/flagutil"
-	"fmt"
-	"flag"
 )
 
 func MakeCmdRemoveFeed() *flagutil.Command {

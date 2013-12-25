@@ -59,7 +59,7 @@ func (self *ListUsersCommand) ListUsers() {
 			feeds, err := self.Dbh.GetUsersFeeds(&u)
 			if err != nil {
 				PrintErrorAndExit(fmt.Sprintf("Couldn't find users subscriptions: %s",
-				err))
+					err))
 			}
 			for _, fi := range feeds {
 				fmt.Printf("  %s - %s\n", fi.Name, fi.Url)

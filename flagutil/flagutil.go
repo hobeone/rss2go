@@ -141,7 +141,7 @@ func (c Commands) Usage() {
 }
 
 func PrintCommandHelp(cmd *Command) {
-		tmpl(os.Stdout, helpTemplate, cmd)
+	tmpl(os.Stdout, helpTemplate, cmd)
 }
 
 // == Templates

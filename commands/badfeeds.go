@@ -1,8 +1,8 @@
 package commands
 
 import (
-	"fmt"
 	"flag"
+	"fmt"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/flagutil"
 )

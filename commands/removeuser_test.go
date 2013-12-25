@@ -6,18 +6,18 @@ import (
 )
 
 func TestRemoveUnknownUser(t *testing.T) {
-  cfg := config.NewTestConfig()
-  cfg.Db.Type = "memory"
-  ru := NewRemoveUserCommand(cfg)
+	cfg := config.NewTestConfig()
+	cfg.Db.Type = "memory"
+	ru := NewRemoveUserCommand(cfg)
 	overrideExit()
 	defer assertPanic(t, "RemoveUser should exit on unknown users.")
 	ru.RemoveUser("test@example.com")
 }
 
 func TestRemoveUser(t *testing.T) {
-  cfg := config.NewTestConfig()
-  cfg.Db.Type = "memory"
-  ru := NewRemoveUserCommand(cfg)
+	cfg := config.NewTestConfig()
+	cfg.Db.Type = "memory"
+	ru := NewRemoveUserCommand(cfg)
 
 	_, err := ru.Dbh.AddUser("test", "test@example.com")
 	if err != nil {

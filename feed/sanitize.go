@@ -133,7 +133,6 @@ func snipper(s string) string {
 	return cleanNonUTF8(s)
 }
 
-
 func cleanNonUTF8(s string) string {
 	b := &bytes.Buffer{}
 	for i := 0; i < len(s); i++ {

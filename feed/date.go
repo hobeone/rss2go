@@ -4,9 +4,9 @@
 package feed
 
 import (
-	"time"
-	"strings"
 	"fmt"
+	"strings"
+	"time"
 )
 
 var dateFormats = []string{

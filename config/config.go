@@ -45,8 +45,6 @@ type feedsConfig struct {
 	Urls []string
 }
 
-const MissingToAddressError = "Config Error: ToAddress must be defined."
-
 func NewConfig() *Config {
 	return &Config{
 		Mail: mailConfig{
