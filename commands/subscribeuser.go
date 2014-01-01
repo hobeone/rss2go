@@ -63,9 +63,18 @@ func (self *SubscribeUserCommand) SubscribeUser(user_email string, feed_urls []s
 	if err != nil {
 		PrintErrorAndExit(fmt.Sprintf("Error getting user: %s", err))
 	}
-	err = self.Dbh.AddFeedsToUser(u, feed_urls)
-	if err != nil {
-		PrintErrorAndExit(err.Error())
+	feeds := make([]*db.FeedInfo, len(feed_urls))
+	for i, feed_url := range feed_urls {
+		f, err := self.Dbh.GetFeedByUrl(feed_url)
+		if err != nil {
+			PrintErrorAndExit(fmt.Sprintf("Feed %s doesn't exist in db, add it first.", feed_url))
+		}
+		feeds[i] = f
 	}
+	err = self.Dbh.AddFeedsToUser(u, feeds)
+	if err != nil {
+		PrintErrorAndExit(fmt.Sprintf("Error adding feeds to user: %s", err))
+	}
+
 	fmt.Printf("Subscribed user %s to %d feed.\n", user_email, len(feed_urls))
 }

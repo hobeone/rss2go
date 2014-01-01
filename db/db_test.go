@@ -1,6 +1,8 @@
 package db
 
 import (
+	"fmt"
+	"runtime/debug"
 	"testing"
 	"time"
 )
@@ -107,7 +109,7 @@ func TestAddAndDeleteFeed(t *testing.T) {
 		t.Fatalf("Error creating test user: %s", err)
 	}
 
-	err = d.AddFeedsToUser(user1, []string{feed.Url})
+	err = d.AddFeedsToUser(user1, []*FeedInfo{feed})
 	if err != nil {
 		t.Fatalf("Error adding feeds to a user: %s", err)
 	}
@@ -218,7 +220,7 @@ func TestAddRemoveUser(t *testing.T) {
 		t.Fatalf("Error getting user from db: %s", err)
 	}
 
-	err = d.AddFeedsToUser(db_user, []string{feed1.Url})
+	err = d.AddFeedsToUser(db_user, []*FeedInfo{feed1})
 	if err != nil {
 		t.Fatalf("Error adding feeds to a user: %s", err)
 	}
@@ -249,20 +251,15 @@ func TestRemoveFeedsFromUser(t *testing.T) {
 		t.Fatalf("Error creating test user: %s", err)
 	}
 
-	err = d.AddFeedsToUser(user1, []string{feed1.Url})
+	err = d.AddFeedsToUser(user1, []*FeedInfo{feed1})
 	if err != nil {
 		t.Fatalf("Error adding feeds to a user: %s", err)
 	}
 
-	err = d.RemoveFeedsFromUser(user1, []string{feed1.Url})
+	err = d.RemoveFeedsFromUser(user1, []*FeedInfo{feed1})
 	if err != nil {
 		t.Fatalf("Error removing feeds from a user: %s", err)
 	}
-	err = d.RemoveFeedsFromUser(user1, []string{""})
-	if err == nil {
-		t.Fatalf("Should return error when removing unknown feed from a user.")
-	}
-
 }
 
 func TestGetFeedsWithUsers(t *testing.T) {
@@ -288,11 +285,11 @@ func TestGetFeedsWithUsers(t *testing.T) {
 		t.Fatalf("Error creating test user: %s", err)
 	}
 
-	err = d.AddFeedsToUser(user1, []string{feed1.Url})
+	err = d.AddFeedsToUser(user1, []*FeedInfo{feed1})
 	if err != nil {
 		t.Fatalf("Error adding feeds to a user: %s", err)
 	}
-	err = d.AddFeedsToUser(user2, []string{feed2.Url})
+	err = d.AddFeedsToUser(user2, []*FeedInfo{feed2})
 	if err != nil {
 		t.Fatalf("Error adding feeds to a user: %s", err)
 	}
@@ -324,7 +321,7 @@ func TestGetFeedUsers(t *testing.T) {
 		t.Fatalf("Error creating test user: %s", err)
 	}
 
-	err = d.AddFeedsToUser(user1, []string{feed1.Url})
+	err = d.AddFeedsToUser(user1, []*FeedInfo{feed1})
 	if err != nil {
 		t.Fatalf("Error adding feeds to a user: %s", err)
 	}
@@ -339,5 +336,79 @@ func TestGetFeedUsers(t *testing.T) {
 	if feed_users[0].Email != user1.Email {
 		t.Error("Expected user to have email %s but got %s", user1.Email,
 			feed_users[0].Email)
+	}
+}
+
+const USER_FIXTURES = ``
+
+func loadFixtures(t *testing.T, d *DbDispatcher) ([]*FeedInfo, []*User) {
+	users := map[string]string{
+		"test1": "test1@example.com",
+		"test2": "test2@example.com",
+		"test3": "test3@example.com",
+	}
+	feeds := map[string]string{
+		"test_feed1": "http://testfeed1/feed.atom",
+		"test_feed2": "http://testfeed2/feed.atom",
+		"test_feed3": "http://testfeed3/feed.atom",
+	}
+	db_feeds := make([]*FeedInfo, len(feeds))
+	i := 0
+	for name, url := range feeds {
+		feed, err := d.AddFeed(name, url)
+		if err != nil {
+			t.Fatalf("Error adding feed to db: %s", err.Error())
+		}
+		db_feeds[i] = feed
+		i++
+	}
+
+	db_users := make([]*User, len(users))
+	i = 0
+	for name, email := range users {
+		u, err := d.AddUser(name, email)
+		if err != nil {
+			t.Fatalf("Error adding user to db: %s", err.Error())
+		}
+		db_users[i] = u
+		i++
+
+		err = d.AddFeedsToUser(u, db_feeds)
+		if err != nil {
+			t.Fatalf("Error adding feed to user: %s", err.Error())
+		}
+	}
+	return db_feeds, db_users
+}
+
+func failOnError(t *testing.T, err error) {
+	if err != nil {
+		fmt.Println(string(debug.Stack()))
+		t.Fatalf("Error: %s", err.Error())
+	}
+}
+
+func TestUpdateUsersFeeds(t *testing.T) {
+	d := NewMemoryDbDispatcher(false, true)
+	feeds, users := loadFixtures(t, d)
+
+	d.UpdateUsersFeeds(users[0], []int{})
+
+	new_feeds, err := d.GetUsersFeeds(users[0])
+	failOnError(t, err)
+	if len(new_feeds) != 0 {
+		t.Fatalf("Expected 0 feeds for user, got %d", len(new_feeds))
+	}
+
+	feed_ids := make([]int, len(feeds))
+	for i := range feeds {
+		feed_ids[i] = feeds[i].Id
+	}
+	d.UpdateUsersFeeds(users[0], feed_ids)
+
+	new_feeds, err = d.GetUsersFeeds(users[0])
+	failOnError(t, err)
+	if len(new_feeds) != 3 {
+		t.Fatalf("Expected 3 feeds for user, got %d", len(new_feeds))
 	}
 }

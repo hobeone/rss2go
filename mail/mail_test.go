@@ -43,11 +43,11 @@ func TestSendToUsers(t *testing.T) {
 		t.Fatalf("Error creating test user: %s", err)
 	}
 
-	err = dbh.AddFeedsToUser(user1, []string{feed1.Url})
+	err = dbh.AddFeedsToUser(user1, []*db.FeedInfo{feed1})
 	if err != nil {
 		t.Fatalf("Error adding feeds to user: %s", err)
 	}
-	err = dbh.AddFeedsToUser(user2, []string{feed1.Url})
+	err = dbh.AddFeedsToUser(user2, []*db.FeedInfo{feed1})
 	if err != nil {
 		t.Fatalf("Error adding feeds to user: %s", err)
 	}

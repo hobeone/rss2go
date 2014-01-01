@@ -35,6 +35,6 @@ func TestUnsubscribeUserToUnknownFeed(t *testing.T) {
 	}
 
 	overrideExit()
-	defer assertPanic(t, "UnsubscribeUser shouldn't have exited.")
+	defer assertNoPanic(t, "UnsubscribeUser shouldn't have exited.")
 	su.UnsubscribeUser(user.Email, []string{""})
 }

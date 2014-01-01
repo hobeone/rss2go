@@ -14,11 +14,11 @@ import (
 )
 
 type FeedInfo struct {
-	Id            int `beedb:"PK"`
-	Name          string
-	Url           string
-	LastPollTime  time.Time
-	LastPollError string
+	Id            int       `beedb:"PK" json:"id"`
+	Name          string    `json:"name"`
+	Url           string    `json:"url"`
+	LastPollTime  time.Time `json:"lastPollTime"`
+	LastPollError string    `json:"lastPollError"`
 }
 
 type FeedItem struct {
@@ -29,10 +29,10 @@ type FeedItem struct {
 }
 
 type User struct {
-	Id      int `beedb:"PK"`
-	Name    string
-	Email   string
-	Enabled bool
+	Id      int    `beedb:"PK"  json:"id"`
+	Name    string `json:"name"`
+	Email   string `json:"email"`
+	Enabled bool   `json:"enabled"`
 }
 
 type UserFeed struct {
@@ -335,11 +335,25 @@ func (self *DbDispatcher) AddUser(name string, email string) (*User, error) {
 	return u, err
 }
 
+func (self *DbDispatcher) SaveUser(u *User) error {
+	self.syncMutex.Lock()
+	defer self.syncMutex.Unlock()
+	return self.Orm.Save(u)
+}
+
 func (self *DbDispatcher) GetUser(name string) (*User, error) {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 	u := &User{}
 	err := self.Orm.Where("name = ?", name).Find(u)
+
+	return u, err
+}
+func (self *DbDispatcher) GetUserById(id int) (*User, error) {
+	self.syncMutex.Lock()
+	defer self.syncMutex.Unlock()
+	u := &User{}
+	err := self.Orm.Where(id).Find(u)
 
 	return u, err
 }
@@ -380,23 +394,14 @@ func (self *DbDispatcher) RemoveUserByEmail(email string) error {
 	return self.unsafeRemoveUser(u)
 }
 
-func (self *DbDispatcher) AddFeedsToUser(u *User, feed_urls []string) error {
+func (self *DbDispatcher) AddFeedsToUser(u *User, feeds []*FeedInfo) error {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 
-	feed_ids := []int{}
-
-	for _, f_url := range feed_urls {
-		fi, err := self.unsafeGetFeedByUrl(f_url)
-		if err != nil {
-			return err
-		}
-		feed_ids = append(feed_ids, fi.Id)
-	}
-	for _, f_id := range feed_ids {
+	for _, f := range feeds {
 		uf := &UserFeed{
 			UserId: u.Id,
-			FeedId: f_id,
+			FeedId: f.Id,
 		}
 		err := self.Orm.Save(uf)
 		if err != nil {
@@ -406,22 +411,13 @@ func (self *DbDispatcher) AddFeedsToUser(u *User, feed_urls []string) error {
 	return nil
 }
 
-func (self *DbDispatcher) RemoveFeedsFromUser(u *User, feed_urls []string) error {
+func (self *DbDispatcher) RemoveFeedsFromUser(u *User, feeds []*FeedInfo) error {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 
-	feed_ids := []int{}
-
-	for _, f_url := range feed_urls {
-		fi, err := self.unsafeGetFeedByUrl(f_url)
-		if err != nil {
-			return err
-		}
-		feed_ids = append(feed_ids, fi.Id)
-	}
-	for _, f_id := range feed_ids {
+	for _, f := range feeds {
 		_, err := self.Orm.SetTable("user_feed").
-			Where("feed_id = ? and user_id = ?", f_id, u.Id).
+			Where("feed_id = ? and user_id = ?", f.Id, u.Id).
 			DeleteRow()
 		if err != nil {
 			return err
@@ -451,6 +447,52 @@ func (self *DbDispatcher) GetUsersFeeds(u *User) ([]FeedInfo, error) {
 		FindAll(&all)
 
 	return all, err
+}
+
+func (self *DbDispatcher) UpdateUsersFeeds(u *User, feed_ids []int) error {
+	feeds, err := self.GetUsersFeeds(u)
+	if err != nil {
+		return err
+	}
+
+	existing_feed_ids := make(map[int]*FeedInfo, len(feeds))
+	new_feed_ids := make(map[int]*FeedInfo, len(feed_ids))
+
+	for i := range feeds {
+		existing_feed_ids[feeds[i].Id] = &feeds[i]
+	}
+	for _, id := range feed_ids {
+		feed, err := self.GetFeedById(id)
+		if err != nil {
+			return fmt.Errorf("No feed with id %d found.", id)
+		}
+		new_feed_ids[id] = feed
+	}
+
+	to_add := []*FeedInfo{}
+	to_delete := []*FeedInfo{}
+
+	for k, v := range existing_feed_ids {
+		if _, ok := new_feed_ids[k]; !ok {
+			to_delete = append(to_delete, v)
+		}
+	}
+	for k, v := range new_feed_ids {
+		if _, ok := existing_feed_ids[k]; !ok {
+			to_add = append(to_add, v)
+		}
+	}
+
+	err = self.AddFeedsToUser(u, to_add)
+	if err != nil {
+		return err
+	}
+	err = self.RemoveFeedsFromUser(u, to_delete)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (self *DbDispatcher) GetFeedUsers(f_url string) ([]User, error) {

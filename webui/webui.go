@@ -11,112 +11,71 @@ import (
 	"github.com/hobeone/rss2go/feed_watcher"
 	"net/http"
 	"strconv"
-	"time"
 )
 
-type UserPageData struct {
-	User  *db.User
-	Feeds []db.FeedInfo
-}
-
-func feedsPage(rend render.Render, feeds map[string]*feed_watcher.FeedWatcher) {
-	rend.JSON(http.StatusOK, feeds)
-}
-
-func userPage(r render.Render, params martini.Params, dbh *db.DbDispatcher) {
-	glog.Infof("Got \"%s\" as email.", params["email"])
-	u, err := dbh.GetUserByEmail(params["email"])
+func handleError(err error) {
 	if err != nil {
-		r.JSON(404, err.Error())
-		return
+		panic(err.Error())
 	}
-
-	feeds, err := dbh.GetUsersFeeds(u)
-	if err != nil {
-		r.JSON(404, err.Error())
-		return
-	}
-
-	r.JSON(200, UserPageData{
-		User:  u,
-		Feeds: feeds,
-	})
 }
 
-func addFeed(rend render.Render, r *http.Request, w http.ResponseWriter, dbh *db.DbDispatcher) {
-	name, url := r.FormValue("name"), r.FormValue("url")
-	_, err := dbh.GetFeedByUrl(url)
-	if err == nil {
-		rend.JSON(http.StatusConflict, errors.New("Feed already exists"))
-		return
+func parseParamIds(str_ids []string) ([]int, error) {
+	if len(str_ids) == 0 {
+		return nil, errors.New("No ids given")
 	}
-	feed, err := dbh.AddFeed(name, url)
-	if err != nil {
-		rend.JSON(http.StatusInternalServerError, fmt.Errorf("Couldn't create feed: %s", err))
-		return
+	int_ids := make([]int, len(str_ids))
+	for i, str_id := range str_ids {
+		int_id, err := strconv.Atoi(str_id)
+		if err != nil {
+			return nil, fmt.Errorf("Error parsing feed id: %s", err)
+		}
+		int_ids[i] = int_id
 	}
-	w.Header().Set("Location", fmt.Sprintf("/feeds/%d", feed.Id))
-	rend.JSON(http.StatusCreated, feed)
+	return int_ids, nil
 }
 
-func getFeed(rend render.Render, dbh *db.DbDispatcher, params martini.Params) {
-	feed_id, err := strconv.Atoi(params["id"])
-	if err != nil {
-		rend.JSON(
-			http.StatusNotFound,
-			fmt.Errorf("Feed with id \"%s\" does not exist\n.", params["id"]),
-		)
-	}
-	feed, err := dbh.GetFeedById(feed_id)
-	if err != nil {
-	}
-	rend.JSON(http.StatusOK, feed)
-}
+func createMartini(dbh *db.DbDispatcher, feeds map[string]*feed_watcher.FeedWatcher) *martini.Martini {
+	m := martini.New()
+	m.Use(martini.Logger())
 
-type SubscribeFeedPageData struct {
-	User    *db.User
-	FeedUrl string
-}
-
-func subscribeFeed(rend render.Render, r *http.Request, dbh *db.DbDispatcher) {
-	user_email, feed_url := r.FormValue("useremail"), r.FormValue("feed_url")
-	user, err := dbh.GetUserByEmail(user_email)
-
-	err = dbh.AddFeedsToUser(user, []string{feed_url})
-	if err != nil {
-		return
-	}
-	rend.JSON(http.StatusOK, SubscribeFeedPageData{user, feed_url})
-}
-
-func formatTime(t time.Time) string {
-	return t.Format(time.RFC1123)
-}
-
-func createMartini(dbh *db.DbDispatcher, feeds map[string]*feed_watcher.FeedWatcher) *martini.ClassicMartini {
-	m := martini.Classic()
-	m.Use(render.Renderer(render.Options{
-		IndentJson: true,
-	}))
+	m.Use(
+		render.Renderer(
+			render.Options{
+				IndentJson: true,
+			},
+		),
+	)
+	m.Use(JSONRecovery())
 
 	m.Map(dbh)
 	m.Map(feeds)
 
+	r := martini.NewRouter()
 	// API
 	// Feed API
-	// All Feeds
-	m.Get("/api/1/feeds", feedsPage)
+	// All Feeds or multiple feeds (ids= parameter)
+	r.Get("/api/1/feeds", getFeeds)
 	// One Feed
-	m.Get("/api/1/feeds/:id", getFeed)
+	r.Get("/api/1/feeds/:id", getFeed)
+	// Update
+	r.Put("/api/1/feeds/:id", updateFeed)
 	// Add Feed
-	m.Post("/api/1/feeds", addFeed)
+	r.Post("/api/1/feeds", addFeed)
+	r.Delete("/api/1/feeds/:id", deleteFeed)
 
 	// User API
-	m.Get("/api/1/user/:email", userPage)
+	r.Get("/api/1/users", getUsers)
+	r.Get("/api/1/users/:id", getUser)
+	r.Put("/api/1/users/:id", updateUser)
+	r.Post("/api/1/users", addUser)
+	r.Delete("/api/1/users/:id", deleteUser)
+
 	// Subscribe a user to a feed
-	m.Post("/api/1/user/subscribe", subscribeFeed)
+	//r.Put("/api/1/users/:user_id/subscribe/:feed_id", subscribeFeed)
 	// Unsubscribe a user from a feed
-	//m.Delete("/user/unsubscribe/:feed_url", unsubscribeFeed)
+	//m.Delete("/api/1/users/:user_id/unsubscribe/:feed_id", unsubscribeFeed)
+
+	m.Action(r.Handle)
 
 	return m
 }

@@ -76,7 +76,15 @@ func (self *AddUserCommand) AddUser(name string, email string, feed_urls []strin
 
 	// Add given feeds to user
 	if len(feed_urls) > 0 {
-		err = self.Dbh.AddFeedsToUser(user, feed_urls)
+		feeds := make([]*db.FeedInfo, len(feed_urls))
+		for i, feed_url := range feed_urls {
+			f, err := self.Dbh.GetFeedByUrl(feed_url)
+			if err != nil {
+				PrintErrorAndExit(fmt.Sprintf("Feed %s doesn't exist in db, add it first.", feed_url))
+			}
+			feeds[i] = f
+		}
+		err = self.Dbh.AddFeedsToUser(user, feeds)
 		if err != nil {
 			PrintErrorAndExit(fmt.Sprintf("Error adding feeds to user: %s", err))
 		}
