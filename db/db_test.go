@@ -1,11 +1,44 @@
 package db
 
 import (
-	"fmt"
-	"runtime/debug"
 	"testing"
 	"time"
+	"github.com/stretchr/testify/assert"
 )
+
+func loadFixtures(t *testing.T, d *DbDispatcher) ([]*FeedInfo, []*User) {
+	users := map[string]string{
+		"test1": "test1@example.com",
+		"test2": "test2@example.com",
+		"test3": "test3@example.com",
+	}
+	feeds := map[string]string{
+		"test_feed1": "http://testfeed1/feed.atom",
+		"test_feed2": "http://testfeed2/feed.atom",
+		"test_feed3": "http://testfeed3/feed.atom",
+	}
+	db_feeds := make([]*FeedInfo, len(feeds))
+	i := 0
+	for name, url := range feeds {
+		feed, err := d.AddFeed(name, url)
+		assert.Nil(t, err, "Error adding feed to db")
+		db_feeds[i] = feed
+		i++
+	}
+
+	db_users := make([]*User, len(users))
+	i = 0
+	for name, email := range users {
+		u, err := d.AddUser(name, email)
+		assert.Nil(t, err, "Error adding user to db")
+		db_users[i] = u
+		i++
+
+		err = d.AddFeedsToUser(u, db_feeds)
+		assert.Nil(t, err, "Error adding feed to user")
+	}
+	return db_feeds, db_users
+}
 
 func TestFeedCreation(t *testing.T) {
 	d := NewMemoryDbDispatcher(false, true)
@@ -27,46 +60,28 @@ func TestFeedCreation(t *testing.T) {
 func TestCheckRecordGuid(t *testing.T) {
 	d := NewMemoryDbDispatcher(false, true)
 	err := d.RecordGuid(1, "123")
-
-	if err != nil {
-		t.Errorf("Error recording guid: %s\n", err.Error())
-	}
+	assert.Nil(t, err)
 }
 
 func TestGetMostRecentGuidsForFeed(t *testing.T) {
 	d := NewMemoryDbDispatcher(false, true)
-	feed_id := 1
-	d.RecordGuid(feed_id, "123")
-	d.RecordGuid(feed_id, "1234")
-	d.RecordGuid(feed_id, "12345")
+	feeds, _ := loadFixtures(t, d)
+
+	d.RecordGuid(feeds[0].Id, "123")
+	d.RecordGuid(feeds[0].Id, "1234")
+	d.RecordGuid(feeds[0].Id, "12345")
 
 	max_guids_to_fetch := 2
-	guids, err := d.GetMostRecentGuidsForFeed(feed_id, max_guids_to_fetch)
+	guids, err := d.GetMostRecentGuidsForFeed(feeds[0].Id, max_guids_to_fetch)
+	assert.Nil(t, err)
+	assert.Equal(t, len(guids), max_guids_to_fetch)
 
-	if err != nil {
-		t.Error(err.Error())
-	}
+	assert.Equal(t, guids[0], "12345")
+	assert.Equal(t, guids[1], "1234")
 
-	if len(guids) != 2 {
-		t.Errorf("Expecting to get 2 guids.  Got %d", len(guids))
-	}
-
-	if guids[0] != "12345" {
-		t.Errorf("Expecting 12345 as first guid got %s", guids[0])
-	}
-
-	if guids[1] != "1234" {
-		t.Errorf("Expecting 1234 as second guid got %s", guids[1])
-	}
-
-	guids, err = d.GetMostRecentGuidsForFeed(feed_id, -1)
-
-	if err != nil {
-		t.Error(err.Error())
-	}
-	if len(guids) != 3 {
-		t.Errorf("Expecting to get 3 guids.  Got %d", len(guids))
-	}
+	guids, err = d.GetMostRecentGuidsForFeed(feeds[0].Id, -1)
+	assert.Nil(t, err)
+	assert.Equal(t, len(guids), 3)
 }
 
 func TestAddFeedValidation(t *testing.T) {
@@ -80,9 +95,7 @@ func TestAddFeedValidation(t *testing.T) {
 
 	for _, ins := range inputs {
 		_, err := d.AddFeed(ins[0], ins[1])
-		if err == nil {
-			t.Errorf("AddFeed should return an error on invalid URL. Inputs: '%s','%s'", ins[0], ins[1])
-		}
+		assert.NotNil(t, err, "AddFeed should return an error on invalid URL. Inputs: '%s','%s'", ins[0], ins[1])
 	}
 }
 
@@ -90,93 +103,67 @@ func TestAddAndDeleteFeed(t *testing.T) {
 	d := NewMemoryDbDispatcher(false, true)
 	feed, err := d.AddFeed("test feed", "http://test/feed.xml")
 
-	if err != nil {
-		t.Error("AddFeed shouldn't return an error")
-	}
+	assert.Nil(t, err, "AddFeed shouldn't return an error")
 
 	_, err = d.AddFeed("test feed", "http://test/feed.xml")
 
-	if err == nil {
-		t.Error("AddFeed should return an error when adding a duplicate feed.")
-	}
+	assert.NotNil(t, err, "AddFeed should return an error when adding a duplicate feed.")
 
 	err = d.RecordGuid(feed.Id, "abcd")
-	if err != nil {
-		t.Fatalf("Couldn't add item to feed: %s", err)
-	}
+	assert.Nil(t, err)
 	user1, err := d.AddUser("name", "email@example.com")
-	if err != nil {
-		t.Fatalf("Error creating test user: %s", err)
-	}
+	assert.Nil(t, err)
 
 	err = d.AddFeedsToUser(user1, []*FeedInfo{feed})
-	if err != nil {
-		t.Fatalf("Error adding feeds to a user: %s", err)
-	}
-
+	assert.Nil(t, err)
 	err = d.RemoveFeed(feed.Url, true)
-	if err != nil {
-		t.Errorf("RemoveFeed shouldn't return an error. Got: %s", err.Error())
-	}
+	assert.Nil(t, err)
 
 	_, err = d.GetFeedByUrl(feed.Url)
-	if err == nil {
-		t.Errorf("Feed with url %s shouldn't exist anymore.", feed.Url)
-	}
+	assert.NotNil(t, err, "Feed with url %s shouldn't exist anymore.", feed.Url)
 
 	i := FeedItem{}
 	err = d.Orm.Where("guid = ?", "abcd").Find(&i)
-	if err == nil {
-		t.Errorf("FeedItem was not deleted with feed.")
-	}
+	assert.NotNil(t, err, "FeedItem was not deleted with feed.")
 
 	fu := UserFeed{}
 	err = d.Orm.Where("feed_id = ?", feed.Id).Find(&fu)
-	if err == nil {
-		t.Errorf("UserFeeds were not deleted with feed.")
-	}
+	assert.NotNil(t, err, "UserFeeds were not deleted with feed.")
 }
 
 func TestGetFeedItemByGuid(t *testing.T) {
 	d := NewMemoryDbDispatcher(false, true)
+	feeds, _ := loadFixtures(t, d)
 
-	feed1, _ := d.AddFeed("test1", "http://foo.bar/")
-	feed2, _ := d.AddFeed("test2", "http://foo.baz/")
+	feed1 := feeds[0]
+	feed2 := feeds[1]
 	d.RecordGuid(feed1.Id, "foobar")
 	d.RecordGuid(feed2.Id, "foobaz")
 	d.RecordGuid(feed2.Id, "foobar")
 	guid, err := d.GetFeedItemByGuid(feed1.Id, "foobar")
-	if err != nil {
-		t.Fatalf("Error getting guid: %s", err.Error())
-	}
-	if guid.FeedInfoId != 1 {
-		t.Fatalf("Error getting guid: %s", err.Error())
-	}
+	assert.Nil(t, err, "Error getting guid")
+
+	assert.Equal(t, guid.FeedInfoId, 1)
 }
 
 func TestGetStaleFeeds(t *testing.T) {
 	d := NewMemoryDbDispatcher(false, true)
+	feeds, _ := loadFixtures(t, d)
+	feed1 := feeds[0]
 
-	feed1, _ := d.AddFeed("test1", "http://foo.bar/")
-	feed2, _ := d.AddFeed("test2", "http://foo.baz/")
 	d.RecordGuid(feed1.Id, "foobar")
-	d.RecordGuid(feed2.Id, "foobaz")
+	d.RecordGuid(feeds[1].Id, "foobaz")
+	d.RecordGuid(feeds[2].Id, "foobaz")
 	guid, err := d.GetFeedItemByGuid(feed1.Id, "foobar")
-	if err != nil {
-		t.Fatalf("Error getting guid: %s", err.Error())
-	}
+	assert.Nil(t, err, "Error getting guid")
 	guid.AddedOn = *new(time.Time)
-	d.Orm.Save(guid)
+	err = d.Orm.Save(guid)
+	assert.Nil(t, err)
 
 	f, err := d.GetStaleFeeds()
-	if err != nil {
-		t.Errorf("Error getting stale feeds: %s", err.Error())
-	}
+	assert.Nil(t, err, "Error getting stale feeds")
 
-	exp := "http://foo.bar/"
-	if f[0].Url != exp {
-		t.Error("Expected stale feed url of %s, instead got %s", exp, f[0].Url)
-	}
+	assert.Equal(t, f[0].Id, feed1.Id)
 }
 
 func TestAddUserValidation(t *testing.T) {
@@ -189,203 +176,68 @@ func TestAddUserValidation(t *testing.T) {
 
 	for _, ins := range inputs {
 		_, err := d.AddUser(ins[0], ins[1])
-		if err == nil {
-			t.Errorf("AddUser should return an error on invalid args. Inputs: '%s','%s'", ins[0], ins[1])
-		}
+		assert.NotNil(t, err, "AddUser should return an error on invalid args. Inputs: '%s','%s'", ins[0], ins[1])
 	}
 }
 
 func TestAddRemoveUser(t *testing.T) {
 	d := NewMemoryDbDispatcher(false, true)
-	feed1, err := d.AddFeed("test1", "http://foo.bar/")
-	if err != nil {
-		t.Fatalf("Error creating test feed: %s", err)
-	}
+	feeds, users := loadFixtures(t, d)
 
-	_, err = d.AddUser("user1", "user1@example.com")
-	if err != nil {
-		t.Fatalf("Error creating test user: %s", err)
-	}
-	_, err = d.AddUser("user1", "diff_email@example.com")
-	if err == nil {
-		t.Fatalf("Should have error on duplicate user name")
-	}
-	_, err = d.AddUser("diff_name", "user1@example.com")
-	if err == nil {
-		t.Fatalf("Should have error on duplicate user email")
-	}
+	_, err := d.AddUser(users[0].Name, "diff_email@example.com")
+	assert.NotNil(t, err, "Should have error on duplicate user name")
 
-	db_user, err := d.GetUser("user1")
-	if err != nil {
-		t.Fatalf("Error getting user from db: %s", err)
-	}
+	_, err = d.AddUser("diff_name", users[0].Email)
+	assert.NotNil(t, err, "Should have error on duplicate user email")
 
-	err = d.AddFeedsToUser(db_user, []*FeedInfo{feed1})
-	if err != nil {
-		t.Fatalf("Error adding feeds to a user: %s", err)
-	}
+	db_user, err := d.GetUser(users[0].Name)
+	assert.Nil(t, err)
+
+	err = d.AddFeedsToUser(db_user, []*FeedInfo{feeds[0]})
+	assert.Nil(t, err)
 
 	err = d.RemoveUser(db_user)
-	if err != nil {
-		t.Fatalf("Error removing user from db: %s", err)
-	}
+	assert.Nil(t, err)
 
 	// Check that feed was removed b/c it has no users
 	var u []UserFeed
 	d.Orm.FindAll(&u)
-	if len(u) != 0 {
-		t.Fatalf("Expecting 0 UserFeeds remaining after deleting user, got %d",
-			len(u))
-	}
+	assert.NotEqual(t, len(u), 0, "Expecting 0 UserFeeds remaining after deleting user, got %d", len(u))
 }
 
 func TestRemoveFeedsFromUser(t *testing.T) {
 	d := NewMemoryDbDispatcher(false, true)
-	feed1, err := d.AddFeed("test1", "http://foo.bar/")
-	if err != nil {
-		t.Fatalf("Error creating test feed: %s", err)
-	}
+	feeds, users := loadFixtures(t, d)
 
-	user1, err := d.AddUser("name", "email@example.com")
-	if err != nil {
-		t.Fatalf("Error creating test user: %s", err)
-	}
+	err := d.AddFeedsToUser(users[0], []*FeedInfo{feeds[0]})
+	assert.Nil(t, err, "Error adding feeds to a user")
 
-	err = d.AddFeedsToUser(user1, []*FeedInfo{feed1})
-	if err != nil {
-		t.Fatalf("Error adding feeds to a user: %s", err)
-	}
-
-	err = d.RemoveFeedsFromUser(user1, []*FeedInfo{feed1})
-	if err != nil {
-		t.Fatalf("Error removing feeds from a user: %s", err)
-	}
+	err = d.RemoveFeedsFromUser(users[0], []*FeedInfo{feeds[0]})
+	assert.Nil(t, err, "Error removing feeds to a user")
 }
 
 func TestGetFeedsWithUsers(t *testing.T) {
 	d := NewMemoryDbDispatcher(false, true)
+	feeds, users := loadFixtures(t, d)
 
-	feed1, err := d.AddFeed("test1", "http://foo.bar/")
-	if err != nil {
-		t.Fatalf("Error creating test feed: %s", err)
-	}
+	user_feeds, err := d.GetUsersFeeds(users[0])
+	assert.Nil(t, err, "Error getting a user's feeds")
 
-	feed2, err := d.AddFeed("test2", "http://foo.baz/")
-	if err != nil {
-		t.Fatalf("Error creating test feed: %s", err)
-	}
+	assert.Equal(t, len(user_feeds), 3,
+		"Expected 1 feed for user got %d.", len(user_feeds))
 
-	user1, err := d.AddUser("name", "email@example.com")
-	if err != nil {
-		t.Fatalf("Error creating test user: %s", err)
-	}
-
-	user2, err := d.AddUser("name2", "email2@example.com")
-	if err != nil {
-		t.Fatalf("Error creating test user: %s", err)
-	}
-
-	err = d.AddFeedsToUser(user1, []*FeedInfo{feed1})
-	if err != nil {
-		t.Fatalf("Error adding feeds to a user: %s", err)
-	}
-	err = d.AddFeedsToUser(user2, []*FeedInfo{feed2})
-	if err != nil {
-		t.Fatalf("Error adding feeds to a user: %s", err)
-	}
-
-	user_feeds, err := d.GetUsersFeeds(user1)
-	if err != nil {
-		t.Fatalf("Error getting a user's feeds: %s", err)
-	}
-
-	if len(user_feeds) != 1 {
-		t.Errorf("Expected 1 feed for user got %d.", len(user_feeds))
-	}
-	if user_feeds[0].Url != feed1.Url {
-		t.Error("Expected feed to have url %s but got %s", feed1.Url,
-			user_feeds[0].Url)
-	}
+	assert.Equal(t, user_feeds[0].Url, feeds[0].Url)
 }
 
 func TestGetFeedUsers(t *testing.T) {
 	d := NewMemoryDbDispatcher(false, true)
+	feeds, users := loadFixtures(t, d)
 
-	feed1, err := d.AddFeed("test1", "http://foo.bar/")
-	if err != nil {
-		t.Fatalf("Error creating test feed: %s", err)
-	}
+	feed_users, err := d.GetFeedUsers(feeds[0].Url)
+	assert.Nil(t, err)
 
-	user1, err := d.AddUser("name", "email@example.com")
-	if err != nil {
-		t.Fatalf("Error creating test user: %s", err)
-	}
-
-	err = d.AddFeedsToUser(user1, []*FeedInfo{feed1})
-	if err != nil {
-		t.Fatalf("Error adding feeds to a user: %s", err)
-	}
-	feed_users, err := d.GetFeedUsers(feed1.Url)
-	if err != nil {
-		t.Fatalf("Error getting a feed's users: %s", err)
-	}
-
-	if len(feed_users) != 1 {
-		t.Fatalf("Expected 1 user for feed got %d.", len(feed_users))
-	}
-	if feed_users[0].Email != user1.Email {
-		t.Error("Expected user to have email %s but got %s", user1.Email,
-			feed_users[0].Email)
-	}
-}
-
-const USER_FIXTURES = ``
-
-func loadFixtures(t *testing.T, d *DbDispatcher) ([]*FeedInfo, []*User) {
-	users := map[string]string{
-		"test1": "test1@example.com",
-		"test2": "test2@example.com",
-		"test3": "test3@example.com",
-	}
-	feeds := map[string]string{
-		"test_feed1": "http://testfeed1/feed.atom",
-		"test_feed2": "http://testfeed2/feed.atom",
-		"test_feed3": "http://testfeed3/feed.atom",
-	}
-	db_feeds := make([]*FeedInfo, len(feeds))
-	i := 0
-	for name, url := range feeds {
-		feed, err := d.AddFeed(name, url)
-		if err != nil {
-			t.Fatalf("Error adding feed to db: %s", err.Error())
-		}
-		db_feeds[i] = feed
-		i++
-	}
-
-	db_users := make([]*User, len(users))
-	i = 0
-	for name, email := range users {
-		u, err := d.AddUser(name, email)
-		if err != nil {
-			t.Fatalf("Error adding user to db: %s", err.Error())
-		}
-		db_users[i] = u
-		i++
-
-		err = d.AddFeedsToUser(u, db_feeds)
-		if err != nil {
-			t.Fatalf("Error adding feed to user: %s", err.Error())
-		}
-	}
-	return db_feeds, db_users
-}
-
-func failOnError(t *testing.T, err error) {
-	if err != nil {
-		fmt.Println(string(debug.Stack()))
-		t.Fatalf("Error: %s", err.Error())
-	}
+	assert.Equal(t, len(feed_users), 3)
+	assert.Equal(t, feed_users[0].Email, users[0].Email)
 }
 
 func TestUpdateUsersFeeds(t *testing.T) {
@@ -395,10 +247,8 @@ func TestUpdateUsersFeeds(t *testing.T) {
 	d.UpdateUsersFeeds(users[0], []int{})
 
 	new_feeds, err := d.GetUsersFeeds(users[0])
-	failOnError(t, err)
-	if len(new_feeds) != 0 {
-		t.Fatalf("Expected 0 feeds for user, got %d", len(new_feeds))
-	}
+	assert.Nil(t, err)
+	assert.Equal(t, len(new_feeds), 0)
 
 	feed_ids := make([]int, len(feeds))
 	for i := range feeds {
@@ -407,8 +257,6 @@ func TestUpdateUsersFeeds(t *testing.T) {
 	d.UpdateUsersFeeds(users[0], feed_ids)
 
 	new_feeds, err = d.GetUsersFeeds(users[0])
-	failOnError(t, err)
-	if len(new_feeds) != 3 {
-		t.Fatalf("Expected 3 feeds for user, got %d", len(new_feeds))
-	}
+	assert.Nil(t, err)
+	assert.Equal(t, len(new_feeds), 3)
 }

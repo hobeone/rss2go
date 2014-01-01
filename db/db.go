@@ -215,17 +215,18 @@ func (self *DbDispatcher) GetStaleFeeds() (feeds []FeedInfo, err error) {
 	defer self.syncMutex.Unlock()
 
 	rows, err := self.dbh.Query(`
-	select feed_info.name, feed_info.url, feed_info.last_poll_time, feed_info.last_poll_error, r.MaxTime FROM (SELECT feed_info_id, MAX(added_on) as MaxTime FROM feed_item GROUP BY feed_info_id) r, feed_info INNER JOIN feed_item f ON f.feed_info_id = r.feed_info_id AND f.added_on = r.MaxTime AND r.MaxTime < datetime('now','-14 days') AND f.feed_info_id = feed_info.id group by f.feed_info_id;
+	select feed_info.id, feed_info.name, feed_info.url, feed_info.last_poll_time, feed_info.last_poll_error, r.MaxTime FROM (SELECT feed_info_id, MAX(added_on) as MaxTime FROM feed_item GROUP BY feed_info_id) r, feed_info INNER JOIN feed_item f ON f.feed_info_id = r.feed_info_id AND f.added_on = r.MaxTime AND r.MaxTime < datetime('now','-14 days') AND f.feed_info_id = feed_info.id group by f.feed_info_id;
 	`)
 	if err != nil {
 		return
 	}
 	defer rows.Close()
 	for rows.Next() {
+		var id int
 		var name, url, last_poll_error, last_poll_time, max_time string
-		err = rows.Scan(&name, &url, &last_poll_time, &last_poll_error, &max_time)
+		err = rows.Scan(&id, &name, &url, &last_poll_time, &last_poll_error, &max_time)
 		if err != nil {
-			return
+			return feeds, err
 		}
 		ftime, err := time.Parse("2006-01-02 15:04:05", max_time)
 		if err != nil {
@@ -234,6 +235,7 @@ func (self *DbDispatcher) GetStaleFeeds() (feeds []FeedInfo, err error) {
 		// Sorta hacky: set LastPollTime to time of last item seen, rather than
 		// last time feed was polled.
 		feeds = append(feeds, FeedInfo{
+			Id:            id,
 			Name:          name,
 			Url:           url,
 			LastPollTime:  ftime,
