@@ -1,5 +1,11 @@
 Follow next poll data from feeds
 
+https://github.com/3d0c/skeleton
+
+go-spew for pprinting
+
+
+
 Signal HUP reload
 - if no longer exists in db:
 - stop polling

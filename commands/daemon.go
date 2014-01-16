@@ -77,7 +77,7 @@ func (d *Daemon) feedDbUpdateLoop() {
 func (d *Daemon) feedDbUpdate() {
 	db_feeds, err := d.Dbh.GetAllFeeds()
 	if err != nil {
-		glog.Errorf("Error getting feeds from db: %s\n", err.Error)
+		glog.Errorf("Error getting feeds from db: %s\n", err.Error())
 		return
 	}
 	all_feeds := make(map[string]db.FeedInfo)

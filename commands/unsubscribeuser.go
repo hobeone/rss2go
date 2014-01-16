@@ -68,16 +68,14 @@ func (self *UnsubscribeUserCommand) UnsubscribeUser(user_email string, feed_urls
 	for _, feed_url := range feed_urls {
 		f, err := self.Dbh.GetFeedByUrl(feed_url)
 		if err != nil {
-			fmt.Printf("Feed %s doesn't exist in db, skipping.", feed_url)
+			fmt.Printf("Feed %s doesn't exist in db, skipping.\n", feed_url)
 		}
 		feeds = append(feeds, f)
 	}
-	err = self.Dbh.RemoveFeedsFromUser(u, feeds)
-	if err != nil {
-		PrintErrorAndExit(fmt.Sprintf("Error removing feeds from user: %s", err))
-	}
-
-	if err != nil {
-		PrintErrorAndExit(err.Error())
+	if len(feeds)> 0 {
+		err = self.Dbh.RemoveFeedsFromUser(u, feeds)
+		if err != nil {
+			PrintErrorAndExit(fmt.Sprintf("Error removing feeds from user: %s", err))
+		}
 	}
 }

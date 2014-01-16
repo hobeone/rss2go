@@ -192,7 +192,7 @@ func CreateMailFromItem(from string, to string, item *feed.Story) *gophermail.Me
 	msg := &gophermail.Message{
 		From:     from,
 		To:       []string{to},
-		Subject:  fmt.Sprintf("%s: %s", item.Feed.Title, item.Title),
+		Subject:  item.Title,
 		Body:     content, //TODO Convert to plain text
 		HTMLBody: content,
 		Headers:  mail.Header{},

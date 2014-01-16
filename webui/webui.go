@@ -41,7 +41,7 @@ func createMartini(dbh *db.DbDispatcher, feeds map[string]*feed_watcher.FeedWatc
 	m.Use(
 		render.Renderer(
 			render.Options{
-				IndentJson: true,
+				IndentJSON: true,
 			},
 		),
 	)

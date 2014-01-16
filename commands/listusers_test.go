@@ -13,7 +13,7 @@ func TestListUsers(t *testing.T) {
 	lu := NewListUsersCommand(cfg)
 	_, err := lu.Dbh.AddUser("test", "test@test.com")
 	if err != nil {
-		t.Fatalf("Error adding user to db", err)
+		t.Fatalf("Error adding user to db: %s", err)
 	}
 	overrideExit()
 

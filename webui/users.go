@@ -87,7 +87,7 @@ type unmarshalUserJSON struct {
 	Name    string `json:"name"`
 	Email   string `json:"email"`
 	Enabled *bool  `json:"enabled"`
-	Feeds   []int  `json:"feeds`
+	Feeds   []int  `json:"feeds"`
 }
 type unmarshalUserJSONContainer struct {
 	User unmarshalUserJSON `json:"user"`

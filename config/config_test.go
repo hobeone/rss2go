@@ -10,7 +10,7 @@ func TestReadConfigFailsOnNonExistingPath(t *testing.T) {
 	path := "/does/not/exist"
 	err := c.ReadConfig(path)
 	if _, ok := err.(*os.PathError); !ok {
-		t.Error("Expected PathError on non existing path: %s", path)
+		t.Error("Expected PathError on non existing path: ", path)
 	}
 }
 

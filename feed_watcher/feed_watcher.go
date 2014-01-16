@@ -210,6 +210,7 @@ func (self *FeedWatcher) updateFeed() *FeedCrawlResponse {
 	glog.Infof("Feed %s has new %d items", feed.Title, len(resp.Items))
 
 	for _, item := range resp.Items {
+		item.Title = fmt.Sprintf("%s: %s", self.FeedInfo.Name, item.Title)
 		glog.Infof("New Story: %s, sending for mail.", item.Title)
 		err := self.sendMail(item)
 		if err != nil {
