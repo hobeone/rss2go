@@ -1,9 +1,10 @@
 package webui
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/codegangsta/martini"
+	"github.com/codegangsta/martini-contrib/binding"
+	//"github.com/davecgh/go-spew/spew"
 	"github.com/golang/glog"
 	"github.com/hobeone/martini-contrib/render"
 	"github.com/hobeone/rss2go/db"
@@ -25,23 +26,34 @@ type FeedJSON struct {
 
 func getFeeds(rend render.Render, r *http.Request, params martini.Params, dbh *db.DbDispatcher) {
 	if err := r.ParseForm(); err != nil {
-		rend.JSON(500, fmt.Errorf("Couldn't parse request: %s", err.Error()))
+		rend.JSON(500, fmt.Sprintf("Couldn't parse request: %s", err.Error()))
 		return
 	}
 	var feed_json []FeedJSONItem
 	if len(r.Form["ids[]"]) > 0 {
 		feed_ids, err := parseParamIds(r.Form["ids[]"])
-		handleError(err)
+		if err != nil {
+			rend.JSON(500, fmt.Errorf("Couldn't parse request: %s", err.Error()))
+			return
+		}
 		feed_json = make([]FeedJSONItem, len(feed_ids))
 		for i, feed_id := range feed_ids {
 			feed, err := dbh.GetFeedById(feed_id)
-			handleError(err)
+			if err != nil {
+				rend.JSON(404, err.Error())
+				return
+			}
+
 			feed_json[i] = FeedJSONItem{*feed}
 		}
 		glog.Infof("Got %d feeds", len(feed_json))
 	} else {
 		feeds, err := dbh.GetAllFeeds()
-		handleError(err)
+		if err != nil {
+			rend.JSON(500, err.Error())
+			return
+		}
+
 		feed_json = make([]FeedJSONItem, len(feeds))
 		for i, feed := range feeds {
 			feed_json[i] = FeedJSONItem{feed}
@@ -53,26 +65,28 @@ func getFeeds(rend render.Render, r *http.Request, params martini.Params, dbh *d
 
 func getFeed(rend render.Render, dbh *db.DbDispatcher, params martini.Params) {
 	feed_id, err := strconv.Atoi(params["id"])
-	handleError(err)
-	feed, err := dbh.GetFeedById(feed_id)
-	handleError(err)
-	rend.JSON(http.StatusOK, FeedJSON{Feed: feed})
-}
-
-func addFeed(rend render.Render, req *http.Request, w http.ResponseWriter, dbh *db.DbDispatcher) {
-
-	err := req.ParseForm()
-	handleError(err)
-
-	f := &FeedJSON{}
-	err = json.NewDecoder(req.Body).Decode(f)
-	handleError(err)
-	if f.Feed == nil {
-		rend.JSON(http.StatusBadRequest, "Malformed request, no Feed found.")
+	if err != nil {
+		rend.JSON(500, err.Error())
 		return
 	}
 
-	_, err = dbh.GetFeedByUrl(f.Feed.Url)
+	feed, err := dbh.GetFeedById(feed_id)
+	if err != nil {
+		rend.JSON(404, err.Error())
+		return
+	}
+
+	rend.JSON(http.StatusOK, FeedJSON{Feed: feed})
+}
+
+func (f FeedJSON) Validate(errors *binding.Errors, req *http.Request) {
+	if f.Feed == nil {
+		errors.Fields["Feed"] = "Feed must exist."
+	}
+}
+
+func addFeed(rend render.Render, req *http.Request, w http.ResponseWriter, dbh *db.DbDispatcher, f FeedJSON, ctx martini.Context) {
+	_, err := dbh.GetFeedByUrl(f.Feed.Url)
 	if err == nil {
 		rend.JSON(
 			http.StatusConflict,
@@ -82,24 +96,54 @@ func addFeed(rend render.Render, req *http.Request, w http.ResponseWriter, dbh *
 	}
 
 	feed, err := dbh.AddFeed(f.Feed.Name, f.Feed.Url)
-	handleError(err)
+	if err != nil {
+		rend.JSON(500, err.Error())
+		return
+	}
+
 	w.Header().Set("Location", fmt.Sprintf("/feeds/%d", feed.Id))
-	rend.JSON(http.StatusCreated, feed)
+	rend.JSON(http.StatusCreated, FeedJSON{Feed: feed})
 }
 
-func deleteFeed(params martini.Params, dbh *db.DbDispatcher) int {
+func deleteFeed(rend render.Render, params martini.Params, dbh *db.DbDispatcher) {
 	feed_id, err := strconv.Atoi(params["id"])
-	handleError(err)
+	if err != nil {
+		rend.JSON(500, err.Error())
+		return
+	}
 
 	feed, err := dbh.GetFeedById(feed_id)
-	handleError(err)
+	if err != nil {
+		rend.JSON(500, err.Error())
+		return
+	}
 
-	dbh.RemoveFeed(feed.Url, true)
+	err = dbh.RemoveFeed(feed.Url, true)
+	if err != nil {
+		rend.JSON(500, err.Error())
+		return
+	}
 
-	return http.StatusNoContent
+	rend.JSON(http.StatusNoContent, "")
 }
 
-// TODO: complete this.
-func updateFeed() int {
-	return http.StatusOK
+func updateFeed(rend render.Render, req *http.Request, dbh *db.DbDispatcher, params martini.Params, f FeedJSON) {
+	feed_id, err := strconv.Atoi(params["id"])
+	if err != nil {
+		rend.JSON(500, err.Error())
+		return
+	}
+
+	dbfeed, err := dbh.GetFeedById(feed_id)
+	if err != nil {
+		rend.JSON(404, err.Error())
+		return
+	}
+
+	dbfeed.Name = f.Feed.Name
+	dbfeed.Url = f.Feed.Url
+	dbfeed.LastPollTime = f.Feed.LastPollTime
+
+	dbh.SaveFeed(dbfeed)
+	rend.JSON(http.StatusOK, FeedJSON{Feed: dbfeed})
 }

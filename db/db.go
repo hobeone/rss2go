@@ -15,8 +15,8 @@ import (
 
 type FeedInfo struct {
 	Id            int       `beedb:"PK" json:"id"`
-	Name          string    `json:"name"`
-	Url           string    `json:"url"`
+	Name          string    `json:"name" binding:"required"`
+	Url           string    `json:"url" binding:"required"`
 	LastPollTime  time.Time `json:"lastPollTime"`
 	LastPollError string    `json:"lastPollError"`
 }
@@ -341,6 +341,12 @@ func (self *DbDispatcher) SaveUser(u *User) error {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 	return self.Orm.Save(u)
+}
+
+func (self *DbDispatcher) SaveFeed(f *FeedInfo) error {
+	self.syncMutex.Lock()
+	defer self.syncMutex.Unlock()
+	return self.Orm.Save(f)
 }
 
 func (self *DbDispatcher) GetUser(name string) (*User, error) {

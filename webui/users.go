@@ -23,21 +23,30 @@ type UsersJSON struct {
 	Users []userWithFeeds `json:"users"`
 }
 
-func getUser(r render.Render, params martini.Params, dbh *db.DbDispatcher) {
+func getUser(rend render.Render, params martini.Params, dbh *db.DbDispatcher) {
 	user_id, err := strconv.Atoi(params["id"])
-	handleError(err)
+	if err != nil {
+		rend.JSON(500, err.Error())
+		return
+	}
 
 	u, err := dbh.GetUserById(user_id)
-	handleError(err)
+	if err != nil {
+		rend.JSON(404, err.Error())
+		return
+	}
 
 	feeds, err := dbh.GetUsersFeeds(u)
-	handleError(err)
+	if err != nil {
+		rend.JSON(500, err.Error())
+		return
+	}
 
 	feed_ids := make([]int, len(feeds))
 	for i, f := range feeds {
 		feed_ids[i] = f.Id
 	}
-	r.JSON(http.StatusOK, UserJSON{
+	rend.JSON(http.StatusOK, UserJSON{
 		User: userWithFeeds{
 			*u,
 			feed_ids,
@@ -45,30 +54,48 @@ func getUser(r render.Render, params martini.Params, dbh *db.DbDispatcher) {
 	})
 }
 
-func getUsers(r render.Render, req *http.Request, dbh *db.DbDispatcher) {
+func getUsers(rend render.Render, req *http.Request, dbh *db.DbDispatcher) {
 	err := req.ParseForm()
-	handleError(err)
+	if err != nil {
+		rend.JSON(500, err.Error())
+		return
+	}
 
 	var users []db.User
 	param_ids := req.Form["ids[]"]
 	if len(param_ids) > 0 {
 		user_ids, err := parseParamIds(param_ids)
-		handleError(err)
+		if err != nil {
+			rend.JSON(500, err.Error())
+			return
+		}
+
 		users = make([]db.User, len(user_ids))
 		for i, uid := range user_ids {
 			u, err := dbh.GetUserById(uid)
-			handleError(err)
+			if err != nil {
+				rend.JSON(404, err.Error())
+				return
+			}
+
 			users[i] = *u
 		}
 	} else {
 		users, err = dbh.GetAllUsers()
-		handleError(err)
+		if err != nil {
+			rend.JSON(500, err.Error())
+			return
+		}
+
 	}
 
 	users_json := make([]userWithFeeds, len(users))
 	for i, u := range users {
 		feeds, err := dbh.GetUsersFeeds(&u)
-		handleError(err)
+		if err != nil {
+			rend.JSON(500, err.Error())
+			return
+		}
 
 		feed_ids := make([]int, len(feeds))
 		for i, f := range feeds {
@@ -78,7 +105,7 @@ func getUsers(r render.Render, req *http.Request, dbh *db.DbDispatcher) {
 		users_json[i] = userWithFeeds{u, feed_ids}
 	}
 
-	r.JSON(http.StatusOK, UsersJSON{Users: users_json})
+	rend.JSON(http.StatusOK, UsersJSON{Users: users_json})
 	return
 }
 
@@ -93,20 +120,33 @@ type unmarshalUserJSONContainer struct {
 	User unmarshalUserJSON `json:"user"`
 }
 
-func updateUser(req *http.Request, dbh *db.DbDispatcher, params martini.Params) {
+func updateUser(rend render.Render, req *http.Request, dbh *db.DbDispatcher, params martini.Params) {
 	user_id, err := strconv.Atoi(params["id"])
-	handleError(err)
+	if err != nil {
+		rend.JSON(500, err.Error())
+		return
+	}
 
 	err = req.ParseForm()
-	handleError(err)
+	if err != nil {
+		rend.JSON(500, err.Error())
+		return
+	}
 
 	u := unmarshalUserJSONContainer{}
 	u.User.Enabled = nil
 	err = json.NewDecoder(req.Body).Decode(&u)
-	handleError(err)
+	if err != nil {
+		rend.JSON(500, err.Error())
+		return
+	}
 
 	dbuser, err := dbh.GetUserById(user_id)
-	handleError(err)
+	if err != nil {
+		rend.JSON(404, err.Error())
+		return
+	}
+
 	if u.User.Email != "" {
 		dbuser.Email = u.User.Email
 	}
@@ -122,14 +162,24 @@ func updateUser(req *http.Request, dbh *db.DbDispatcher, params martini.Params) 
 
 func addUser(req *http.Request, w http.ResponseWriter, dbh *db.DbDispatcher, rend render.Render) {
 	err := req.ParseForm()
-	handleError(err)
+	if err != nil {
+		rend.JSON(500, err.Error())
+		return
+	}
+
 	u := unmarshalUserJSONContainer{}
 
 	err = json.NewDecoder(req.Body).Decode(&u)
-	handleError(err)
+	if err != nil {
+		rend.JSON(500, err.Error())
+		return
+	}
 
 	db_user, err := dbh.AddUser(u.User.Name, u.User.Email)
-	handleError(err)
+	if err != nil {
+		rend.JSON(500, err.Error())
+		return
+	}
 
 	w.Header().Set("Location", fmt.Sprintf("/users/%d", db_user.Id))
 	rend.JSON(http.StatusCreated, UserJSON{
@@ -140,14 +190,20 @@ func addUser(req *http.Request, w http.ResponseWriter, dbh *db.DbDispatcher, ren
 	})
 }
 
-func deleteUser(params martini.Params, dbh *db.DbDispatcher) int {
+func deleteUser(rend render.Render, params martini.Params, dbh *db.DbDispatcher) {
 	user_id, err := strconv.Atoi(params["id"])
-	handleError(err)
+	if err != nil {
+		rend.JSON(500, err.Error())
+		return
+	}
 
 	user, err := dbh.GetUserById(user_id)
-	handleError(err)
+	if err != nil {
+		rend.JSON(500, err.Error())
+		return
+	}
 
 	dbh.RemoveUser(user)
 
-	return http.StatusNoContent
+	rend.JSON(http.StatusNoContent, "")
 }

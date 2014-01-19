@@ -50,9 +50,9 @@ func TestGetUser(t *testing.T) {
 	response = httptest.NewRecorder()
 	m.ServeHTTP(response, req)
 
-	if response.Code != 500 {
+	if response.Code != 404 {
 		fmt.Println(response.Body.String())
-		t.Fatalf("Expected 500 response code, got %d", response.Code)
+		t.Fatalf("Expected 404 response code, got %d", response.Code)
 	}
 }
 
@@ -236,9 +236,9 @@ func TestDeleteUser(t *testing.T) {
 		fmt.Sprintf("/api/1/users/%d", users[0].Id), nil)
 	response := httptest.NewRecorder()
 	m.ServeHTTP(response, req)
-	if response.Code != 200 {
+	if response.Code != 204 {
 		fmt.Println(response.Body.String())
-		t.Fatalf("Expected 200 response code, got %d", response.Code)
+		t.Fatalf("Expected 204 response code, got %d", response.Code)
 	}
 	_, err = dbh.GetUserById(users[0].Id)
 	if err == nil {

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/codegangsta/martini"
+	"github.com/codegangsta/martini-contrib/binding"
 	"github.com/golang/glog"
 	"github.com/hobeone/martini-contrib/render"
 	"github.com/hobeone/rss2go/config"
@@ -12,12 +13,6 @@ import (
 	"net/http"
 	"strconv"
 )
-
-func handleError(err error) {
-	if err != nil {
-		panic(err.Error())
-	}
-}
 
 func parseParamIds(str_ids []string) ([]int, error) {
 	if len(str_ids) == 0 {
@@ -45,7 +40,16 @@ func createMartini(dbh *db.DbDispatcher, feeds map[string]*feed_watcher.FeedWatc
 			},
 		),
 	)
-	m.Use(JSONRecovery())
+
+	m.Use(func(w http.ResponseWriter, req *http.Request) {
+		if origin := req.Header.Get("Origin"); origin != "" {
+			w.Header().Add("Access-Control-Allow-Origin", origin)
+		}
+
+		w.Header().Add("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+		w.Header().Add("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token")
+		w.Header().Add("Access-Control-Allow-Credentials", "true")
+	})
 
 	m.Map(dbh)
 	m.Map(feeds)
@@ -58,14 +62,18 @@ func createMartini(dbh *db.DbDispatcher, feeds map[string]*feed_watcher.FeedWatc
 	// One Feed
 	r.Get("/api/1/feeds/:id", getFeed)
 	// Update
-	r.Put("/api/1/feeds/:id", updateFeed)
+	r.Put("/api/1/feeds/:id", binding.Bind(FeedJSON{}), updateFeed)
+  // Ember sends an OPTIONS request before sending a potentially destructive
+	// call to see if it will be allowed.
+	r.Options("/api/1/feeds/:id", send200)
 	// Add Feed
-	r.Post("/api/1/feeds", addFeed)
+	r.Post("/api/1/feeds", binding.Bind(FeedJSON{}), addFeed)
 	r.Delete("/api/1/feeds/:id", deleteFeed)
 
 	// User API
 	r.Get("/api/1/users", getUsers)
 	r.Get("/api/1/users/:id", getUser)
+	r.Options("/api/1/users/:id", send200)
 	r.Put("/api/1/users/:id", updateUser)
 	r.Post("/api/1/users", addUser)
 	r.Delete("/api/1/users/:id", deleteUser)
@@ -78,6 +86,10 @@ func createMartini(dbh *db.DbDispatcher, feeds map[string]*feed_watcher.FeedWatc
 	m.Action(r.Handle)
 
 	return m
+}
+
+func send200() int {
+	return http.StatusOK
 }
 
 func RunWebUi(config *config.Config, dbh *db.DbDispatcher, feeds map[string]*feed_watcher.FeedWatcher) {

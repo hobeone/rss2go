@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	//	"github.com/davecgh/go-spew/spew"
 	"github.com/hobeone/rss2go/db"
 	"github.com/stretchr/testify/assert"
 	"net/http"
@@ -95,11 +96,13 @@ func TestGetSomeFeeds(t *testing.T) {
 }
 
 const addFeedGoldenResponse = `{
-  "id": 1,
-  "name": "test",
-  "url": "http://test/url/feed.atom",
-  "lastPollTime": "0001-01-01T00:00:00Z",
-  "lastPollError": ""
+  "feed": {
+    "id": 1,
+    "name": "test",
+    "url": "http://test/url/feed.atom",
+    "lastPollTime": "0001-01-01T00:00:00Z",
+    "lastPollError": ""
+  }
 }`
 
 func TestAddFeed(t *testing.T) {
@@ -155,7 +158,17 @@ func TestAddFeedWithMalformedData(t *testing.T) {
 		fmt.Println(response.Body.String())
 		t.Fatalf("Expected 201 response code, got %d", response.Code)
 	}
-	if response.Body.String() != `"Malformed request, no Feed found."` {
+
+	var a interface{}
+	err = json.Unmarshal(response.Body.Bytes(), &a)
+	json_map := a.(map[string]interface{})
+
+	err_string, ok := json_map["fields"].(map[string]interface{})["Feed"].(string)
+	if !ok {
+		t.Fatalf("Expected to find Feed error field, found nothing")
+	}
+
+	if err_string != "Feed must exist." {
 		fmt.Println(response.Body.String())
 		t.Fatalf("Response didn't match expected response.")
 	}
@@ -207,9 +220,9 @@ func TestDeleteFeed(t *testing.T) {
 		fmt.Sprintf("/api/1/feeds/%d", feeds[0].Id), nil)
 	response := httptest.NewRecorder()
 	m.ServeHTTP(response, req)
-	if response.Code != 200 {
+	if response.Code != http.StatusNoContent {
 		fmt.Println(response.Body.String())
-		t.Fatalf("Expected 200 response code, got %d", response.Code)
+		t.Fatalf("Expected 204 response code, got %d", response.Code)
 	}
 	_, err = dbh.GetFeedById(feeds[0].Id)
 	if err == nil {
