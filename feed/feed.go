@@ -16,6 +16,7 @@ import (
 	"github.com/hobeone/rss2go/atom"
 	"github.com/hobeone/rss2go/rdf"
 	"github.com/hobeone/rss2go/rss"
+	"github.com/mjibson/goread/sanitizer"
 	"html"
 	"net/url"
 	"strings"
@@ -30,6 +31,7 @@ type Feed struct {
 	Link       string
 	Checked    time.Time
 	Image      string
+	Hub        string
 }
 
 // parent: Feed, key: story ID
@@ -75,9 +77,15 @@ func parseAtom(u string, b []byte) (*Feed, []*Story, error) {
 		fb, _ = url.Parse("")
 	}
 	if len(a.Link) > 0 {
-		f.Link = findBestAtomLink(a.Link).Href
+		f.Link = findBestAtomLink(a.Link)
 		if l, err := fb.Parse(f.Link); err == nil {
 			f.Link = l.String()
+		}
+		for _, l := range a.Link {
+			if l.Rel == "hub" {
+				f.Hub = l.Href
+				break
+			}
 		}
 	}
 
@@ -97,7 +105,7 @@ func parseAtom(u string, b []byte) (*Feed, []*Story, error) {
 			st.Published = t
 		}
 		if len(i.Link) > 0 {
-			st.Link = findBestAtomLink(i.Link).Href
+			st.Link = findBestAtomLink(i.Link)
 			if l, err := eb.Parse(st.Link); err == nil {
 				st.Link = l.String()
 			}
@@ -253,26 +261,30 @@ func ParseFeed(u string, b []byte) (*Feed, []*Story, error) {
 	return nil, nil, err
 }
 
-func findBestAtomLink(links []atom.Link) atom.Link {
+func findBestAtomLink(links []atom.Link) string {
 	getScore := func(l atom.Link) int {
 		switch {
 		case l.Rel == "hub":
 			return 0
+		case l.Rel == "alternate" && l.Type == "text/html":
+			return 5
 		case l.Type == "text/html":
-			return 3
-		case l.Rel != "self":
+			return 4
+		case l.Rel == "self":
 			return 2
+		case l.Rel == "":
+			return 3
 		default:
 			return 1
 		}
 	}
 
-	var bestlink atom.Link
+	var bestlink string
 	bestscore := -1
 	for _, l := range links {
 		score := getScore(l)
 		if score > bestscore {
-			bestlink = l
+			bestlink = l.Href
 			bestscore = score
 		}
 	}
@@ -282,6 +294,9 @@ func findBestAtomLink(links []atom.Link) atom.Link {
 
 func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 	f.Checked = time.Now()
+
+	f.Link = strings.TrimSpace(f.Link)
+	f.Title = html.UnescapeString(strings.TrimSpace(f.Title))
 
 	if u, err := url.Parse(f.Url); err == nil {
 		if ul, err := u.Parse(f.Link); err == nil {
@@ -295,6 +310,7 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 
 	for _, s := range ss {
 		s.Created = f.Checked
+		s.Link = strings.TrimSpace(s.Link)
 		if !s.Updated.IsZero() && s.Published.IsZero() {
 			s.Published = s.Updated
 		}
@@ -335,7 +351,9 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 			su = &url.URL{}
 			s.Link = ""
 		}
-		s.Content, s.Summary = Sanitize(s.Content, su)
+		const snipLen = 100
+		s.Content, s.Summary = sanitizer.Sanitize(s.Content, su)
+		s.Summary = sanitizer.SnipText(s.Summary, snipLen)
 	}
 
 	return f, ss, nil
