@@ -63,7 +63,7 @@ func createMartini(dbh *db.DbDispatcher, feeds map[string]*feed_watcher.FeedWatc
 	r.Get("/api/1/feeds/:id", getFeed)
 	// Update
 	r.Put("/api/1/feeds/:id", binding.Bind(FeedJSON{}), updateFeed)
-  // Ember sends an OPTIONS request before sending a potentially destructive
+	// Ember sends an OPTIONS request before sending a potentially destructive
 	// call to see if it will be allowed.
 	r.Options("/api/1/feeds/:id", send200)
 	// Add Feed
@@ -93,6 +93,8 @@ func send200() int {
 }
 
 func RunWebUi(config *config.Config, dbh *db.DbDispatcher, feeds map[string]*feed_watcher.FeedWatcher) {
-	m := createMartini(dbh, feeds)
-	glog.Fatal(http.ListenAndServe(config.WebServer.ListenAddress, m))
+	if config.WebServer.EnableAPI {
+		m := createMartini(dbh, feeds)
+		glog.Fatal(http.ListenAndServe(config.WebServer.ListenAddress, m))
+	}
 }

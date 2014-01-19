@@ -15,6 +15,7 @@ type Config struct {
 
 type webConfig struct {
 	ListenAddress string // eg localhost:7000 or 0.0.0.0:8000
+	EnableAPI     bool
 }
 
 type mailConfig struct {
@@ -60,6 +61,7 @@ func NewConfig() *Config {
 		},
 		WebServer: webConfig{
 			ListenAddress: "localhost:7000",
+			EnableAPI: false,
 		},
 		Db: dbConfig{
 			Verbose:       true,
