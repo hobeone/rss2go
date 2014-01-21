@@ -46,3 +46,20 @@ go build -o rss2go main.go
 Upstart config for Ubuntu is in initscripts/upstart/rss2go.conf.  Copy it to
 /etc/init/rss2go.conf and install a built binary where it says to have rss2go
 run as a service.
+
+
+REST API
+========
+Rss2Go can expose a REST API which can be used to edit users and feeds in the system.
+
+To enable it set "enableAPI" to true in the web_server section of the config:
+
+```
+[web_server]
+listenAddress = "localhost:7000"
+enableAPI = false
+```
+
+webui/webui.go documents the endpoints.  See https://github.com/hobeone/rss2go_web for a hacky Ember.js based client.
+
+*Note:* There is no authentication whatsoever on the API yet so be careful.
