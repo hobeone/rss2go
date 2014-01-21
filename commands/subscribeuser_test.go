@@ -10,7 +10,7 @@ func TestSubscribeUser(t *testing.T) {
 	cfg.Db.Type = "memory"
 	su := NewSubscribeUserCommand(cfg)
 
-	user, err := su.Dbh.AddUser("test", "test@test.com")
+	user, err := su.Dbh.AddUser("test", "test@test.com", "pass")
 	if err != nil {
 		t.Fatalf("Error creating user: %s", err)
 	}
@@ -29,7 +29,7 @@ func TestSubscribeUserToUnknownFeed(t *testing.T) {
 	cfg.Db.Type = "memory"
 	su := NewSubscribeUserCommand(cfg)
 
-	user, err := su.Dbh.AddUser("test", "test@test.com")
+	user, err := su.Dbh.AddUser("test", "test@test.com", "pass")
 	if err != nil {
 		t.Fatalf("Error creating user: %s", err)
 	}

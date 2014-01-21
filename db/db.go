@@ -1,6 +1,7 @@
 package db
 
 import (
+	"code.google.com/p/go.crypto/bcrypt"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -29,10 +30,11 @@ type FeedItem struct {
 }
 
 type User struct {
-	Id      int    `beedb:"PK"  json:"id"`
-	Name    string `json:"name"`
-	Email   string `json:"email"`
-	Enabled bool   `json:"enabled"`
+	Id       int    `beedb:"PK"  json:"id"`
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Enabled  bool   `json:"enabled"`
+	Password string `json:"-"`
 }
 
 type UserFeed struct {
@@ -63,7 +65,8 @@ const USER_TABLE = `
 		id integer not null primary key,
 		name text not null UNIQUE,
 		email text not null UNIQUE,
-		enabled bool not null
+		enabled bool not null,
+		password text not null
 	);
 `
 const USER_FEED_TABLE = `
@@ -318,20 +321,27 @@ func (self *DbDispatcher) UpdateFeed(f *FeedInfo) error {
 	return self.Orm.Save(f)
 }
 
-func (self *DbDispatcher) AddUser(name string, email string) (*User, error) {
-	if name == "" || email == "" {
-		return nil, errors.New("Name and Email must be set.")
+func (self *DbDispatcher) AddUser(name string, email string, pass string) (*User, error) {
+	if name == "" || email == "" || pass == "" {
+		return nil, errors.New("name, email or pass can't be empty.")
 	}
 	addr, err := mail.ParseAddress(email)
 	if err != nil {
 		return nil, fmt.Errorf("Invalid email address: %s", err)
 	}
+
+	bcrypt_password, err := bcrypt.GenerateFromPassword([]byte(pass), 10)
+	if err != nil {
+		return nil, err
+	}
+
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 	u := &User{
-		Name:    name,
-		Email:   addr.Address,
-		Enabled: true,
+		Name:     name,
+		Email:    addr.Address,
+		Enabled:  true,
+		Password: string(bcrypt_password[:]),
 	}
 	err = self.Orm.Save(u)
 	return u, err

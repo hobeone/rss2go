@@ -110,11 +110,12 @@ func getUsers(rend render.Render, req *http.Request, dbh *db.DbDispatcher) {
 }
 
 type unmarshalUserJSON struct {
-	Id      int    `json:"id"`
-	Name    string `json:"name"`
-	Email   string `json:"email"`
-	Enabled *bool  `json:"enabled"`
-	Feeds   []int  `json:"feeds"`
+	Id       int    `json:"id"`
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Enabled  *bool  `json:"enabled"`
+	Password string `json:"password"`
+	Feeds    []int  `json:"feeds"`
 }
 type unmarshalUserJSONContainer struct {
 	User unmarshalUserJSON `json:"user"`
@@ -175,7 +176,7 @@ func addUser(req *http.Request, w http.ResponseWriter, dbh *db.DbDispatcher, ren
 		return
 	}
 
-	db_user, err := dbh.AddUser(u.User.Name, u.User.Email)
+	db_user, err := dbh.AddUser(u.User.Name, u.User.Email, u.User.Password)
 	if err != nil {
 		rend.JSON(500, err.Error())
 		return

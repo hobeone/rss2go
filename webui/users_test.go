@@ -1,6 +1,7 @@
 package webui
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -22,7 +23,7 @@ func TestGetUser(t *testing.T) {
 	dbh, m := setupTest(t)
 	response := httptest.NewRecorder()
 
-	user, err := dbh.AddUser("test", "test@test.com")
+	user, err := dbh.AddUser("test", "test@test.com", "pass")
 	if err != nil {
 		t.Fatalf("Couldn't create user: %s", err)
 	}
@@ -199,9 +200,23 @@ const addUserGoldenOutput = `{
 }`
 
 func TestAddUser(t *testing.T) {
+	u := unmarshalUserJSONContainer{
+		unmarshalUserJSON{
+			Id:       1,
+			Name:     "test1",
+			Email:    "test1_changed@example.com",
+			Password: "123",
+			Feeds:    []int{},
+		},
+	}
+	encoded, err := json.Marshal(u)
+	if err != nil {
+		t.Fatalf("Error marshaling json: %s", err)
+	}
+
 	dbh, m := setupTest(t)
 	response := httptest.NewRecorder()
-	body := strings.NewReader(updateUserReq)
+	body := strings.NewReader(string(encoded[:]))
 	req, _ := http.NewRequest("POST", "/api/1/users", body)
 	req.Header["Content-Type"] = []string{"application/json; charset=UTF-8"}
 

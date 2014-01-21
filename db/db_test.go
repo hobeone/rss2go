@@ -1,16 +1,16 @@
 package db
 
 import (
+	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
-	"github.com/stretchr/testify/assert"
 )
 
 func loadFixtures(t *testing.T, d *DbDispatcher) ([]*FeedInfo, []*User) {
-	users := map[string]string{
-		"test1": "test1@example.com",
-		"test2": "test2@example.com",
-		"test3": "test3@example.com",
+	users := map[string][]string{
+		"test1": []string{"test1@example.com", "pass"},
+		"test2": []string{"test2@example.com", "pass"},
+		"test3": []string{"test3@example.com", "pass"},
 	}
 	feeds := map[string]string{
 		"test_feed1": "http://testfeed1/feed.atom",
@@ -28,8 +28,8 @@ func loadFixtures(t *testing.T, d *DbDispatcher) ([]*FeedInfo, []*User) {
 
 	db_users := make([]*User, len(users))
 	i = 0
-	for name, email := range users {
-		u, err := d.AddUser(name, email)
+	for name, user_data := range users {
+		u, err := d.AddUser(name, user_data[0], user_data[1])
 		assert.Nil(t, err, "Error adding user to db")
 		db_users[i] = u
 		i++
@@ -111,7 +111,7 @@ func TestAddAndDeleteFeed(t *testing.T) {
 
 	err = d.RecordGuid(feed.Id, "abcd")
 	assert.Nil(t, err)
-	user1, err := d.AddUser("name", "email@example.com")
+	user1, err := d.AddUser("name", "email@example.com", "pass")
 	assert.Nil(t, err)
 
 	err = d.AddFeedsToUser(user1, []*FeedInfo{feed})
@@ -175,7 +175,7 @@ func TestAddUserValidation(t *testing.T) {
 	}
 
 	for _, ins := range inputs {
-		_, err := d.AddUser(ins[0], ins[1])
+		_, err := d.AddUser(ins[0], ins[1], "pass")
 		assert.NotNil(t, err, "AddUser should return an error on invalid args. Inputs: '%s','%s'", ins[0], ins[1])
 	}
 }
@@ -184,10 +184,10 @@ func TestAddRemoveUser(t *testing.T) {
 	d := NewMemoryDbDispatcher(false, true)
 	feeds, users := loadFixtures(t, d)
 
-	_, err := d.AddUser(users[0].Name, "diff_email@example.com")
+	_, err := d.AddUser(users[0].Name, "diff_email@example.com", "")
 	assert.NotNil(t, err, "Should have error on duplicate user name")
 
-	_, err = d.AddUser("diff_name", users[0].Email)
+	_, err = d.AddUser("diff_name", users[0].Email, "")
 	assert.NotNil(t, err, "Should have error on duplicate user email")
 
 	db_user, err := d.GetUser(users[0].Name)

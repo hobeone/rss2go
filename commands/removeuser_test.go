@@ -19,7 +19,7 @@ func TestRemoveUser(t *testing.T) {
 	cfg.Db.Type = "memory"
 	ru := NewRemoveUserCommand(cfg)
 
-	_, err := ru.Dbh.AddUser("test", "test@example.com")
+	_, err := ru.Dbh.AddUser("test", "test@example.com", "pass")
 	if err != nil {
 		t.Fatalf("Error creating user: %s", err)
 	}

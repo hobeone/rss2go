@@ -11,7 +11,7 @@ func TestListUsers(t *testing.T) {
 	cfg.Db.Type = "memory"
 
 	lu := NewListUsersCommand(cfg)
-	_, err := lu.Dbh.AddUser("test", "test@test.com")
+	_, err := lu.Dbh.AddUser("test", "test@test.com", "pass")
 	if err != nil {
 		t.Fatalf("Error adding user to db: %s", err)
 	}

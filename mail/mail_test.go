@@ -34,11 +34,11 @@ func TestSendToUsers(t *testing.T) {
 		t.Fatalf("Error creating test feed: %s", err)
 	}
 
-	user1, err := dbh.AddUser("name", "email@example.com")
+	user1, err := dbh.AddUser("name", "email@example.com", "pass")
 	if err != nil {
 		t.Fatalf("Error creating test user: %s", err)
 	}
-	user2, err := dbh.AddUser("nam2", "email2@example.com")
+	user2, err := dbh.AddUser("nam2", "email2@example.com", "pass")
 	if err != nil {
 		t.Fatalf("Error creating test user: %s", err)
 	}
@@ -85,7 +85,7 @@ func TestLocalMTASender(t *testing.T) {
 	mta := NewLocalMTASender("/bin/true")
 	err := mta.SendMail(msg)
 	if err != nil {
-		t.Fatalf("Error sending mail with /bin/true which should always work.")
+		t.Fatalf("Error sending mail with /bin/true which should always work. Err: %s", err)
 	}
 
 	mta = NewLocalMTASender("/bin/false")

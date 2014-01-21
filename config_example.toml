@@ -16,3 +16,7 @@ maxInterval = 3600
 path = "/path/to/rss2go.db"
 verbose = false
 UpdateDb = true
+
+[web_server]
+listenAddress = "localhost:7000"
+enableAPI = false

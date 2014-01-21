@@ -5,6 +5,7 @@ import (
 	"github.com/codegangsta/martini"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
+	"net/http"
 	"runtime/debug"
 	"testing"
 )
@@ -12,6 +13,8 @@ import (
 func setupTest(t *testing.T) (*db.DbDispatcher, *martini.Martini) {
 	feeds := make(map[string]*feed_watcher.FeedWatcher)
 	dbh := db.NewMemoryDbDispatcher(false, true)
+	authenticateUser = func(res http.ResponseWriter, req *http.Request, dbh *db.DbDispatcher) {
+	}
 	m := createMartini(dbh, feeds)
 	return dbh, m
 }
@@ -43,7 +46,7 @@ func loadFixtures(dbh *db.DbDispatcher) {
 	}
 
 	for name, email := range users {
-		u, _ := dbh.AddUser(name, email)
+		u, _ := dbh.AddUser(name, email, "pass")
 		dbh.AddFeedsToUser(u, db_feeds)
 	}
 }

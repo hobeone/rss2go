@@ -61,7 +61,7 @@ func NewConfig() *Config {
 		},
 		WebServer: webConfig{
 			ListenAddress: "localhost:7000",
-			EnableAPI: false,
+			EnableAPI:     false,
 		},
 		Db: dbConfig{
 			Verbose:       true,

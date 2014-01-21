@@ -18,9 +18,9 @@ func MakeCmdAddUser() *flagutil.Command {
 		given	feeds.
 
 		Example:
-		adduser username email@address
+		adduser username email@address password
 		-or-
-		adduser username email@address http://feed/url ....
+		adduser username email@address password http://feed/url ....
 		`,
 		Flag: *flag.NewFlagSet("adduser", flag.ExitOnError),
 	}
@@ -35,14 +35,15 @@ type AddUserCommand struct {
 }
 
 func runAddUser(cmd *flagutil.Command, args []string) {
-	if len(args) < 2 {
-		PrintErrorAndExit("Must give a username and email address")
+	if len(args) < 3 {
+		PrintErrorAndExit("Must give a username an email address and a password")
 	}
 	user_name := args[0]
 	user_email := args[1]
+	pass := args[1]
 	var feeds []string
-	if len(args) > 2 {
-		feeds = args[2:]
+	if len(args) > 3 {
+		feeds = args[3:]
 	}
 
 	cfg := loadConfig(cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
@@ -50,7 +51,7 @@ func runAddUser(cmd *flagutil.Command, args []string) {
 	cfg.Db.UpdateDb = true
 
 	a := NewAddUserCommand(cfg)
-	a.AddUser(user_name, user_email, feeds)
+	a.AddUser(user_name, user_email, pass, feeds)
 }
 
 func NewAddUserCommand(cfg *config.Config) *AddUserCommand {
@@ -67,8 +68,8 @@ func NewAddUserCommand(cfg *config.Config) *AddUserCommand {
 	}
 }
 
-func (self *AddUserCommand) AddUser(name string, email string, feed_urls []string) {
-	user, err := self.Dbh.AddUser(name, email)
+func (self *AddUserCommand) AddUser(name string, email string, pass string, feed_urls []string) {
+	user, err := self.Dbh.AddUser(name, email, pass)
 	if err != nil {
 		PrintErrorAndExit(err.Error())
 	}

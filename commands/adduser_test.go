@@ -10,7 +10,10 @@ func TestAddUser(t *testing.T) {
 	cfg.Mail.SendMail = false
 	cfg.Db.Type = "memory"
 	au := NewAddUserCommand(cfg)
-	au.AddUser("test", "test@example.com", []string{})
+
+	overrideExit()
+	defer assertNoPanic(t, "AddUser shouldn't have exited but did.")
+	au.AddUser("test", "test@example.com", "pass", []string{})
 
 	_, err := au.Dbh.GetUser("test")
 	if err != nil {
@@ -23,7 +26,7 @@ func TestAddDuplicateUser(t *testing.T) {
 	cfg.Mail.SendMail = false
 	cfg.Db.Type = "memory"
 	au := NewAddUserCommand(cfg)
-	au.AddUser("test", "test@example.com", []string{})
+	au.AddUser("test", "test@example.com", "pass", []string{})
 
 	_, err := au.Dbh.GetUser("test")
 	if err != nil {
@@ -31,7 +34,7 @@ func TestAddDuplicateUser(t *testing.T) {
 	}
 	overrideExit()
 	defer assertPanic(t, "AddUser should have exited but didn't.")
-	au.AddUser("test", "test@example.com", []string{})
+	au.AddUser("test", "test@example.com", "pass", []string{})
 }
 
 func TestAddUserWithFeeds(t *testing.T) {
@@ -45,7 +48,7 @@ func TestAddUserWithFeeds(t *testing.T) {
 		t.Fatalf("Error adding feed: %s", err)
 	}
 
-	au.AddUser("test", "test@example.com", []string{"http://test"})
+	au.AddUser("test", "test@example.com", "pass", []string{"http://test"})
 	db_user, err := au.Dbh.GetUser("test")
 	if err != nil {
 		t.Errorf("Couldn't find user 'test', AddUser didn't add it.")
@@ -68,7 +71,7 @@ func TestAddUserWithUnknownFeeds(t *testing.T) {
 
 	overrideExit()
 	defer assertPanic(t, "AddUser should have exited when given unknown feeds")
-	au.AddUser("test", "test@example.com", []string{"http://test"})
+	au.AddUser("test", "test@example.com", "pass", []string{"http://test"})
 }
 
 func TestAddUserWithInvalidEmailFormat(t *testing.T) {
@@ -79,5 +82,5 @@ func TestAddUserWithInvalidEmailFormat(t *testing.T) {
 
 	overrideExit()
 	defer assertPanic(t, "AddUser should have exited when given unknown feeds")
-	au.AddUser("test", ".test@example.com", []string{"http://test"})
+	au.AddUser("test", ".test@example.com", "", []string{"http://test"})
 }

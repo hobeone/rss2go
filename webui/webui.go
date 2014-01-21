@@ -1,10 +1,13 @@
 package webui
 
 import (
+	"code.google.com/p/go.crypto/bcrypt"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"github.com/codegangsta/martini"
 	"github.com/codegangsta/martini-contrib/binding"
+	//"github.com/davecgh/go-spew/spew"
 	"github.com/golang/glog"
 	"github.com/hobeone/martini-contrib/render"
 	"github.com/hobeone/rss2go/config"
@@ -12,7 +15,57 @@ import (
 	"github.com/hobeone/rss2go/feed_watcher"
 	"net/http"
 	"strconv"
+	"strings"
 )
+
+func failAuth(w http.ResponseWriter) {
+	w.Header().Set("WWW-Authenticate", "Basic realm=\"Authorization Required\"")
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusUnauthorized)
+	fmt.Fprintln(w, "Not Authorized")
+}
+
+var authenticateUser = func (res http.ResponseWriter, req *http.Request, dbh *db.DbDispatcher) {
+	auth_header := strings.SplitAfterN(
+		strings.TrimSpace(
+			req.Header.Get("Authorization"),
+		),
+		"Basic ",
+		2,
+	)
+	if len(auth_header) > 1 {
+		dec_string, err := base64.StdEncoding.DecodeString(auth_header[1])
+		if err != nil {
+			glog.Errorf("Error decoding string: ", err)
+			failAuth(res)
+			return
+		}
+		auth_parts := strings.SplitN(string(dec_string[:]), ":", 2)
+		if len(auth_parts) < 2 {
+			glog.Errorf("auth string had no ':' in it, failing")
+			failAuth(res)
+			return
+		}
+		user_email := auth_parts[0]
+		pass := auth_parts[1]
+		dbuser, err := dbh.GetUserByEmail(user_email)
+		if err != nil {
+			glog.Infof("Unknown user authentication: %s", user_email)
+			failAuth(res)
+			return
+		}
+		if bcrypt.CompareHashAndPassword([]byte(dbuser.Password), []byte(pass)) != nil {
+			failAuth(res)
+			return
+		}
+	} else {
+		failAuth(res)
+	}
+}
+
+func UserAuth() martini.Handler {
+	return authenticateUser
+}
 
 func parseParamIds(str_ids []string) ([]int, error) {
 	if len(str_ids) == 0 {
@@ -32,7 +85,6 @@ func parseParamIds(str_ids []string) ([]int, error) {
 func createMartini(dbh *db.DbDispatcher, feeds map[string]*feed_watcher.FeedWatcher) *martini.Martini {
 	m := martini.New()
 	m.Use(martini.Logger())
-
 	m.Use(
 		render.Renderer(
 			render.Options{
@@ -45,12 +97,12 @@ func createMartini(dbh *db.DbDispatcher, feeds map[string]*feed_watcher.FeedWatc
 		if origin := req.Header.Get("Origin"); origin != "" {
 			w.Header().Add("Access-Control-Allow-Origin", origin)
 		}
-
 		w.Header().Add("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
 		w.Header().Add("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token")
 		w.Header().Add("Access-Control-Allow-Credentials", "true")
 	})
 
+	m.Use(UserAuth())
 	m.Map(dbh)
 	m.Map(feeds)
 
