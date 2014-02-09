@@ -154,9 +154,9 @@ func TestAddFeedWithMalformedData(t *testing.T) {
 
 	m.ServeHTTP(response, req)
 
-	if response.Code != 400 {
+	if response.Code != 422 {
 		fmt.Println(response.Body.String())
-		t.Fatalf("Expected 201 response code, got %d", response.Code)
+		t.Fatalf("Expected 422 response code, got %d", response.Code)
 	}
 
 	var a interface{}

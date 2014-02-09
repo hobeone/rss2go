@@ -6,13 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"github.com/codegangsta/martini"
-	"github.com/codegangsta/martini-contrib/binding"
+	"github.com/martini-contrib/binding"
 	//"github.com/davecgh/go-spew/spew"
 	"github.com/golang/glog"
-	"github.com/hobeone/martini-contrib/render"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
+	"github.com/martini-contrib/render"
 	"net/http"
 	"strconv"
 	"strings"
@@ -25,7 +25,7 @@ func failAuth(w http.ResponseWriter) {
 	fmt.Fprintln(w, "Not Authorized")
 }
 
-var authenticateUser = func (res http.ResponseWriter, req *http.Request, dbh *db.DbDispatcher) {
+var authenticateUser = func(res http.ResponseWriter, req *http.Request, dbh *db.DbDispatcher) {
 	auth_header := strings.SplitAfterN(
 		strings.TrimSpace(
 			req.Header.Get("Authorization"),
