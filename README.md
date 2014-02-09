@@ -1,6 +1,9 @@
 rss2go
 ======
 
+[![wercker status](https://app.wercker.com/status/9e619f7630d2c3797ce94f75f654e334 "wercker status")](https://app.wercker.com/project/bykey/9e619f7630d2c3797ce94f75f654e334)
+
+
 Clone of rss2email in Go.
 
 *Basic Architecture:*
