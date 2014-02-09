@@ -82,7 +82,7 @@ func TestLocalMTASender(t *testing.T) {
 		Body:    "Test Body",
 	}
 
-	mta := NewLocalMTASender("/bin/true")
+	mta := NewLocalMTASender("/bin/cat")
 	err := mta.SendMail(msg)
 	if err != nil {
 		t.Fatalf("Error sending mail with /bin/true which should always work. Err: %s", err)
@@ -91,6 +91,6 @@ func TestLocalMTASender(t *testing.T) {
 	mta = NewLocalMTASender("/bin/false")
 	err = mta.SendMail(msg)
 	if err == nil {
-		t.Fatalf("Sending mail with /bin/false which should always work.")
+		t.Fatalf("Sending mail with /bin/false which should always fail.")
 	}
 }
