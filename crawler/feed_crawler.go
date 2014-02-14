@@ -11,6 +11,9 @@ import (
 	"time"
 )
 
+// GetFeed gets a URL and returns a http.Response.
+// Sets a reasonable timeout on the connection and read from the server.
+// Users will need to Close() the resposne.Body or risk leaking connections.
 func GetFeed(url string) (*http.Response, error) {
 	glog.Infof("Crawling %v", url)
 
@@ -26,52 +29,57 @@ func GetFeed(url string) (*http.Response, error) {
 		return r, err
 	}
 	if r.StatusCode != http.StatusOK {
-		err = fmt.Errorf("Feed %s returned a non 200 status code: %s", url, r.Status)
+		err = fmt.Errorf("feed %s returned a non 200 status code: %s", url, r.Status)
 		glog.Info(err)
 		return r, err
 	}
 	return r, nil
 }
 
+// GetFeedAndMakeResponse gets a URL and returns a FeedCrawlResponse
+// Sets FeedCrawlResponse.Error if there was a problem retreiving the URL.
 func GetFeedAndMakeResponse(url string) *feed_watcher.FeedCrawlResponse {
 	resp := &feed_watcher.FeedCrawlResponse{
 		URI: url,
 	}
 	r, err := GetFeed(url)
+	defer r.Body.Close()
 
 	if err != nil {
 		resp.Error = err
 		return resp
 	}
 	resp.HttpResponseStatus = r.Status
-	defer r.Body.Close()
 	if r.ContentLength > 0 {
 		b := make([]byte, r.ContentLength)
 		_, err := io.ReadFull(r.Body, b)
 		if err != nil {
-			resp.Error = fmt.Errorf("Error reading response for %s: %s", url, err)
+			resp.Error = fmt.Errorf("error reading response for %s: %s", url, err)
 		}
 		resp.Body = b
 	} else {
 		resp.Body, resp.Error = ioutil.ReadAll(r.Body)
 		if err != nil {
-			resp.Error = fmt.Errorf("Error reading response for %s: %s", url, err)
+			resp.Error = fmt.Errorf("error reading response for %s: %s", url, err)
 		}
 	}
 	return resp
 }
 
-func FeedCrawler(crawl_requests chan *feed_watcher.FeedCrawlRequest) {
+// FeedCrawler pulls FeedCrawlRequests from the crawl_requests channel,
+// gets the given URL and returns a response
+func FeedCrawler(crawlRequests chan *feed_watcher.FeedCrawlRequest) {
 	for {
 		select {
-		case req := <-crawl_requests:
+		case req := <-crawlRequests:
 			req.ResponseChan <- GetFeedAndMakeResponse(req.URI)
 		}
 	}
 }
 
-func StartCrawlerPool(num int, crawl_channel chan *feed_watcher.FeedCrawlRequest) {
+// StartCrawlerPool creates a pool of num http crawlers listening to the crawl_channel.
+func StartCrawlerPool(num int, crawlChannel chan *feed_watcher.FeedCrawlRequest) {
 	for i := 0; i < num; i++ {
-		go FeedCrawler(crawl_channel)
+		go FeedCrawler(crawlChannel)
 	}
 }
