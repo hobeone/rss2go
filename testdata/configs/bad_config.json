@@ -1,0 +1,7 @@
+{
+  "Mail": {
+    "SendMail": true
+    "UseSendmail": true
+  }
+}
+

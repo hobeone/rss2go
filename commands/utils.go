@@ -8,23 +8,24 @@ import (
 	"testing"
 )
 
-const default_config = "~/.config/rss2go/config.toml"
+const default_config = "~/.config/rss2go/config.json"
 
+// PrintErrorAndEdit prints out the given string to SRDERR and exits
 var PrintErrorAndExit = func(err_string string) {
 	fmt.Fprintf(os.Stderr, "ERROR: %s.\n", err_string)
 	os.Exit(1)
 }
 
-func loadConfig(config_file string) *config.Config {
-	if len(config_file) == 0 {
+func loadConfig(configFile string) *config.Config {
+	if len(configFile) == 0 {
 		glog.Infof("No --config_file given.  Using default: %s\n",
 			default_config)
-		config_file = default_config
+		configFile = default_config
 	}
 
-	glog.Infof("Got config file: %s\n", config_file)
+	glog.Infof("Got config file: %s\n", configFile)
 	config := config.NewConfig()
-	err := config.ReadConfig(config_file)
+	err := config.ReadConfig(configFile)
 	if err != nil {
 		glog.Fatal(err)
 	}

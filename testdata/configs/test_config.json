@@ -1,0 +1,29 @@
+{
+  "Mail": {
+    "SendMail": true,
+    "UseSendmail": true,
+    "UseSmtp": true,
+    "MtaPath": "",
+    "SmtpServer": "",
+    "SmtpUsername": "",
+    "SmtpPassword": "",
+    "FromAddress": "rss2go@localhost.localdomain"
+  },
+  "Crawl": {
+    "MaxCrawlers": 10,
+    "MinInterval": 300,
+    "MaxInterval": 86400
+  },
+  "Db": {
+    "Path": "",
+    "Verbose": true,
+    "UpdateDb": true,
+    "WatchInterval": 60,
+    "Type": "file"
+  },
+  "WebServer": {
+    "ListenAddress": "localhost:7000",
+    "EnableAPI": false
+  }
+}
+

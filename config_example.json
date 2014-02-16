@@ -1,0 +1,28 @@
+{
+  "Mail": {
+    "SendMail": true,
+    "UseSendmail": true,
+    "UseSmtp": false,
+    "MtaPath": "sendmail",
+    "SmtpServer": "mail.gmail.com",
+    "SmtpUsername": "example_user@gmail.com",
+    "SmtpPassword": "example_password",
+    "FromAddress": "rss2go@localhost.localdomain"
+  },
+  "Crawl": {
+    "MaxCrawlers": 10,
+    "MinInterval": 300,
+    "MaxInterval": 86400
+  },
+  "Db": {
+    "Path": "/path/to/rss2go.db",
+    "Verbose": true,
+    "UpdateDb": true,
+    "WatchInterval": 60,
+    "Type": "file"
+  },
+  "WebServer": {
+    "ListenAddress": "localhost:7000",
+    "EnableAPI": false
+  }
+}

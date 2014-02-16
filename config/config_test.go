@@ -1,7 +1,7 @@
 package config
 
 import (
-	"os"
+	//	"github.com/davecgh/go-spew/spew"
 	"testing"
 )
 
@@ -9,15 +9,16 @@ func TestReadConfigFailsOnNonExistingPath(t *testing.T) {
 	c := NewConfig()
 	path := "/does/not/exist"
 	err := c.ReadConfig(path)
-	if _, ok := err.(*os.PathError); !ok {
-		t.Error("Expected PathError on non existing path: ", path)
+	if err == nil {
+		t.Errorf("Expected PathError on non existing path: %s", path)
 	}
 }
 
 func TestReadConfigFailsOnBadFormat(t *testing.T) {
 	c := NewConfig()
-	path := "../testdata/configs/bad_format.toml"
+	path := "../testdata/configs/bad_config.json"
 	err := c.ReadConfig(path)
+
 	if err == nil {
 		t.Error("Expected error on bad format config: ", path)
 	}
@@ -28,10 +29,10 @@ func TestDefaultsGetOverridden(t *testing.T) {
 	if c.Mail.UseSmtp {
 		t.Fatal("Expected UseSmtp to be false")
 	}
-	path := "../testdata/configs/test_config.toml"
+	path := "../testdata/configs/test_config.json"
 	err := c.ReadConfig(path)
 	if err != nil {
-		t.Fatal("Expected no errors when parsing: ", path)
+		t.Fatalf("Expected no errors when parsing: %s, got %s", path, err)
 	}
 	if !c.Mail.UseSmtp {
 		t.Fatal("Expected c.Mail.UseSmtp to be true")
