@@ -3,11 +3,12 @@ package commands
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
+
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/feed"
 	"github.com/hobeone/rss2go/flagutil"
 	"github.com/hobeone/rss2go/mail"
-	"io/ioutil"
 )
 
 func MakeCmdTestFeed() *flagutil.Command {
@@ -33,7 +34,7 @@ func testFeed(cmd *flagutil.Command, args []string) {
 		PrintErrorAndExit("Need to provide a url to crawl.\n")
 	}
 	url := args[0]
-	resp, err := crawler.GetFeed(url)
+	resp, err := crawler.GetFeed(url, nil)
 	if err != nil {
 		PrintErrorAndExit(err.Error())
 	}

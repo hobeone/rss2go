@@ -2,27 +2,31 @@ package crawler
 
 import (
 	"fmt"
-	"github.com/golang/glog"
-	"github.com/hobeone/rss2go/feed_watcher"
-	"github.com/hobeone/rss2go/httpclient"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"time"
+
+	"github.com/golang/glog"
+	"github.com/hobeone/rss2go/feed_watcher"
+	"github.com/hobeone/rss2go/httpclient"
 )
 
 // GetFeed gets a URL and returns a http.Response.
 // Sets a reasonable timeout on the connection and read from the server.
 // Users will need to Close() the resposne.Body or risk leaking connections.
-func GetFeed(url string) (*http.Response, error) {
+func GetFeed(url string, client *http.Client) (*http.Response, error) {
 	glog.Infof("Crawling %v", url)
 
 	// Defaults to 1 second for connect and read
 	connectTimeout := (5 * time.Second)
 	readWriteTimeout := (15 * time.Second)
 
-	httpClient := httpclient.NewTimeoutClient(connectTimeout, readWriteTimeout)
-	r, err := httpClient.Get(url)
+	if client == nil {
+		client = httpclient.NewTimeoutClient(connectTimeout, readWriteTimeout)
+	}
+
+	r, err := client.Get(url)
 
 	if err != nil {
 		glog.Infof("Error getting %s: %s", url, err)
@@ -38,17 +42,20 @@ func GetFeed(url string) (*http.Response, error) {
 
 // GetFeedAndMakeResponse gets a URL and returns a FeedCrawlResponse
 // Sets FeedCrawlResponse.Error if there was a problem retreiving the URL.
-func GetFeedAndMakeResponse(url string) *feed_watcher.FeedCrawlResponse {
+func GetFeedAndMakeResponse(url string, client *http.Client) *feed_watcher.FeedCrawlResponse {
 	resp := &feed_watcher.FeedCrawlResponse{
 		URI: url,
 	}
-	r, err := GetFeed(url)
-	defer r.Body.Close()
-
+	r, err := GetFeed(url, client)
+	if r != nil {
+		// If there are connection issues the response will be nil
+		defer r.Body.Close()
+	}
 	if err != nil {
 		resp.Error = err
 		return resp
 	}
+
 	resp.HttpResponseStatus = r.Status
 	if r.ContentLength > 0 {
 		b := make([]byte, r.ContentLength)
@@ -72,7 +79,7 @@ func FeedCrawler(crawlRequests chan *feed_watcher.FeedCrawlRequest) {
 	for {
 		select {
 		case req := <-crawlRequests:
-			req.ResponseChan <- GetFeedAndMakeResponse(req.URI)
+			req.ResponseChan <- GetFeedAndMakeResponse(req.URI, nil)
 		}
 	}
 }
