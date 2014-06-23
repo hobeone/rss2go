@@ -12,16 +12,17 @@ package mail
 import (
 	"bytes"
 	"fmt"
-	"github.com/golang/glog"
-	"github.com/hobeone/rss2go/config"
-	"github.com/hobeone/rss2go/db"
-	"github.com/hobeone/rss2go/feed"
-	"github.com/jpoehls/gophermail"
 	"net/mail"
 	"net/smtp"
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/golang/glog"
+	"github.com/hobeone/rss2go/config"
+	"github.com/hobeone/rss2go/db"
+	"github.com/hobeone/rss2go/feed"
+	"github.com/jpoehls/gophermail"
 )
 
 const MTA_BINARY = "sendmail"
@@ -190,8 +191,8 @@ func (self *MailDispatcher) sendToUsers(m *feed.Story) error {
 func CreateMailFromItem(from string, to string, item *feed.Story) *gophermail.Message {
 	content := FormatMessageBody(item)
 	msg := &gophermail.Message{
-		From:     from,
-		To:       []string{to},
+		From:     mail.Address{"", from},
+		To:       []mail.Address{mail.Address{"", to}},
 		Subject:  item.Title,
 		Body:     content, //TODO Convert to plain text
 		HTMLBody: content,

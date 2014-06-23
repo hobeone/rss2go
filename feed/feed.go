@@ -8,19 +8,20 @@ package feed
 
 import (
 	"bytes"
-	"code.google.com/p/go-charset/charset"
-	_ "code.google.com/p/go-charset/data"
 	"encoding/xml"
 	"fmt"
+	"html"
+	"net/url"
+	"strings"
+	"time"
+
+	"code.google.com/p/go-charset/charset"
+	_ "code.google.com/p/go-charset/data"
 	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/atom"
 	"github.com/hobeone/rss2go/rdf"
 	"github.com/hobeone/rss2go/rss"
 	"github.com/mjibson/goread/sanitizer"
-	"html"
-	"net/url"
-	"strings"
-	"time"
 )
 
 type Feed struct {
@@ -58,6 +59,7 @@ func parseAtom(u string, b []byte) (*Feed, []*Story, error) {
 	xml_decoder := xml.NewDecoder(bytes.NewReader(b))
 	xml_decoder.Strict = false
 	xml_decoder.CharsetReader = charset.NewReader
+	xml_decoder.Entity = xml.HTMLEntity
 	err := xml_decoder.Decode(&a)
 	if err != nil {
 		return nil, nil, err
@@ -135,6 +137,7 @@ func parseRss(u string, b []byte) (*Feed, []*Story, error) {
 	d.Strict = false
 	d.CharsetReader = charset.NewReader
 	d.DefaultSpace = "DefaultSpace"
+	d.Entity = xml.HTMLEntity
 
 	err := d.Decode(&r)
 	if err != nil {
@@ -193,6 +196,7 @@ func parseRdf(u string, b []byte) (*Feed, []*Story, error) {
 	d := xml.NewDecoder(bytes.NewReader(b))
 	d.CharsetReader = charset.NewReader
 	d.Strict = false
+	d.Entity = xml.HTMLEntity
 	err := d.Decode(&rd)
 	if err != nil {
 		return nil, nil, err
@@ -242,16 +246,19 @@ func ParseFeed(u string, b []byte) (*Feed, []*Story, error) {
 
 	feed, stories, atomerr := parseAtom(u, b)
 	if atomerr == nil {
+		glog.Infof("Parsed %s as Atom", u)
 		return feed, stories, nil
 	}
 
 	feed, stories, rsserr := parseRss(u, b)
 	if rsserr == nil {
+		glog.Infof("Parsed %s as RSS", u)
 		return feed, stories, nil
 	}
 
 	feed, stories, rdferr := parseRdf(u, b)
 	if rdferr == nil {
+		glog.Infof("Parsed %s as RDF", u)
 		return feed, stories, nil
 	}
 

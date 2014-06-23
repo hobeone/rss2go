@@ -1,12 +1,13 @@
 package feed
 
 import (
-	"code.google.com/p/go-charset/charset"
-	_ "code.google.com/p/go-charset/data"
 	"fmt"
 	"io/ioutil"
 	"testing"
 	"unicode/utf8"
+
+	"code.google.com/p/go-charset/charset"
+	_ "code.google.com/p/go-charset/data"
 )
 
 func TestParseFeed(t *testing.T) {

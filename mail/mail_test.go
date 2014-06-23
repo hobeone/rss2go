@@ -1,10 +1,12 @@
 package mail
 
 import (
+	"net/mail"
+	"testing"
+
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed"
 	"github.com/jpoehls/gophermail"
-	"testing"
 )
 
 type MockedMailer struct {
@@ -76,8 +78,8 @@ func TestSendToUsers(t *testing.T) {
 
 func TestLocalMTASender(t *testing.T) {
 	msg := &gophermail.Message{
-		From:    "from@example.com",
-		To:      []string{"to@example.com"},
+		From:    mail.Address{"", "from@example.com"},
+		To:      []mail.Address{mail.Address{"", "to@example.com"}},
 		Subject: "Testing subject",
 		Body:    "Test Body",
 	}

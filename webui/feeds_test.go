@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	//	"github.com/davecgh/go-spew/spew"
-	"github.com/hobeone/rss2go/db"
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/davecgh/go-spew/spew"
+	"github.com/hobeone/rss2go/db"
+	"github.com/stretchr/testify/assert"
 )
 
 const getAllFeedGoldenOutput = `{
@@ -53,8 +55,7 @@ func TestGetAllFeeds(t *testing.T) {
 		t.Fatalf("Expected 200 response code, got %d", response.Code)
 	}
 	if response.Body.String() != getAllFeedGoldenOutput {
-		fmt.Println(response.Body.String())
-		t.Fatalf("Expected to find feed_list in reponse body")
+		t.Fatalf("Response didn't match golden response: %s", response.Body.String())
 	}
 }
 
@@ -137,6 +138,12 @@ func TestAddFeed(t *testing.T) {
 	}
 }
 
+type ErrorMessage []struct {
+	FieldNames     []string `json:"fieldNames"`
+	Classification string   `json:"classification"`
+	Message        string   `json:"message"`
+}
+
 func TestAddFeedWithMalformedData(t *testing.T) {
 	_, m := setupTest(t)
 	response := httptest.NewRecorder()
@@ -159,18 +166,14 @@ func TestAddFeedWithMalformedData(t *testing.T) {
 		t.Fatalf("Expected 422 response code, got %d", response.Code)
 	}
 
-	var a interface{}
+	var a ErrorMessage
 	err = json.Unmarshal(response.Body.Bytes(), &a)
-	json_map := a.(map[string]interface{})
 
-	err_string, ok := json_map["fields"].(map[string]interface{})["Feed"].(string)
-	if !ok {
-		t.Fatalf("Expected to find Feed error field, found nothing")
+	if len(a) != 1 {
+		t.Fatalf("Expected only one error message got:\n%s", spew.Sdump(a))
 	}
-
-	if err_string != "Feed must exist." {
-		fmt.Println(response.Body.String())
-		t.Fatalf("Response didn't match expected response.")
+	if a[0].Classification != "RequiredError" {
+		t.Fatalf("Expected to find Feed error field, found nothing")
 	}
 }
 

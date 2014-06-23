@@ -2,14 +2,16 @@ package webui
 
 import (
 	"fmt"
+
 	"github.com/codegangsta/martini"
 	"github.com/martini-contrib/binding"
 	//"github.com/davecgh/go-spew/spew"
+	"net/http"
+	"strconv"
+
 	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/db"
 	"github.com/martini-contrib/render"
-	"net/http"
-	"strconv"
 )
 
 type FeedsJSON struct {
@@ -21,7 +23,7 @@ type FeedJSONItem struct {
 }
 
 type FeedJSON struct {
-	Feed *db.FeedInfo `json:"feed"`
+	Feed *db.FeedInfo `json:"feed" binding:"required"`
 }
 
 func getFeeds(rend render.Render, r *http.Request, params martini.Params, dbh *db.DbDispatcher) {
@@ -81,7 +83,7 @@ func getFeed(rend render.Render, dbh *db.DbDispatcher, params martini.Params) {
 
 func (f FeedJSON) Validate(errors *binding.Errors, req *http.Request) {
 	if f.Feed == nil {
-		errors.Fields["Feed"] = "Feed must exist."
+		errors.Add([]string{"Feed"}, "error", "Feed must exist.")
 	}
 }
 

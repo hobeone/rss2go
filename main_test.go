@@ -1,17 +1,18 @@
 package main
 
 import (
-	"github.com/golang/glog"
-	"github.com/hobeone/rss2go/commands"
-	"github.com/hobeone/rss2go/config"
-	"github.com/hobeone/rss2go/db"
-	"github.com/hobeone/rss2go/feed_watcher"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/golang/glog"
+	"github.com/hobeone/rss2go/commands"
+	"github.com/hobeone/rss2go/config"
+	"github.com/hobeone/rss2go/db"
+	"github.com/hobeone/rss2go/feed_watcher"
 )
 
 func MakeDbFixtures(d db.DbDispatcher, local_url string) {
