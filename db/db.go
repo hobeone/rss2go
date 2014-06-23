@@ -1,44 +1,44 @@
 package db
 
 import (
-	"code.google.com/p/go.crypto/bcrypt"
-	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/astaxie/beedb"
-	"github.com/golang/glog"
-	_ "github.com/mattn/go-sqlite3"
 	"net/mail"
 	"net/url"
 	"sync"
 	"time"
+
+	"code.google.com/p/go.crypto/bcrypt"
+	"github.com/golang/glog"
+	"github.com/jinzhu/gorm"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 type FeedInfo struct {
-	Id            int       `beedb:"PK" json:"id"`
-	Name          string    `json:"name" binding:"required"`
-	Url           string    `json:"url" binding:"required"`
+	Id            int       `json:"id"`
+	Name          string    `sql:"not null;unique" json:"name" binding:"required"`
+	Url           string    `sql:"not null;unique" json:"url" binding:"required"`
 	LastPollTime  time.Time `json:"lastPollTime"`
 	LastPollError string    `json:"lastPollError"`
 }
 
 type FeedItem struct {
-	Id         int `beedb:"PK"`
+	Id         int
 	FeedInfoId int
 	Guid       string
 	AddedOn    time.Time
 }
 
 type User struct {
-	Id       int    `beedb:"PK"  json:"id"`
-	Name     string `json:"name"`
-	Email    string `json:"email"`
+	Id       int    `json:"id"`
+	Name     string `sql:"not null;unique" json:"name"`
+	Email    string `sql:"not null;unique" json:"email"`
 	Enabled  bool   `json:"enabled"`
 	Password string `json:"-"`
 }
 
 type UserFeed struct {
-	Id     int `beedb:"PK"`
+	Id     int
 	UserId int
 	FeedId int
 }
@@ -77,81 +77,47 @@ const USER_FEED_TABLE = `
 	);
 `
 
-func createAndOpenDb(db_path string, verbose bool, memory bool) (*sql.DB, beedb.Model) {
-	beedb.OnDebug = verbose
-	glog.Infof("Opening database %s", db_path)
-	mode := "rwc"
-	if memory {
-		mode = "memory"
-	}
-	db, err := sql.Open("sqlite3",
-		fmt.Sprintf("file:%s?mode=%s", db_path, mode))
-
-	if err != nil {
-		glog.Fatal(err)
-	}
-
-	rows, err := db.Query("SELECT name FROM sqlite_master WHERE type='table';")
-	if err != nil {
-		glog.Fatalf("Couldn't get list of tables from database: %s", err.Error())
-	}
-	tables := make(map[string]bool)
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			glog.Fatal(err)
-		}
-		tables[name] = true
-	}
-
-	if _, ok := tables["feed_info"]; !ok {
-		createTable(db, FEED_INFO_TABLE)
-	}
-	if _, ok := tables["feed_item"]; !ok {
-		createTable(db, FEED_ITEM_TABLE)
-	}
-	if _, ok := tables["user"]; !ok {
-		createTable(db, USER_TABLE)
-	}
-	if _, ok := tables["user_feed"]; !ok {
-		createTable(db, USER_FEED_TABLE)
-	}
-
-	return db, beedb.New(db)
-}
-
-func createTable(dbh *sql.DB, table_def string) {
-	_, err := dbh.Exec(table_def)
-	if err != nil {
-		panic(fmt.Sprintf("Error creating table: %s\nSQL: %s", err.Error(),
-			table_def))
-	}
-}
-
-type DbDispatcher struct {
-	Orm          beedb.Model
-	dbh          *sql.DB
+type DBHandle struct {
+	DB           gorm.DB
 	writeUpdates bool
 	syncMutex    sync.Mutex
 }
 
-func NewDbDispatcher(db_path string, verbose bool, write_updates bool) *DbDispatcher {
-	d := &DbDispatcher{
-		writeUpdates: write_updates,
+func createAndOpenDb(db_path string, verbose bool, memory bool) *DBHandle {
+	mode := "rwc"
+	if memory {
+		mode = "memory"
 	}
-	d.dbh, d.Orm = createAndOpenDb(db_path, verbose, false)
+	constructed_path := fmt.Sprintf("file:%s?mode=%s", db_path, mode)
+	glog.Infof("Opening database %s", constructed_path)
+
+	db, err := gorm.Open("sqlite3", constructed_path)
+	if err != nil {
+		glog.Fatal(err)
+	}
+	db.SingularTable(true)
+	db.LogMode(verbose)
+	db.AutoMigrate(User{})
+	db.AutoMigrate(UserFeed{})
+	db.AutoMigrate(FeedInfo{})
+	db.AutoMigrate(FeedItem{})
+
+	return &DBHandle{DB: db}
+}
+
+func NewDBHandle(db_path string, verbose bool, write_updates bool) *DBHandle {
+	d := createAndOpenDb(db_path, verbose, false)
+	d.writeUpdates = write_updates
 	return d
 }
 
-func NewMemoryDbDispatcher(verbose bool, write_updates bool) *DbDispatcher {
-	d := &DbDispatcher{
-		writeUpdates: write_updates,
-	}
-	d.dbh, d.Orm = createAndOpenDb("in_memory_test", verbose, true)
+func NewMemoryDBHandle(verbose bool, write_updates bool) *DBHandle {
+	d := createAndOpenDb("in_memory_test", verbose, true)
+	d.writeUpdates = write_updates
 	return d
 }
 
-func (self *DbDispatcher) AddFeed(name string, feed_url string) (*FeedInfo, error) {
+func (self *DBHandle) AddFeed(name string, feed_url string) (*FeedInfo, error) {
 	if name == "" || feed_url == "" {
 		return nil, errors.New("Name and url can't be empty.")
 	}
@@ -170,24 +136,25 @@ func (self *DbDispatcher) AddFeed(name string, feed_url string) (*FeedInfo, erro
 		Name: name,
 		Url:  u.String(),
 	}
-	err = self.Orm.Save(f)
+	err = self.DB.Save(f).Error
 	return f, err
 }
 
-func (self *DbDispatcher) RemoveFeed(url string, purge_guids bool) error {
+func (self *DBHandle) RemoveFeed(url string, purge_guids bool) error {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 	f, err := self.unsafeGetFeedByUrl(url)
+
 	if err != nil {
 		return err
 	}
-	_, err = self.Orm.Delete(f)
+	err = self.DB.Delete(f).Error
 	if err == nil {
-		_, err := self.Orm.SetTable("feed_item").Where("feed_info_id = ?", f.Id).DeleteRow()
+		err = self.DB.Where("feed_info_id = ?", f.Id).Delete(FeedItem{}).Error
 		if err != nil {
 			return err
 		}
-		_, err = self.Orm.SetTable("user_feed").Where("feed_id = ?", f.Id).DeleteRow()
+		err = self.DB.Where("feed_id = ?", f.Id).Delete(UserFeed{}).Error
 		if err != nil {
 			return err
 		}
@@ -196,90 +163,100 @@ func (self *DbDispatcher) RemoveFeed(url string, purge_guids bool) error {
 	return err
 }
 
-func (self *DbDispatcher) GetAllFeeds() (feeds []FeedInfo, err error) {
+func (self *DBHandle) GetAllFeeds() (feeds []FeedInfo, err error) {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
-	err = self.Orm.FindAll(&feeds)
+	err = self.DB.Find(&feeds).Error
 	return
 }
 
-func (self *DbDispatcher) GetFeedsWithErrors() (feeds []FeedInfo, err error) {
+func (self *DBHandle) GetFeedsWithErrors() (feeds []FeedInfo, err error) {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 
-	err = self.Orm.Where(
-		"last_poll_error IS NOT NULL and last_poll_error <> ''").FindAll(&feeds)
+	err = self.DB.Where(
+		"last_poll_error IS NOT NULL and last_poll_error <> ''").Find(&feeds).Error
 
 	return
 }
 
-func (self *DbDispatcher) GetStaleFeeds() (feeds []FeedInfo, err error) {
+type staleFeedResult struct {
+	Id            int
+	Name          string
+	Url           string
+	LastPollTime  time.Time
+	LastPollError string
+}
+
+func (self *DBHandle) GetStaleFeeds() ([]FeedInfo, error) {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 
-	rows, err := self.dbh.Query(`
-	select feed_info.id, feed_info.name, feed_info.url, feed_info.last_poll_time, feed_info.last_poll_error, r.MaxTime FROM (SELECT feed_info_id, MAX(added_on) as MaxTime FROM feed_item GROUP BY feed_info_id) r, feed_info INNER JOIN feed_item f ON f.feed_info_id = r.feed_info_id AND f.added_on = r.MaxTime AND r.MaxTime < datetime('now','-14 days') AND f.feed_info_id = feed_info.id group by f.feed_info_id;
-	`)
+	var res []FeedInfo
+	err := self.DB.Raw(`
+	select feed_info.id, feed_info.name, feed_info.url,  r.MaxTime, feed_info.last_poll_error FROM (SELECT feed_info_id, MAX(added_on) as MaxTime FROM feed_item GROUP BY feed_info_id) r, feed_info INNER JOIN feed_item f ON f.feed_info_id = r.feed_info_id AND f.added_on = r.MaxTime AND r.MaxTime < datetime('now','-14 days') AND f.feed_info_id = feed_info.id group by f.feed_info_id;
+	`).Scan(&res).Error
 	if err != nil {
-		return
+		return nil, err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var id int
-		var name, url, last_poll_error, last_poll_time, max_time string
-		err = rows.Scan(&id, &name, &url, &last_poll_time, &last_poll_error, &max_time)
-		if err != nil {
-			return feeds, err
+	/*
+		for rows.Next() {
+			var id int
+			var name, url, last_poll_error string
+			var last_poll_time, max_time time.Time
+			err = rows.Scan(&id, &name, &url, &last_poll_time, &last_poll_error, &max_time)
+			if err != nil {
+				return feeds, err
+			}
+			ftime, err := time.Parse("2006-01-02 15:04:05", max_time)
+			if err != nil {
+				return nil, err
+			}
+			// Sorta hacky: set LastPollTime to time of last item seen, rather than
+			// last time feed was polled.
+			feeds = append(feeds, FeedInfo{
+				Id:            id,
+				Name:          name,
+				Url:           url,
+				LastPollTime:  ftime,
+				LastPollError: last_poll_error,
+			})
 		}
-		ftime, err := time.Parse("2006-01-02 15:04:05", max_time)
-		if err != nil {
-			return nil, err
-		}
-		// Sorta hacky: set LastPollTime to time of last item seen, rather than
-		// last time feed was polled.
-		feeds = append(feeds, FeedInfo{
-			Id:            id,
-			Name:          name,
-			Url:           url,
-			LastPollTime:  ftime,
-			LastPollError: last_poll_error,
-		})
-	}
-
-	return
+	*/
+	return res, nil
 }
 
-func (self *DbDispatcher) GetFeedById(id int) (*FeedInfo, error) {
+func (self *DBHandle) GetFeedById(id int) (*FeedInfo, error) {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 	feed_info := &FeedInfo{}
-	err := self.Orm.Where(id).Find(feed_info)
+	err := self.DB.First(feed_info, id).Error
 	return feed_info, err
 }
 
-func (self *DbDispatcher) GetFeedByUrl(url string) (*FeedInfo, error) {
+func (self *DBHandle) GetFeedByUrl(url string) (*FeedInfo, error) {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 	return self.unsafeGetFeedByUrl(url)
 }
 
-func (self *DbDispatcher) unsafeGetFeedByUrl(url string) (*FeedInfo, error) {
+func (self *DBHandle) unsafeGetFeedByUrl(url string) (*FeedInfo, error) {
 	feed := FeedInfo{}
-	err := self.Orm.Where("url = ?", url).Find(&feed)
+	err := self.DB.Where("url = ?", url).First(&feed).Error
 	return &feed, err
 }
 
-func (self *DbDispatcher) GetFeedItemByGuid(f_id int, guid string) (*FeedItem, error) {
+func (self *DBHandle) GetFeedItemByGuid(f_id int, guid string) (*FeedItem, error) {
 	//TODO: see if beedb will handle this correctly and protect against injection
 	//attacks.
 	fi := FeedItem{}
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
-	err := self.Orm.Where("feed_info_id = ? AND guid = ?", f_id, guid).Find(&fi)
+	err := self.DB.Where("feed_info_id = ? AND guid = ?", f_id, guid).First(&fi).Error
 	return &fi, err
 }
 
-func (self *DbDispatcher) RecordGuid(feed_id int, guid string) (err error) {
+func (self *DBHandle) RecordGuid(feed_id int, guid string) (err error) {
 	if self.writeUpdates {
 		glog.Infof("Adding GUID '%s' for feed %d", guid, feed_id)
 		f := FeedItem{
@@ -290,19 +267,19 @@ func (self *DbDispatcher) RecordGuid(feed_id int, guid string) (err error) {
 		self.syncMutex.Lock()
 		defer self.syncMutex.Unlock()
 
-		return self.Orm.Save(&f)
+		return self.DB.Save(&f).Error
 	}
 	return nil
 }
 
 // Retrieves the most recent GUIDs for a given feed up to max.  GUIDs are
 // returned ordered with the most recent first.
-func (self *DbDispatcher) GetMostRecentGuidsForFeed(f_id int, max int) ([]string, error) {
+func (self *DBHandle) GetMostRecentGuidsForFeed(f_id int, max int) ([]string, error) {
 	var items []FeedItem
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 
-	err := self.Orm.Where("feed_info_id=?", f_id).GroupBy("guid").OrderBy("added_on DESC").Limit(max).FindAll(&items)
+	err := self.DB.Where("feed_info_id=?", f_id).Group("guid").Order("added_on DESC").Limit(max).Find(&items).Error
 	if err != nil {
 		return []string{}, err
 	}
@@ -314,14 +291,14 @@ func (self *DbDispatcher) GetMostRecentGuidsForFeed(f_id int, max int) ([]string
 	return known_guids, nil
 }
 
-func (self *DbDispatcher) UpdateFeed(f *FeedInfo) error {
+func (self *DBHandle) UpdateFeed(f *FeedInfo) error {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 
-	return self.Orm.Save(f)
+	return self.DB.Save(f).Error
 }
 
-func (self *DbDispatcher) AddUser(name string, email string, pass string) (*User, error) {
+func (self *DBHandle) AddUser(name string, email string, pass string) (*User, error) {
 	if name == "" || email == "" || pass == "" {
 		return nil, errors.New("name, email or pass can't be empty.")
 	}
@@ -343,64 +320,64 @@ func (self *DbDispatcher) AddUser(name string, email string, pass string) (*User
 		Enabled:  true,
 		Password: string(bcrypt_password[:]),
 	}
-	err = self.Orm.Save(u)
+	err = self.DB.Save(u).Error
 	return u, err
 }
 
-func (self *DbDispatcher) SaveUser(u *User) error {
+func (self *DBHandle) SaveUser(u *User) error {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
-	return self.Orm.Save(u)
+	return self.DB.Save(u).Error
 }
 
-func (self *DbDispatcher) SaveFeed(f *FeedInfo) error {
+func (self *DBHandle) SaveFeed(f *FeedInfo) error {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
-	return self.Orm.Save(f)
+	return self.DB.Save(f).Error
 }
 
-func (self *DbDispatcher) GetUser(name string) (*User, error) {
+func (self *DBHandle) GetUser(name string) (*User, error) {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 	u := &User{}
-	err := self.Orm.Where("name = ?", name).Find(u)
+	err := self.DB.Where("name = ?", name).First(u).Error
 
 	return u, err
 }
-func (self *DbDispatcher) GetUserById(id int) (*User, error) {
+func (self *DBHandle) GetUserById(id int) (*User, error) {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 	u := &User{}
-	err := self.Orm.Where(id).Find(u)
+	err := self.DB.First(u, id).Error
 
 	return u, err
 }
 
-func (self *DbDispatcher) GetUserByEmail(name string) (*User, error) {
+func (self *DBHandle) GetUserByEmail(name string) (*User, error) {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 	return self.unsafeGetUserByEmail(name)
 }
-func (self *DbDispatcher) unsafeGetUserByEmail(name string) (*User, error) {
+func (self *DBHandle) unsafeGetUserByEmail(name string) (*User, error) {
 	u := &User{}
-	err := self.Orm.Where("email = ?", name).Find(u)
+	err := self.DB.Where("email = ?", name).Find(u).Error
 	return u, err
 }
 
-func (self *DbDispatcher) RemoveUser(user *User) error {
+func (self *DBHandle) RemoveUser(user *User) error {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 	return self.unsafeRemoveUser(user)
 }
-func (self *DbDispatcher) unsafeRemoveUser(user *User) error {
-	_, err := self.Orm.Delete(user)
+func (self *DBHandle) unsafeRemoveUser(user *User) error {
+	err := self.DB.Delete(user).Error
 	if err == nil {
-		_, err = self.Orm.SetTable("user_feed").Where("user_id = ?", user.Id).DeleteRow()
+		err = self.DB.Where("user_id = ?", user.Id).Delete(UserFeed{}).Error
 	}
 	return err
 }
 
-func (self *DbDispatcher) RemoveUserByEmail(email string) error {
+func (self *DBHandle) RemoveUserByEmail(email string) error {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 
@@ -412,7 +389,7 @@ func (self *DbDispatcher) RemoveUserByEmail(email string) error {
 	return self.unsafeRemoveUser(u)
 }
 
-func (self *DbDispatcher) AddFeedsToUser(u *User, feeds []*FeedInfo) error {
+func (self *DBHandle) AddFeedsToUser(u *User, feeds []*FeedInfo) error {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 
@@ -421,7 +398,7 @@ func (self *DbDispatcher) AddFeedsToUser(u *User, feeds []*FeedInfo) error {
 			UserId: u.Id,
 			FeedId: f.Id,
 		}
-		err := self.Orm.Save(uf)
+		err := self.DB.Save(uf).Error
 		if err != nil {
 			return err
 		}
@@ -429,14 +406,12 @@ func (self *DbDispatcher) AddFeedsToUser(u *User, feeds []*FeedInfo) error {
 	return nil
 }
 
-func (self *DbDispatcher) RemoveFeedsFromUser(u *User, feeds []*FeedInfo) error {
+func (self *DBHandle) RemoveFeedsFromUser(u *User, feeds []*FeedInfo) error {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 
 	for _, f := range feeds {
-		_, err := self.Orm.SetTable("user_feed").
-			Where("feed_id = ? and user_id = ?", f.Id, u.Id).
-			DeleteRow()
+		err := self.DB.Where("feed_id = ? and user_id = ?", f.Id, u.Id).Delete(UserFeed{}).Error
 		if err != nil {
 			return err
 		}
@@ -444,30 +419,41 @@ func (self *DbDispatcher) RemoveFeedsFromUser(u *User, feeds []*FeedInfo) error 
 	return nil
 }
 
-func (self *DbDispatcher) GetAllUsers() ([]User, error) {
+func (self *DBHandle) GetAllUsers() ([]User, error) {
 	var all []User
-	err := self.Orm.FindAll(&all)
+	err := self.DB.Find(&all).Error
 	return all, err
 }
 
-func (self *DbDispatcher) GetUsersFeeds(u *User) ([]FeedInfo, error) {
+func (self *DBHandle) GetUsersFeeds(u *User) ([]FeedInfo, error) {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 
-	var all []FeedInfo
+	var feed_infos []FeedInfo
 
-	err := self.Orm.SetTable("feed_info").
-		Join("INNER", "user_feed", "feed_info.id=user_feed.feed_id").
+	err := self.DB.Table("feed_info").
 		Select("feed_info.id,feed_info.name,feed_info.url").
+		Joins("INNER join user_feed on user_feed.feed_id = feed_info.id").
 		Where("user_feed.user_id = ?", u.Id).
-		OrderBy("feed_info.name").
-		GroupBy("feed_info.id").
-		FindAll(&all)
-
-	return all, err
+		Order("feed_info.name").
+		Group("feed_info.id").
+		Scan(&feed_infos).Error
+	if err == gorm.RecordNotFound {
+		err = nil
+	}
+	/*
+		err := self.Orm.SetTable("feed_info").
+			Join("INNER", "user_feed", "feed_info.id=user_feed.feed_id").
+			Select("feed_info.id,feed_info.name,feed_info.url").
+			Where("user_feed.user_id = ?", u.Id).
+			OrderBy("feed_info.name").
+			GroupBy("feed_info.id").
+			FindAll(&all)
+	*/
+	return feed_infos, err
 }
 
-func (self *DbDispatcher) UpdateUsersFeeds(u *User, feed_ids []int) error {
+func (self *DBHandle) UpdateUsersFeeds(u *User, feed_ids []int) error {
 	feeds, err := self.GetUsersFeeds(u)
 	if err != nil {
 		return err
@@ -513,17 +499,23 @@ func (self *DbDispatcher) UpdateUsersFeeds(u *User, feed_ids []int) error {
 	return nil
 }
 
-func (self *DbDispatcher) GetFeedUsers(f_url string) ([]User, error) {
+func (self *DBHandle) GetFeedUsers(f_url string) ([]User, error) {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
-
 	var all []User
-	err := self.Orm.SetTable("user").
-		Join("INNER", "user_feed", "user.id=user_feed.user_id").
-		Join("INNER", "feed_info", "feed_info.id=user_feed.feed_id").
+	err := self.DB.Table("user").
+		Select("user.id,user.name,user.email,user.enabled").
+		Joins("inner join user_feed on user.id=user_feed.user_id inner join feed_info on feed_info.id=user_feed.feed_id").
 		Where("feed_info.url = ?", f_url).
-		GroupBy("user.id").
-		Select("user.id,user.name,user.email,user.enabled").FindAll(&all)
-
+		Group("user.id").
+		Find(&all).Error
+	/*
+		err := self.Orm.SetTable("user").
+			Join("INNER", "user_feed", "user.id=user_feed.user_id").
+			Join("INNER", "feed_info", "feed_info.id=user_feed.feed_id").
+			Where("feed_info.url = ?", f_url).
+			GroupBy("user.id").
+			Select("user.id,user.name,user.email,user.enabled").FindAll(&all)
+	*/
 	return all, err
 }
