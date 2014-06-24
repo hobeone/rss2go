@@ -3,6 +3,7 @@ package db
 import (
 	"testing"
 	"time"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -245,7 +246,7 @@ func TestUpdateUsersFeeds(t *testing.T) {
 	d := NewMemoryDBHandle(true, true)
 	feeds, users := loadFixtures(t, d)
 
-	err := d.UpdateUsersFeeds(users[0], []int{})
+	err := d.UpdateUsersFeeds(users[0], []int64{})
 	if err != nil {
 		t.Fatalf("Error updating user feeds: %s", err)
 	}
@@ -254,7 +255,7 @@ func TestUpdateUsersFeeds(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, len(new_feeds), 0)
 
-	feed_ids := make([]int, len(feeds))
+	feed_ids := make([]int64, len(feeds))
 	for i := range feeds {
 		feed_ids[i] = feeds[i].Id
 	}

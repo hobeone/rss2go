@@ -117,7 +117,7 @@ func (c *Config) ReadConfig(configPath string) error {
 		extra := ""
 		if serr, ok := err.(*json.SyntaxError); ok {
 			if _, serr := f.Seek(0, os.SEEK_SET); serr != nil {
-				fmt.Println("seek error: %v", serr)
+				fmt.Printf("seek error: %v\n", serr)
 			}
 			line, col, highlight := highlightBytePosition(f, serr.Offset)
 			extra = fmt.Sprintf(":\nError at line %d, column %d (file offset %d):\n%s",

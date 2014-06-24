@@ -78,8 +78,8 @@ func TestSendToUsers(t *testing.T) {
 
 func TestLocalMTASender(t *testing.T) {
 	msg := &gophermail.Message{
-		From:    mail.Address{"", "from@example.com"},
-		To:      []mail.Address{mail.Address{"", "to@example.com"}},
+		From:    mail.Address{Address: "from@example.com"},
+		To:      []mail.Address{mail.Address{Address: "to@example.com"}},
 		Subject: "Testing subject",
 		Body:    "Test Body",
 	}

@@ -36,7 +36,7 @@ var authenticateUser = func(res http.ResponseWriter, req *http.Request, dbh *db.
 	if len(auth_header) > 1 {
 		dec_string, err := base64.StdEncoding.DecodeString(auth_header[1])
 		if err != nil {
-			glog.Errorf("Error decoding string: ", err)
+			glog.Errorf("Error decoding string: %s", err)
 			failAuth(res)
 			return
 		}
@@ -67,13 +67,13 @@ func UserAuth() martini.Handler {
 	return authenticateUser
 }
 
-func parseParamIds(str_ids []string) ([]int, error) {
+func parseParamIds(str_ids []string) ([]int64, error) {
 	if len(str_ids) == 0 {
 		return nil, errors.New("No ids given")
 	}
-	int_ids := make([]int, len(str_ids))
+	int_ids := make([]int64, len(str_ids))
 	for i, str_id := range str_ids {
-		int_id, err := strconv.Atoi(str_id)
+		int_id, err := strconv.ParseInt(str_id, 10, 64)
 		if err != nil {
 			return nil, fmt.Errorf("Error parsing feed id: %s", err)
 		}

@@ -66,7 +66,7 @@ func getFeeds(rend render.Render, r *http.Request, params martini.Params, dbh *d
 }
 
 func getFeed(rend render.Render, dbh *db.DBHandle, params martini.Params) {
-	feed_id, err := strconv.Atoi(params["id"])
+	feed_id, err := strconv.ParseInt(params["id"], 10, 64)
 	if err != nil {
 		rend.JSON(500, err.Error())
 		return
@@ -108,7 +108,7 @@ func addFeed(rend render.Render, req *http.Request, w http.ResponseWriter, dbh *
 }
 
 func deleteFeed(rend render.Render, params martini.Params, dbh *db.DBHandle) {
-	feed_id, err := strconv.Atoi(params["id"])
+	feed_id, err := strconv.ParseInt(params["id"], 10, 64)
 	if err != nil {
 		rend.JSON(500, err.Error())
 		return
@@ -130,7 +130,7 @@ func deleteFeed(rend render.Render, params martini.Params, dbh *db.DBHandle) {
 }
 
 func updateFeed(rend render.Render, req *http.Request, dbh *db.DBHandle, params martini.Params, f FeedJSON) {
-	feed_id, err := strconv.Atoi(params["id"])
+	feed_id, err := strconv.ParseInt(params["id"], 10, 64)
 	if err != nil {
 		rend.JSON(500, err.Error())
 		return

@@ -15,7 +15,7 @@ import (
 )
 
 type FeedInfo struct {
-	Id            int       `json:"id"`
+	Id            int64     `json:"id"`
 	Name          string    `sql:"not null;unique" json:"name" binding:"required"`
 	Url           string    `sql:"not null;unique" json:"url" binding:"required"`
 	LastPollTime  time.Time `json:"lastPollTime"`
@@ -23,59 +23,25 @@ type FeedInfo struct {
 }
 
 type FeedItem struct {
-	Id         int
-	FeedInfoId int
-	Guid       string
-	AddedOn    time.Time
+	Id         int64
+	FeedInfoId int64     `sql:"not null"`
+	Guid       string    `sql:"not null"`
+	AddedOn    time.Time `sql:"not null"`
 }
 
 type User struct {
-	Id       int    `json:"id"`
-	Name     string `sql:"not null;unique" json:"name"`
-	Email    string `sql:"not null;unique" json:"email"`
+	Id       int64  `json:"id"`
+	Name     string `sql:"size:255;not null;unique" json:"name"`
+	Email    string `sql:"size:255;not null;unique" json:"email"`
 	Enabled  bool   `json:"enabled"`
 	Password string `json:"-"`
 }
 
 type UserFeed struct {
-	Id     int
-	UserId int
-	FeedId int
+	Id     int64
+	UserId int64 `sql:"not null"`
+	FeedId int64 `sql:"not null"`
 }
-
-const FEED_INFO_TABLE = `
-	create table feed_info (
-		id integer not null primary key,
-		name text not null UNIQUE,
-		url text not null UNIQUE,
-		last_poll_time DATE NULL,
-		last_poll_error text NULL
-	);
-`
-const FEED_ITEM_TABLE = `
-	create table feed_item (
-		id integer not null primary key,
-		feed_info_id integer not null,
-		guid text not null,
-		added_on DATE not NULL
-	);
-`
-const USER_TABLE = `
-  create table user (
-		id integer not null primary key,
-		name text not null UNIQUE,
-		email text not null UNIQUE,
-		enabled bool not null,
-		password text not null
-	);
-`
-const USER_FEED_TABLE = `
-  create table user_feed (
-		id integer not null primary key,
-		user_id integer not null,
-		feed_id integer not null
-	);
-`
 
 type DBHandle struct {
 	DB           gorm.DB
@@ -226,7 +192,7 @@ func (self *DBHandle) GetStaleFeeds() ([]FeedInfo, error) {
 	return res, nil
 }
 
-func (self *DBHandle) GetFeedById(id int) (*FeedInfo, error) {
+func (self *DBHandle) GetFeedById(id int64) (*FeedInfo, error) {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 	feed_info := &FeedInfo{}
@@ -246,7 +212,7 @@ func (self *DBHandle) unsafeGetFeedByUrl(url string) (*FeedInfo, error) {
 	return &feed, err
 }
 
-func (self *DBHandle) GetFeedItemByGuid(f_id int, guid string) (*FeedItem, error) {
+func (self *DBHandle) GetFeedItemByGuid(f_id int64, guid string) (*FeedItem, error) {
 	//TODO: see if beedb will handle this correctly and protect against injection
 	//attacks.
 	fi := FeedItem{}
@@ -256,7 +222,7 @@ func (self *DBHandle) GetFeedItemByGuid(f_id int, guid string) (*FeedItem, error
 	return &fi, err
 }
 
-func (self *DBHandle) RecordGuid(feed_id int, guid string) (err error) {
+func (self *DBHandle) RecordGuid(feed_id int64, guid string) (err error) {
 	if self.writeUpdates {
 		glog.Infof("Adding GUID '%s' for feed %d", guid, feed_id)
 		f := FeedItem{
@@ -274,7 +240,7 @@ func (self *DBHandle) RecordGuid(feed_id int, guid string) (err error) {
 
 // Retrieves the most recent GUIDs for a given feed up to max.  GUIDs are
 // returned ordered with the most recent first.
-func (self *DBHandle) GetMostRecentGuidsForFeed(f_id int, max int) ([]string, error) {
+func (self *DBHandle) GetMostRecentGuidsForFeed(f_id int64, max int) ([]string, error) {
 	var items []FeedItem
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
@@ -352,7 +318,7 @@ func (self *DBHandle) GetUser(name string) (*User, error) {
 
 	return u, err
 }
-func (self *DBHandle) GetUserById(id int) (*User, error) {
+func (self *DBHandle) GetUserById(id int64) (*User, error) {
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 	u := &User{}
@@ -461,14 +427,14 @@ func (self *DBHandle) GetUsersFeeds(u *User) ([]FeedInfo, error) {
 	return feed_infos, err
 }
 
-func (self *DBHandle) UpdateUsersFeeds(u *User, feed_ids []int) error {
+func (self *DBHandle) UpdateUsersFeeds(u *User, feed_ids []int64) error {
 	feeds, err := self.GetUsersFeeds(u)
 	if err != nil {
 		return err
 	}
 
-	existing_feed_ids := make(map[int]*FeedInfo, len(feeds))
-	new_feed_ids := make(map[int]*FeedInfo, len(feed_ids))
+	existing_feed_ids := make(map[int64]*FeedInfo, len(feeds))
+	new_feed_ids := make(map[int64]*FeedInfo, len(feed_ids))
 
 	for i := range feeds {
 		existing_feed_ids[feeds[i].Id] = &feeds[i]

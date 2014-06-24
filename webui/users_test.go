@@ -206,7 +206,7 @@ func TestAddUser(t *testing.T) {
 			Name:     "test1",
 			Email:    "test1_changed@example.com",
 			Password: "123",
-			Feeds:    []int{},
+			Feeds:    []int64{},
 		},
 	}
 	encoded, err := json.Marshal(u)

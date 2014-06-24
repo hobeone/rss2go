@@ -191,8 +191,10 @@ func (self *MailDispatcher) sendToUsers(m *feed.Story) error {
 func CreateMailFromItem(from string, to string, item *feed.Story) *gophermail.Message {
 	content := FormatMessageBody(item)
 	msg := &gophermail.Message{
-		From:     mail.Address{"", from},
-		To:       []mail.Address{mail.Address{"", to}},
+		From: mail.Address{
+			Address: from,
+		},
+		To:       []mail.Address{mail.Address{Address: to}},
 		Subject:  item.Title,
 		Body:     content, //TODO Convert to plain text
 		HTMLBody: content,

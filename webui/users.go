@@ -3,16 +3,17 @@ package webui
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"strconv"
+
 	"github.com/codegangsta/martini"
 	"github.com/hobeone/rss2go/db"
 	"github.com/martini-contrib/render"
-	"net/http"
-	"strconv"
 )
 
 type userWithFeeds struct {
 	db.User
-	FeedIds []int `json:"feeds"`
+	FeedIds []int64 `json:"feeds"`
 }
 
 type UserJSON struct {
@@ -24,7 +25,7 @@ type UsersJSON struct {
 }
 
 func getUser(rend render.Render, params martini.Params, dbh *db.DBHandle) {
-	user_id, err := strconv.Atoi(params["id"])
+	user_id, err := strconv.ParseInt(params["id"], 10, 64)
 	if err != nil {
 		rend.JSON(500, err.Error())
 		return
@@ -42,7 +43,7 @@ func getUser(rend render.Render, params martini.Params, dbh *db.DBHandle) {
 		return
 	}
 
-	feed_ids := make([]int, len(feeds))
+	feed_ids := make([]int64, len(feeds))
 	for i, f := range feeds {
 		feed_ids[i] = f.Id
 	}
@@ -97,7 +98,7 @@ func getUsers(rend render.Render, req *http.Request, dbh *db.DBHandle) {
 			return
 		}
 
-		feed_ids := make([]int, len(feeds))
+		feed_ids := make([]int64, len(feeds))
 		for i, f := range feeds {
 			feed_ids[i] = f.Id
 		}
@@ -110,19 +111,19 @@ func getUsers(rend render.Render, req *http.Request, dbh *db.DBHandle) {
 }
 
 type unmarshalUserJSON struct {
-	Id       int    `json:"id"`
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Enabled  *bool  `json:"enabled"`
-	Password string `json:"password"`
-	Feeds    []int  `json:"feeds"`
+	Id       int     `json:"id"`
+	Name     string  `json:"name"`
+	Email    string  `json:"email"`
+	Enabled  *bool   `json:"enabled"`
+	Password string  `json:"password"`
+	Feeds    []int64 `json:"feeds"`
 }
 type unmarshalUserJSONContainer struct {
 	User unmarshalUserJSON `json:"user"`
 }
 
 func updateUser(rend render.Render, req *http.Request, dbh *db.DBHandle, params martini.Params) {
-	user_id, err := strconv.Atoi(params["id"])
+	user_id, err := strconv.ParseInt(params["id"], 10, 64)
 	if err != nil {
 		rend.JSON(500, err.Error())
 		return
@@ -186,13 +187,13 @@ func addUser(req *http.Request, w http.ResponseWriter, dbh *db.DBHandle, rend re
 	rend.JSON(http.StatusCreated, UserJSON{
 		User: userWithFeeds{
 			*db_user,
-			[]int{},
+			[]int64{},
 		},
 	})
 }
 
 func deleteUser(rend render.Render, params martini.Params, dbh *db.DBHandle) {
-	user_id, err := strconv.Atoi(params["id"])
+	user_id, err := strconv.ParseInt(params["id"], 10, 64)
 	if err != nil {
 		rend.JSON(500, err.Error())
 		return
