@@ -38,16 +38,16 @@ type Daemon struct {
 	RespChan  chan *feed_watcher.FeedCrawlResponse
 	MailChan  chan *mail.MailRequest
 	Feeds     map[string]*feed_watcher.FeedWatcher
-	Dbh       *db.DbDispatcher
+	Dbh       *db.DBHandle
 	PollFeeds bool
 }
 
 func NewDaemon(cfg *config.Config) *Daemon {
-	var dbh *db.DbDispatcher
+	var dbh *db.DBHandle
 	if cfg.Db.Type == "memory" {
-		dbh = db.NewMemoryDbDispatcher(cfg.Db.Verbose, cfg.Db.UpdateDb)
+		dbh = db.NewMemoryDBHandle(cfg.Db.Verbose, cfg.Db.UpdateDb)
 	} else {
-		dbh = db.NewDbDispatcher(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
+		dbh = db.NewDBHandle(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 	}
 	cc := make(chan *feed_watcher.FeedCrawlRequest)
 	rc := make(chan *feed_watcher.FeedCrawlResponse)

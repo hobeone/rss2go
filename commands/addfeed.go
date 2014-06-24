@@ -45,7 +45,7 @@ func addFeed(cmd *flagutil.Command, args []string) {
 	cfg.Mail.SendMail = false
 	cfg.Db.UpdateDb = true
 
-	dbh := db.NewDbDispatcher(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
+	dbh := db.NewDBHandle(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 
 	mailer := mail.CreateAndStartMailer(dbh, cfg)
 

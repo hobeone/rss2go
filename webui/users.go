@@ -23,7 +23,7 @@ type UsersJSON struct {
 	Users []userWithFeeds `json:"users"`
 }
 
-func getUser(rend render.Render, params martini.Params, dbh *db.DbDispatcher) {
+func getUser(rend render.Render, params martini.Params, dbh *db.DBHandle) {
 	user_id, err := strconv.Atoi(params["id"])
 	if err != nil {
 		rend.JSON(500, err.Error())
@@ -54,7 +54,7 @@ func getUser(rend render.Render, params martini.Params, dbh *db.DbDispatcher) {
 	})
 }
 
-func getUsers(rend render.Render, req *http.Request, dbh *db.DbDispatcher) {
+func getUsers(rend render.Render, req *http.Request, dbh *db.DBHandle) {
 	err := req.ParseForm()
 	if err != nil {
 		rend.JSON(500, err.Error())
@@ -121,7 +121,7 @@ type unmarshalUserJSONContainer struct {
 	User unmarshalUserJSON `json:"user"`
 }
 
-func updateUser(rend render.Render, req *http.Request, dbh *db.DbDispatcher, params martini.Params) {
+func updateUser(rend render.Render, req *http.Request, dbh *db.DBHandle, params martini.Params) {
 	user_id, err := strconv.Atoi(params["id"])
 	if err != nil {
 		rend.JSON(500, err.Error())
@@ -161,7 +161,7 @@ func updateUser(rend render.Render, req *http.Request, dbh *db.DbDispatcher, par
 	dbh.UpdateUsersFeeds(dbuser, u.User.Feeds)
 }
 
-func addUser(req *http.Request, w http.ResponseWriter, dbh *db.DbDispatcher, rend render.Render) {
+func addUser(req *http.Request, w http.ResponseWriter, dbh *db.DBHandle, rend render.Render) {
 	err := req.ParseForm()
 	if err != nil {
 		rend.JSON(500, err.Error())
@@ -191,7 +191,7 @@ func addUser(req *http.Request, w http.ResponseWriter, dbh *db.DbDispatcher, ren
 	})
 }
 
-func deleteUser(rend render.Render, params martini.Params, dbh *db.DbDispatcher) {
+func deleteUser(rend render.Render, params martini.Params, dbh *db.DBHandle) {
 	user_id, err := strconv.Atoi(params["id"])
 	if err != nil {
 		rend.JSON(500, err.Error())

@@ -47,7 +47,7 @@ func runOne(cmd *flagutil.Command, args []string) {
 	// Override config settings from flags:
 	cfg.Mail.SendMail = send_mail
 	cfg.Db.UpdateDb = update_db
-	dbh := db.NewDbDispatcher(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
+	dbh := db.NewDBHandle(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 
 	mailer := mail.CreateAndStartMailer(dbh, cfg)
 

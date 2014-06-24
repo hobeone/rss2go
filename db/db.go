@@ -279,7 +279,15 @@ func (self *DBHandle) GetMostRecentGuidsForFeed(f_id int, max int) ([]string, er
 	self.syncMutex.Lock()
 	defer self.syncMutex.Unlock()
 
-	err := self.DB.Where("feed_info_id=?", f_id).Group("guid").Order("added_on DESC").Limit(max).Find(&items).Error
+	err := self.DB.Where("feed_info_id=?", f_id).
+		Group("guid").
+		Order("added_on DESC").
+		Limit(max).
+		Find(&items).Error
+
+	if err == gorm.RecordNotFound {
+		err = nil
+	}
 	if err != nil {
 		return []string{}, err
 	}
@@ -504,11 +512,13 @@ func (self *DBHandle) GetFeedUsers(f_url string) ([]User, error) {
 	defer self.syncMutex.Unlock()
 	var all []User
 	err := self.DB.Table("user").
-		Select("user.id,user.name,user.email,user.enabled").
+		Select("user.id, user.name, user.email, user.enabled").
 		Joins("inner join user_feed on user.id=user_feed.user_id inner join feed_info on feed_info.id=user_feed.feed_id").
 		Where("feed_info.url = ?", f_url).
-		Group("user.id").
-		Find(&all).Error
+		Group("user.id").Scan(&all).Error
+	if err == gorm.RecordNotFound {
+		err = nil
+	}
 	/*
 		err := self.Orm.SetTable("user").
 			Join("INNER", "user_feed", "user.id=user_feed.user_id").

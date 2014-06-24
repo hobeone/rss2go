@@ -97,7 +97,7 @@ const testAllUsersGoldenResponse = `{
 
 func TestGetAllUsers(t *testing.T) {
 	dbh, m := setupTest(t)
-	loadFixtures(dbh)
+	loadFixtures(t, dbh)
 
 	response := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/1/users", nil)
@@ -143,7 +143,7 @@ const getSomeUsersGoldenResponse = `{
 
 func TestGetSomeUsers(t *testing.T) {
 	dbh, m := setupTest(t)
-	loadFixtures(dbh)
+	loadFixtures(t, dbh)
 
 	response := httptest.NewRecorder()
 	req, err := http.NewRequest("GET", "/api/1/users?ids[]=1&ids[]=2", nil)
@@ -167,7 +167,7 @@ const updateUserReq = `
 
 func TestUpdateUser(t *testing.T) {
 	dbh, m := setupTest(t)
-	loadFixtures(dbh)
+	loadFixtures(t, dbh)
 
 	_, err := dbh.GetUserByEmail("test1@example.com")
 	failOnError(t, err)
@@ -242,7 +242,7 @@ func TestAddUser(t *testing.T) {
 
 func TestDeleteUser(t *testing.T) {
 	dbh, m := setupTest(t)
-	loadFixtures(dbh)
+	loadFixtures(t, dbh)
 
 	users, err := dbh.GetAllUsers()
 	failOnError(t, err)

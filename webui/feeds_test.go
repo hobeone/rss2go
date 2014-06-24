@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	//	"github.com/davecgh/go-spew/spew"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -42,7 +41,7 @@ const getAllFeedGoldenOutput = `{
 
 func TestGetAllFeeds(t *testing.T) {
 	dbh, m := setupTest(t)
-	loadFixtures(dbh)
+	loadFixtures(t, dbh)
 	response := httptest.NewRecorder()
 	req, err := http.NewRequest("GET", "/api/1/feeds", nil)
 	if err != nil {
@@ -55,7 +54,7 @@ func TestGetAllFeeds(t *testing.T) {
 		t.Fatalf("Expected 200 response code, got %d", response.Code)
 	}
 	if response.Body.String() != getAllFeedGoldenOutput {
-		t.Fatalf("Response didn't match golden response: %s", response.Body.String())
+		t.Fatalf("Response didn't match golden response:\n%s\n---vs---\n%s", response.Body.String(), getAllFeedGoldenOutput)
 	}
 }
 
@@ -80,7 +79,7 @@ const getSomeFeedsGoldenResponse = `{
 
 func TestGetSomeFeeds(t *testing.T) {
 	dbh, m := setupTest(t)
-	loadFixtures(dbh)
+	loadFixtures(t, dbh)
 	response := httptest.NewRecorder()
 	req, err := http.NewRequest("GET", "/api/1/feeds?ids[]=1&ids[]=2", nil)
 	assert.Nil(t, err)
@@ -189,7 +188,7 @@ const getFeedGoldenOutput = `{
 
 func TestGetFeed(t *testing.T) {
 	dbh, m := setupTest(t)
-	loadFixtures(dbh)
+	loadFixtures(t, dbh)
 	dbfeeds, err := dbh.GetAllFeeds()
 	failOnError(t, err)
 
@@ -214,7 +213,7 @@ func TestGetFeed(t *testing.T) {
 
 func TestDeleteFeed(t *testing.T) {
 	dbh, m := setupTest(t)
-	loadFixtures(dbh)
+	loadFixtures(t, dbh)
 
 	feeds, err := dbh.GetAllFeeds()
 	failOnError(t, err)

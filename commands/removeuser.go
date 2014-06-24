@@ -10,7 +10,7 @@ import (
 
 type RemoveUserCommand struct {
 	Config *config.Config
-	Dbh    *db.DbDispatcher
+	Dbh    *db.DBHandle
 }
 
 func MakeCmdRemoveUser() *flagutil.Command {
@@ -44,11 +44,11 @@ func runRemoveUser(cmd *flagutil.Command, args []string) {
 }
 
 func NewRemoveUserCommand(cfg *config.Config) *RemoveUserCommand {
-	var dbh *db.DbDispatcher
+	var dbh *db.DBHandle
 	if cfg.Db.Type == "memory" {
-		dbh = db.NewMemoryDbDispatcher(cfg.Db.Verbose, cfg.Db.UpdateDb)
+		dbh = db.NewMemoryDBHandle(cfg.Db.Verbose, cfg.Db.UpdateDb)
 	} else {
-		dbh = db.NewDbDispatcher(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
+		dbh = db.NewDBHandle(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 	}
 
 	return &RemoveUserCommand{

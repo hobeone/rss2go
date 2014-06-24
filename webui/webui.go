@@ -1,21 +1,21 @@
 package webui
 
 import (
-	"code.google.com/p/go.crypto/bcrypt"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+
+	"code.google.com/p/go.crypto/bcrypt"
 	"github.com/codegangsta/martini"
-	"github.com/martini-contrib/binding"
-	//"github.com/davecgh/go-spew/spew"
 	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
+	"github.com/martini-contrib/binding"
 	"github.com/martini-contrib/render"
-	"net/http"
-	"strconv"
-	"strings"
 )
 
 func failAuth(w http.ResponseWriter) {
@@ -25,7 +25,7 @@ func failAuth(w http.ResponseWriter) {
 	fmt.Fprintln(w, "Not Authorized")
 }
 
-var authenticateUser = func(res http.ResponseWriter, req *http.Request, dbh *db.DbDispatcher) {
+var authenticateUser = func(res http.ResponseWriter, req *http.Request, dbh *db.DBHandle) {
 	auth_header := strings.SplitAfterN(
 		strings.TrimSpace(
 			req.Header.Get("Authorization"),
@@ -82,7 +82,7 @@ func parseParamIds(str_ids []string) ([]int, error) {
 	return int_ids, nil
 }
 
-func createMartini(dbh *db.DbDispatcher, feeds map[string]*feed_watcher.FeedWatcher) *martini.Martini {
+func createMartini(dbh *db.DBHandle, feeds map[string]*feed_watcher.FeedWatcher) *martini.Martini {
 	m := martini.New()
 	m.Use(martini.Logger())
 	m.Use(
@@ -144,7 +144,7 @@ func send200() int {
 	return http.StatusOK
 }
 
-func RunWebUi(config *config.Config, dbh *db.DbDispatcher, feeds map[string]*feed_watcher.FeedWatcher) {
+func RunWebUi(config *config.Config, dbh *db.DBHandle, feeds map[string]*feed_watcher.FeedWatcher) {
 	if config.WebServer.EnableAPI {
 		m := createMartini(dbh, feeds)
 		glog.Fatal(http.ListenAndServe(config.WebServer.ListenAddress, m))

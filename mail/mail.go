@@ -100,12 +100,12 @@ func NewSMTPSender(server string, username string, password string) MailSender {
 
 type MailDispatcher struct {
 	OutgoingMail chan *MailRequest
-	Dbh          *db.DbDispatcher
+	Dbh          *db.DBHandle
 	FromAddress  string
 	MailSender   MailSender
 }
 
-func NewMailDispatcher(dbh *db.DbDispatcher, from_address string, sender MailSender) *MailDispatcher {
+func NewMailDispatcher(dbh *db.DBHandle, from_address string, sender MailSender) *MailDispatcher {
 	return &MailDispatcher{
 		OutgoingMail: make(chan *MailRequest),
 		Dbh:          dbh,
@@ -121,7 +121,7 @@ func (self *NullMailSender) SendMail(m *gophermail.Message) error {
 	return nil
 }
 
-func CreateAndStartMailer(dbh *db.DbDispatcher, config *config.Config) *MailDispatcher {
+func CreateAndStartMailer(dbh *db.DBHandle, config *config.Config) *MailDispatcher {
 	// Create mail sender
 	var sender MailSender
 
@@ -150,7 +150,7 @@ func CreateAndStartMailer(dbh *db.DbDispatcher, config *config.Config) *MailDisp
 func CreateAndStartStubMailer() *MailDispatcher {
 	// Start Mailer
 	mailer := NewMailDispatcher(
-		db.NewMemoryDbDispatcher(false, false),
+		db.NewMemoryDBHandle(false, false),
 		"from@example.com",
 		&NullMailSender{},
 	)
@@ -165,7 +165,7 @@ func (self *MailDispatcher) DispatchLoop() {
 	}
 }
 
-func (self *MailDispatcher) getUsersForFeed(feed_url string) (u []db.User, err error) {
+func (self *MailDispatcher) getUsersForFeed(feed_url string) ([]db.User, error) {
 	return self.Dbh.GetFeedUsers(feed_url)
 }
 

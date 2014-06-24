@@ -2,18 +2,20 @@ package webui
 
 import (
 	"fmt"
-	"github.com/codegangsta/martini"
-	"github.com/hobeone/rss2go/db"
-	"github.com/hobeone/rss2go/feed_watcher"
 	"net/http"
 	"runtime/debug"
 	"testing"
+
+	"github.com/codegangsta/martini"
+	"github.com/hobeone/rss2go/db"
+	"github.com/hobeone/rss2go/feed_watcher"
+	"github.com/stretchr/testify/assert"
 )
 
-func setupTest(t *testing.T) (*db.DbDispatcher, *martini.Martini) {
+func setupTest(t *testing.T) (*db.DBHandle, *martini.Martini) {
 	feeds := make(map[string]*feed_watcher.FeedWatcher)
-	dbh := db.NewMemoryDbDispatcher(false, true)
-	authenticateUser = func(res http.ResponseWriter, req *http.Request, dbh *db.DbDispatcher) {
+	dbh := db.NewMemoryDBHandle(false, true)
+	authenticateUser = func(res http.ResponseWriter, req *http.Request, dbh *db.DBHandle) {
 	}
 	m := createMartini(dbh, feeds)
 	return dbh, m
@@ -26,27 +28,34 @@ func failOnError(t *testing.T, err error) {
 	}
 }
 
-func loadFixtures(dbh *db.DbDispatcher) {
-	users := map[string]string{
-		"test1": "test1@example.com",
-		"test2": "test2@example.com",
-		"test3": "test3@example.com",
+func loadFixtures(t *testing.T, d *db.DBHandle) {
+	users := [][]string{
+		[]string{"test1", "test1@example.com", "pass"},
+		[]string{"test2", "test2@example.com", "pass"},
+		[]string{"test3", "test3@example.com", "pass"},
 	}
-	feeds := map[string]string{
-		"test_feed1": "http://testfeed1/feed.atom",
-		"test_feed2": "http://testfeed2/feed.atom",
-		"test_feed3": "http://testfeed3/feed.atom",
+	feeds := [][]string{
+		[]string{"test_feed1", "http://testfeed1/feed.atom"},
+		[]string{"test_feed2", "http://testfeed2/feed.atom"},
+		[]string{"test_feed3", "http://testfeed3/feed.atom"},
 	}
 	db_feeds := make([]*db.FeedInfo, len(feeds))
-	i := 0
-	for name, url := range feeds {
-		feed, _ := dbh.AddFeed(name, url)
+	for i, feed_data := range feeds {
+		feed, err := d.AddFeed(feed_data[0], feed_data[1])
+		if !assert.Nil(t, err, "Error adding feed to db") {
+			t.Fail()
+		}
 		db_feeds[i] = feed
-		i++
 	}
 
-	for name, email := range users {
-		u, _ := dbh.AddUser(name, email, "pass")
-		dbh.AddFeedsToUser(u, db_feeds)
+	db_users := make([]*db.User, len(users))
+	for i, user_data := range users {
+		u, err := d.AddUser(user_data[0], user_data[1], user_data[2])
+		assert.Nil(t, err, "Error adding user to db")
+		db_users[i] = u
+
+		err = d.AddFeedsToUser(u, db_feeds)
+		assert.Nil(t, err, "Error adding feed to user")
 	}
+	return
 }

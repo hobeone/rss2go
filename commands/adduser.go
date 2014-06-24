@@ -31,7 +31,7 @@ func MakeCmdAddUser() *flagutil.Command {
 
 type AddUserCommand struct {
 	Config *config.Config
-	Dbh    *db.DbDispatcher
+	Dbh    *db.DBHandle
 }
 
 func runAddUser(cmd *flagutil.Command, args []string) {
@@ -55,11 +55,11 @@ func runAddUser(cmd *flagutil.Command, args []string) {
 }
 
 func NewAddUserCommand(cfg *config.Config) *AddUserCommand {
-	var dbh *db.DbDispatcher
+	var dbh *db.DBHandle
 	if cfg.Db.Type == "memory" {
-		dbh = db.NewMemoryDbDispatcher(cfg.Db.Verbose, cfg.Db.UpdateDb)
+		dbh = db.NewMemoryDBHandle(cfg.Db.Verbose, cfg.Db.UpdateDb)
 	} else {
-		dbh = db.NewDbDispatcher(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
+		dbh = db.NewDBHandle(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 	}
 
 	return &AddUserCommand{

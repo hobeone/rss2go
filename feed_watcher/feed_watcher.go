@@ -18,13 +18,13 @@ package feed_watcher
 import (
 	"errors"
 	"fmt"
+	"math"
+	"math/rand"
+	"time"
 	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed"
 	"github.com/hobeone/rss2go/mail"
-	"math"
-	"math/rand"
-	"time"
 )
 
 // Allow for mocking out in test.
@@ -65,7 +65,7 @@ type FeedWatcher struct {
 	crawling          bool // make sure only one crawl outstanding at a time
 	min_sleep_time    time.Duration
 	max_sleep_time    time.Duration
-	dbh               *db.DbDispatcher
+	dbh               *db.DBHandle
 	KnownGuids        map[string]bool
 	LastCrawlResponse *FeedCrawlResponse
 }
@@ -75,7 +75,7 @@ func NewFeedWatcher(
 	crawl_chan chan *FeedCrawlRequest,
 	resp_chan chan *FeedCrawlResponse,
 	mail_chan chan *mail.MailRequest,
-	dbh *db.DbDispatcher,
+	dbh *db.DBHandle,
 	known_guids []string,
 	min_sleep int64,
 	max_sleep int64,

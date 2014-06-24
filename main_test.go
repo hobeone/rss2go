@@ -15,7 +15,7 @@ import (
 	"github.com/hobeone/rss2go/feed_watcher"
 )
 
-func MakeDbFixtures(d db.DbDispatcher, local_url string) {
+func MakeDbFixtures(d db.DBHandle, local_url string) {
 	all_feeds := []db.FeedInfo{
 		{
 			Name: "Testing1",
@@ -24,7 +24,10 @@ func MakeDbFixtures(d db.DbDispatcher, local_url string) {
 	}
 
 	for _, f := range all_feeds {
-		d.Orm.Save(&f)
+		err := d.DB.Save(&f).Error
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
@@ -58,7 +61,7 @@ func TestEndToEndIntegration(t *testing.T) {
 	cfg.Mail.SendMail = false
 
 	d := commands.NewDaemon(cfg)
-	d.Dbh = db.NewMemoryDbDispatcher(false, true)
+	d.Dbh = db.NewMemoryDBHandle(false, true)
 	MakeDbFixtures(*d.Dbh, ts.URL)
 	all_feeds, err := d.Dbh.GetAllFeeds()
 

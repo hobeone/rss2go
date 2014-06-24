@@ -1,11 +1,12 @@
 package commands
 
 import (
+	"testing"
+	"time"
+
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
-	"testing"
-	"time"
 )
 
 func TestConfigUpdater(t *testing.T) {
@@ -19,7 +20,7 @@ func TestConfigUpdater(t *testing.T) {
 	feed.Name = "Test Feed"
 	feed.Url = "https://testfeed.com/test"
 	feed.LastPollTime = time.Now()
-	err := d.Dbh.Orm.Save(&feed)
+	err := d.Dbh.DB.Save(&feed).Error
 	if err != nil {
 		t.Fatal("Error saving test feed.")
 	}

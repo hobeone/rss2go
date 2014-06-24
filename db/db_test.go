@@ -3,8 +3,6 @@ package db
 import (
 	"testing"
 	"time"
-
-	"github.com/davecgh/go-spew/spew"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -253,7 +251,6 @@ func TestUpdateUsersFeeds(t *testing.T) {
 	}
 
 	new_feeds, err := d.GetUsersFeeds(users[0])
-	spew.Dump(new_feeds)
 	assert.Nil(t, err)
 	assert.Equal(t, len(new_feeds), 0)
 

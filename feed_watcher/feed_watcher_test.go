@@ -1,12 +1,13 @@
 package feed_watcher
 
 import (
-	"github.com/hobeone/rss2go/db"
-	"github.com/hobeone/rss2go/feed"
-	"github.com/hobeone/rss2go/mail"
 	"io/ioutil"
 	"testing"
 	"time"
+
+	"github.com/hobeone/rss2go/db"
+	"github.com/hobeone/rss2go/feed"
+	"github.com/hobeone/rss2go/mail"
 )
 
 func OverrideAfter() {
@@ -15,7 +16,7 @@ func OverrideAfter() {
 	}
 }
 
-func loadTestFixtures(dbh *db.DbDispatcher) []*db.FeedInfo {
+func loadTestFixtures(dbh *db.DBHandle) []*db.FeedInfo {
 	feed, err := dbh.AddFeed("Test Feed", "https://testfeed.com/test")
 	if err != nil {
 		panic(err.Error())
@@ -31,7 +32,7 @@ func TestNewFeedWatcher(t *testing.T) {
 	crawl_chan := make(chan *FeedCrawlRequest)
 	resp_chan := make(chan *FeedCrawlResponse)
 	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
-	d := db.NewMemoryDbDispatcher(false, true)
+	d := db.NewMemoryDBHandle(false, true)
 	fixtures := loadTestFixtures(d)
 	u := *fixtures[0]
 
@@ -46,7 +47,7 @@ func TestFeedWatcherPollLocking(t *testing.T) {
 	crawl_chan := make(chan *FeedCrawlRequest)
 	resp_chan := make(chan *FeedCrawlResponse)
 	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
-	d := db.NewMemoryDbDispatcher(false, true)
+	d := db.NewMemoryDBHandle(false, true)
 	fixtures := loadTestFixtures(d)
 	u := *fixtures[0]
 
@@ -65,7 +66,7 @@ func TestFeedWatcherPolling(t *testing.T) {
 	crawl_chan := make(chan *FeedCrawlRequest)
 	resp_chan := make(chan *FeedCrawlResponse)
 	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
-	d := db.NewMemoryDbDispatcher(false, true)
+	d := db.NewMemoryDBHandle(false, true)
 	fixtures := loadTestFixtures(d)
 	u := *fixtures[0]
 	n := NewFeedWatcher(u, crawl_chan, resp_chan, mail_chan, d, make([]string, 50), 10, 100)
@@ -112,7 +113,7 @@ func TestFeedWatcherPollingRssWithNoItemDates(t *testing.T) {
 	crawl_chan := make(chan *FeedCrawlRequest)
 	resp_chan := make(chan *FeedCrawlResponse)
 	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
-	d := db.NewMemoryDbDispatcher(false, true)
+	d := db.NewMemoryDBHandle(false, true)
 	fixtures := loadTestFixtures(d)
 	feed := *fixtures[0]
 	n := NewFeedWatcher(
@@ -157,7 +158,7 @@ func TestFeedWatcherWithMalformedFeed(t *testing.T) {
 	crawl_chan := make(chan *FeedCrawlRequest)
 	resp_chan := make(chan *FeedCrawlResponse)
 	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
-	d := db.NewMemoryDbDispatcher(false, true)
+	d := db.NewMemoryDBHandle(false, true)
 	fixtures := loadTestFixtures(d)
 	u := *fixtures[0]
 
@@ -189,7 +190,7 @@ func TestFeedWatcherWithMalformedFeed(t *testing.T) {
 }
 
 func TestFeedWithBadEntity(t *testing.T) {
-	d := db.NewMemoryDbDispatcher(false, true)
+	d := db.NewMemoryDBHandle(false, true)
 	fixtures := loadTestFixtures(d)
 	u := *fixtures[0]
 
@@ -208,7 +209,7 @@ func TestFeedWatcherWithGuidsSet(t *testing.T) {
 	crawl_chan := make(chan *FeedCrawlRequest)
 	resp_chan := make(chan *FeedCrawlResponse)
 	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
-	d := db.NewMemoryDbDispatcher(false, true)
+	d := db.NewMemoryDBHandle(false, true)
 	fixtures := loadTestFixtures(d)
 	u := *fixtures[0]
 
@@ -255,7 +256,7 @@ func TestFeedWatcherWithTooRecentLastPoll(t *testing.T) {
 	crawl_chan := make(chan *FeedCrawlRequest)
 	resp_chan := make(chan *FeedCrawlResponse)
 	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
-	d := db.NewMemoryDbDispatcher(false, true)
+	d := db.NewMemoryDBHandle(false, true)
 	fixtures := loadTestFixtures(d)
 	u := *fixtures[0]
 	u.LastPollTime = time.Now()

@@ -38,7 +38,7 @@ func removeFeed(cmd *flagutil.Command, args []string) {
 	cfg.Mail.SendMail = false
 	cfg.Db.UpdateDb = true
 
-	db := db.NewDbDispatcher(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
+	db := db.NewDBHandle(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 
 	had_error := false
 	for _, feed_url := range args {

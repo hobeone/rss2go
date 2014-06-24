@@ -10,7 +10,7 @@ import (
 
 type ListUsersCommand struct {
 	Config *config.Config
-	Dbh    *db.DbDispatcher
+	Dbh    *db.DBHandle
 }
 
 func MakeCmdListUsers() *flagutil.Command {
@@ -35,11 +35,11 @@ func runListUsers(cmd *flagutil.Command, args []string) {
 }
 
 func NewListUsersCommand(cfg *config.Config) *ListUsersCommand {
-	var dbh *db.DbDispatcher
+	var dbh *db.DBHandle
 	if cfg.Db.Type == "memory" {
-		dbh = db.NewMemoryDbDispatcher(cfg.Db.Verbose, cfg.Db.UpdateDb)
+		dbh = db.NewMemoryDBHandle(cfg.Db.Verbose, cfg.Db.UpdateDb)
 	} else {
-		dbh = db.NewDbDispatcher(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
+		dbh = db.NewDBHandle(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 	}
 
 	return &ListUsersCommand{

@@ -26,7 +26,7 @@ func MakeCmdListFeeds() *flagutil.Command {
 
 func listFeed(cmd *flagutil.Command, args []string) {
 	cfg := loadConfig(cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
-	db := db.NewDbDispatcher(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
+	db := db.NewDBHandle(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 	feeds, err := db.GetAllFeeds()
 
 	if err != nil {

@@ -30,7 +30,7 @@ func TestSendToUsersWithNoMailSender(t *testing.T) {
 }
 
 func TestSendToUsers(t *testing.T) {
-	dbh := db.NewMemoryDbDispatcher(false, false)
+	dbh := db.NewMemoryDBHandle(false, false)
 	feed1, err := dbh.AddFeed("test1", "http://foo.bar/")
 	if err != nil {
 		t.Fatalf("Error creating test feed: %s", err)
