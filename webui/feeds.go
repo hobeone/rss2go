@@ -120,7 +120,7 @@ func deleteFeed(rend render.Render, params martini.Params, dbh *db.DBHandle) {
 		return
 	}
 
-	err = dbh.RemoveFeed(feed.Url, true)
+	err = dbh.RemoveFeed(feed.Url)
 	if err != nil {
 		rend.JSON(500, err.Error())
 		return

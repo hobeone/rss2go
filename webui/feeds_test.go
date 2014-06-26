@@ -17,21 +17,21 @@ const getAllFeedGoldenOutput = `{
   "feeds": [
     {
       "id": 1,
-      "name": "test_feed1",
+      "name": "testfeed1",
       "url": "http://testfeed1/feed.atom",
       "lastPollTime": "0001-01-01T00:00:00Z",
       "lastPollError": ""
     },
     {
       "id": 2,
-      "name": "test_feed2",
+      "name": "testfeed2",
       "url": "http://testfeed2/feed.atom",
       "lastPollTime": "0001-01-01T00:00:00Z",
       "lastPollError": ""
     },
     {
       "id": 3,
-      "name": "test_feed3",
+      "name": "testfeed3",
       "url": "http://testfeed3/feed.atom",
       "lastPollTime": "0001-01-01T00:00:00Z",
       "lastPollError": ""
@@ -41,8 +41,7 @@ const getAllFeedGoldenOutput = `{
 
 func TestGetAllFeeds(t *testing.T) {
 	dbh, m := setupTest(t)
-	db.LoadFixtures(dbh, t)
-	loadFixtures(t, dbh)
+	db.LoadFixtures(t, dbh)
 	response := httptest.NewRecorder()
 	req, err := http.NewRequest("GET", "/api/1/feeds", nil)
 	if err != nil {
@@ -63,14 +62,14 @@ const getSomeFeedsGoldenResponse = `{
   "feeds": [
     {
       "id": 1,
-      "name": "test_feed1",
+      "name": "testfeed1",
       "url": "http://testfeed1/feed.atom",
       "lastPollTime": "0001-01-01T00:00:00Z",
       "lastPollError": ""
     },
     {
       "id": 2,
-      "name": "test_feed2",
+      "name": "testfeed2",
       "url": "http://testfeed2/feed.atom",
       "lastPollTime": "0001-01-01T00:00:00Z",
       "lastPollError": ""
@@ -80,7 +79,7 @@ const getSomeFeedsGoldenResponse = `{
 
 func TestGetSomeFeeds(t *testing.T) {
 	dbh, m := setupTest(t)
-	loadFixtures(t, dbh)
+	db.LoadFixtures(t, dbh)
 	response := httptest.NewRecorder()
 	req, err := http.NewRequest("GET", "/api/1/feeds?ids[]=1&ids[]=2", nil)
 	assert.Nil(t, err)
@@ -180,7 +179,7 @@ func TestAddFeedWithMalformedData(t *testing.T) {
 const getFeedGoldenOutput = `{
   "feed": {
     "id": 1,
-    "name": "test_feed1",
+    "name": "testfeed1",
     "url": "http://testfeed1/feed.atom",
     "lastPollTime": "0001-01-01T00:00:00Z",
     "lastPollError": ""
@@ -189,7 +188,7 @@ const getFeedGoldenOutput = `{
 
 func TestGetFeed(t *testing.T) {
 	dbh, m := setupTest(t)
-	loadFixtures(t, dbh)
+	db.LoadFixtures(t, dbh)
 	dbfeeds, err := dbh.GetAllFeeds()
 	failOnError(t, err)
 
@@ -214,7 +213,7 @@ func TestGetFeed(t *testing.T) {
 
 func TestDeleteFeed(t *testing.T) {
 	dbh, m := setupTest(t)
-	loadFixtures(t, dbh)
+	db.LoadFixtures(t, dbh)
 
 	feeds, err := dbh.GetAllFeeds()
 	failOnError(t, err)

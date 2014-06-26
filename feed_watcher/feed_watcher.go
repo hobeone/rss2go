@@ -146,7 +146,7 @@ func (self *FeedWatcher) UpdateFeed() *FeedCrawlResponse {
 	if resp.Error != nil {
 		self.FeedInfo.LastPollError = resp.Error.Error()
 	}
-	self.dbh.UpdateFeed(&self.FeedInfo)
+	self.dbh.SaveFeed(&self.FeedInfo)
 
 	return resp
 }

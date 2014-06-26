@@ -3,6 +3,7 @@ package commands
 import (
 	"flag"
 	"fmt"
+
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/flagutil"
 )
@@ -21,7 +22,6 @@ removefeed --purge_feed=false http://test/feed.rss http://test/other.rss
 		`,
 		Flag: *flag.NewFlagSet("removefeed", flag.ExitOnError),
 	}
-	cmd.Flag.Bool("purge_feed", true, "Purge known item records for this feed.")
 	cmd.Flag.String("config_file", default_config, "Config file to use.")
 
 	return cmd
@@ -33,7 +33,6 @@ func removeFeed(cmd *flagutil.Command, args []string) {
 	}
 
 	cfg := loadConfig(cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
-	purge_feed := cmd.Flag.Lookup("purge_feed").Value.(flag.Getter).Get().(bool)
 
 	cfg.Mail.SendMail = false
 	cfg.Db.UpdateDb = true
@@ -42,7 +41,7 @@ func removeFeed(cmd *flagutil.Command, args []string) {
 
 	had_error := false
 	for _, feed_url := range args {
-		err := db.RemoveFeed(feed_url, purge_feed)
+		err := db.RemoveFeed(feed_url)
 		if err != nil {
 			fmt.Println(err.Error())
 			had_error = true
