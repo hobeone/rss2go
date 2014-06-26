@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/codegangsta/martini"
+	"github.com/go-martini/martini"
 	"github.com/hobeone/rss2go/db"
 	"github.com/martini-contrib/render"
 )

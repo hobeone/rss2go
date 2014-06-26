@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"code.google.com/p/go.crypto/bcrypt"
-	"github.com/codegangsta/martini"
+	"github.com/go-martini/martini"
 	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
@@ -26,31 +26,31 @@ func failAuth(w http.ResponseWriter) {
 }
 
 var authenticateUser = func(res http.ResponseWriter, req *http.Request, dbh *db.DBHandle) {
-	auth_header := strings.SplitAfterN(
+	authHeader := strings.SplitAfterN(
 		strings.TrimSpace(
 			req.Header.Get("Authorization"),
 		),
 		"Basic ",
 		2,
 	)
-	if len(auth_header) > 1 {
-		dec_string, err := base64.StdEncoding.DecodeString(auth_header[1])
+	if len(authHeader) > 1 {
+		decString, err := base64.StdEncoding.DecodeString(authHeader[1])
 		if err != nil {
 			glog.Errorf("Error decoding string: %s", err)
 			failAuth(res)
 			return
 		}
-		auth_parts := strings.SplitN(string(dec_string[:]), ":", 2)
-		if len(auth_parts) < 2 {
+		authParts := strings.SplitN(string(decString[:]), ":", 2)
+		if len(authParts) < 2 {
 			glog.Errorf("auth string had no ':' in it, failing")
 			failAuth(res)
 			return
 		}
-		user_email := auth_parts[0]
-		pass := auth_parts[1]
-		dbuser, err := dbh.GetUserByEmail(user_email)
+		userEmail := authParts[0]
+		pass := authParts[1]
+		dbuser, err := dbh.GetUserByEmail(userEmail)
 		if err != nil {
-			glog.Infof("Unknown user authentication: %s", user_email)
+			glog.Infof("Unknown user authentication: %s", userEmail)
 			failAuth(res)
 			return
 		}
@@ -63,23 +63,24 @@ var authenticateUser = func(res http.ResponseWriter, req *http.Request, dbh *db.
 	}
 }
 
+//UserAuth provides a simple authentication layer for Martini
 func UserAuth() martini.Handler {
 	return authenticateUser
 }
 
-func parseParamIds(str_ids []string) ([]int64, error) {
-	if len(str_ids) == 0 {
-		return nil, errors.New("No ids given")
+func parseParamIds(strIds []string) ([]int64, error) {
+	if len(strIds) == 0 {
+		return nil, errors.New("no ids given")
 	}
-	int_ids := make([]int64, len(str_ids))
-	for i, str_id := range str_ids {
-		int_id, err := strconv.ParseInt(str_id, 10, 64)
+	intIds := make([]int64, len(strIds))
+	for i, strID := range strIds {
+		intID, err := strconv.ParseInt(strID, 10, 64)
 		if err != nil {
-			return nil, fmt.Errorf("Error parsing feed id: %s", err)
+			return nil, fmt.Errorf("error parsing feed id: %s", err)
 		}
-		int_ids[i] = int_id
+		intIds[i] = intID
 	}
-	return int_ids, nil
+	return intIds, nil
 }
 
 func createMartini(dbh *db.DBHandle, feeds map[string]*feed_watcher.FeedWatcher) *martini.Martini {

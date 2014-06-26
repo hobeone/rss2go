@@ -41,6 +41,7 @@ const getAllFeedGoldenOutput = `{
 
 func TestGetAllFeeds(t *testing.T) {
 	dbh, m := setupTest(t)
+	db.LoadFixtures(dbh, t)
 	loadFixtures(t, dbh)
 	response := httptest.NewRecorder()
 	req, err := http.NewRequest("GET", "/api/1/feeds", nil)

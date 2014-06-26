@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/codegangsta/martini"
 	"github.com/martini-contrib/binding"
 
+	"github.com/go-martini/martini"
 	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/db"
 	"github.com/martini-contrib/render"

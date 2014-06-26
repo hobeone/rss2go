@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+
 	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/commands"
 	"github.com/hobeone/rss2go/flagutil"

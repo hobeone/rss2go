@@ -21,6 +21,7 @@ import (
 	"math"
 	"math/rand"
 	"time"
+
 	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed"
@@ -207,7 +208,7 @@ func (self *FeedWatcher) updateFeed() *FeedCrawlResponse {
 	}
 
 	resp.Items = self.filterNewItems(stories)
-	glog.Infof("Feed %s has new %d items", feed.Title, len(resp.Items))
+	glog.Infof("Feed %s has %d new items", feed.Title, len(resp.Items))
 
 	for _, item := range resp.Items {
 		item.Title = fmt.Sprintf("%s: %s", self.FeedInfo.Name, item.Title)

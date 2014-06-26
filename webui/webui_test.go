@@ -6,7 +6,7 @@ import (
 	"runtime/debug"
 	"testing"
 
-	"github.com/codegangsta/martini"
+	"github.com/go-martini/martini"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
 	"github.com/stretchr/testify/assert"
