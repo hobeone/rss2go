@@ -10,7 +10,6 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hobeone/rss2go/db"
-	"github.com/stretchr/testify/assert"
 )
 
 const getAllFeedGoldenOutput = `{
@@ -82,7 +81,9 @@ func TestGetSomeFeeds(t *testing.T) {
 	db.LoadFixtures(t, dbh)
 	response := httptest.NewRecorder()
 	req, err := http.NewRequest("GET", "/api/1/feeds?ids[]=1&ids[]=2", nil)
-	assert.Nil(t, err)
+	if err != nil {
+		t.Fatalf("Error getting response: %s", err)
+	}
 
 	m.ServeHTTP(response, req)
 

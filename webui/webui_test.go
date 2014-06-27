@@ -9,7 +9,6 @@ import (
 	"github.com/go-martini/martini"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
-	"github.com/stretchr/testify/assert"
 )
 
 func setupTest(t *testing.T) (*db.DBHandle, *martini.Martini) {
@@ -42,8 +41,8 @@ func loadFixtures(t *testing.T, d *db.DBHandle) {
 	db_feeds := make([]*db.FeedInfo, len(feeds))
 	for i, feed_data := range feeds {
 		feed, err := d.AddFeed(feed_data[0], feed_data[1])
-		if !assert.Nil(t, err, "Error adding feed to db") {
-			t.Fail()
+		if err != nil {
+			t.Fatal("Error adding feed to db")
 		}
 		db_feeds[i] = feed
 	}
@@ -51,11 +50,17 @@ func loadFixtures(t *testing.T, d *db.DBHandle) {
 	db_users := make([]*db.User, len(users))
 	for i, user_data := range users {
 		u, err := d.AddUser(user_data[0], user_data[1], user_data[2])
-		assert.Nil(t, err, "Error adding user to db")
+		if err != nil {
+			t.Fatal("Error adding user to db")
+		}
+
 		db_users[i] = u
 
 		err = d.AddFeedsToUser(u, db_feeds)
-		assert.Nil(t, err, "Error adding feed to user")
+		if err != nil {
+			t.Fatal("Error adding feeds to user")
+		}
+
 	}
 	return
 }
