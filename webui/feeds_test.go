@@ -10,6 +10,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hobeone/rss2go/db"
+	. "github.com/onsi/gomega"
 )
 
 const getAllFeedGoldenOutput = `{
@@ -41,6 +42,7 @@ const getAllFeedGoldenOutput = `{
 func TestGetAllFeeds(t *testing.T) {
 	dbh, m := setupTest(t)
 	db.LoadFixtures(t, dbh)
+	RegisterTestingT(t)
 	response := httptest.NewRecorder()
 	req, err := http.NewRequest("GET", "/api/1/feeds", nil)
 	if err != nil {
@@ -52,9 +54,7 @@ func TestGetAllFeeds(t *testing.T) {
 	if response.Code != 200 {
 		t.Fatalf("Expected 200 response code, got %d", response.Code)
 	}
-	if response.Body.String() != getAllFeedGoldenOutput {
-		t.Fatalf("Response didn't match golden response:\n%s\n---vs---\n%s", response.Body.String(), getAllFeedGoldenOutput)
-	}
+	Expect(response.Body.String()).Should(MatchJSON(getAllFeedGoldenOutput))
 }
 
 const getSomeFeedsGoldenResponse = `{
@@ -79,6 +79,7 @@ const getSomeFeedsGoldenResponse = `{
 func TestGetSomeFeeds(t *testing.T) {
 	dbh, m := setupTest(t)
 	db.LoadFixtures(t, dbh)
+	RegisterTestingT(t)
 	response := httptest.NewRecorder()
 	req, err := http.NewRequest("GET", "/api/1/feeds?ids[]=1&ids[]=2", nil)
 	if err != nil {
@@ -90,10 +91,7 @@ func TestGetSomeFeeds(t *testing.T) {
 	if response.Code != 200 {
 		t.Fatalf("Expected 200 response code, got %d", response.Code)
 	}
-	if response.Body.String() != getSomeFeedsGoldenResponse {
-		fmt.Println(response.Body.String())
-		t.Fatalf("Expected to find feed_list in reponse body")
-	}
+	Expect(response.Body.String()).Should(MatchJSON(getSomeFeedsGoldenResponse))
 }
 
 const addFeedGoldenResponse = `{
@@ -109,7 +107,7 @@ const addFeedGoldenResponse = `{
 func TestAddFeed(t *testing.T) {
 	_, m := setupTest(t)
 	response := httptest.NewRecorder()
-
+	RegisterTestingT(t)
 	f := FeedJSON{
 		Feed: &db.FeedInfo{
 			Url:  "http://test/url/feed.atom",
@@ -117,11 +115,11 @@ func TestAddFeed(t *testing.T) {
 		},
 	}
 
-	req_body, err := json.Marshal(f)
+	reqBody, err := json.Marshal(f)
 	failOnError(t, err)
 
 	req, err := http.NewRequest("POST", "/api/1/feeds",
-		bytes.NewReader(req_body))
+		bytes.NewReader(reqBody))
 	failOnError(t, err)
 
 	req.Header.Set("Content-Type", "application/json; charset=UTF-8")
@@ -132,10 +130,7 @@ func TestAddFeed(t *testing.T) {
 		fmt.Println(response.Body.String())
 		t.Fatalf("Expected 201 response code, got %d", response.Code)
 	}
-	if response.Body.String() != addFeedGoldenResponse {
-		fmt.Println(response.Body.String())
-		t.Fatalf("Response didn't match expected response.")
-	}
+	Expect(response.Body.String()).Should(MatchJSON(addFeedGoldenResponse))
 }
 
 type ErrorMessage []struct {
@@ -150,11 +145,11 @@ func TestAddFeedWithMalformedData(t *testing.T) {
 
 	f := FeedJSON{}
 
-	req_body, err := json.Marshal(f)
+	reqBody, err := json.Marshal(f)
 	failOnError(t, err)
 
 	req, err := http.NewRequest("POST", "/api/1/feeds",
-		bytes.NewReader(req_body))
+		bytes.NewReader(reqBody))
 	failOnError(t, err)
 
 	req.Header.Set("Content-Type", "application/json; charset=UTF-8")
@@ -190,6 +185,8 @@ const getFeedGoldenOutput = `{
 func TestGetFeed(t *testing.T) {
 	dbh, m := setupTest(t)
 	db.LoadFixtures(t, dbh)
+	RegisterTestingT(t)
+
 	dbfeeds, err := dbh.GetAllFeeds()
 	failOnError(t, err)
 
@@ -206,10 +203,7 @@ func TestGetFeed(t *testing.T) {
 		fmt.Println(response.Body.String())
 		t.Fatalf("GetFeedd Expected 200 response code, got %d", response.Code)
 	}
-	if response.Body.String() != getFeedGoldenOutput {
-		fmt.Println(response.Body.String())
-		t.Fatalf("Response didn't match expected response.")
-	}
+	Expect(response.Body.String()).Should(MatchJSON(getFeedGoldenOutput))
 }
 
 func TestDeleteFeed(t *testing.T) {

@@ -7,6 +7,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/hobeone/rss2go/db"
+	. "github.com/onsi/gomega"
 )
 
 const testGetUserGoldenResponse = `{
@@ -61,7 +64,7 @@ const testAllUsersGoldenResponse = `{
   "users": [
     {
       "id": 1,
-      "name": "test1",
+      "name": "testuser1",
       "email": "test1@example.com",
       "enabled": true,
       "feeds": [
@@ -72,7 +75,7 @@ const testAllUsersGoldenResponse = `{
     },
     {
       "id": 2,
-      "name": "test2",
+      "name": "testuser2",
       "email": "test2@example.com",
       "enabled": true,
       "feeds": [
@@ -83,7 +86,7 @@ const testAllUsersGoldenResponse = `{
     },
     {
       "id": 3,
-      "name": "test3",
+      "name": "testuser3",
       "email": "test3@example.com",
       "enabled": true,
       "feeds": [
@@ -97,7 +100,8 @@ const testAllUsersGoldenResponse = `{
 
 func TestGetAllUsers(t *testing.T) {
 	dbh, m := setupTest(t)
-	loadFixtures(t, dbh)
+	db.LoadFixtures(t, dbh)
+	RegisterTestingT(t)
 
 	response := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/1/users", nil)
@@ -108,17 +112,14 @@ func TestGetAllUsers(t *testing.T) {
 		t.Fatalf("Expected 200 response code, got %d", response.Code)
 	}
 
-	if response.Body.String() != testAllUsersGoldenResponse {
-		fmt.Println(response.Body.String())
-		t.Fatalf("Response doesn't match golden response")
-	}
+	Expect(response.Body.String()).Should(MatchJSON(testAllUsersGoldenResponse))
 }
 
 const getSomeUsersGoldenResponse = `{
   "users": [
     {
       "id": 1,
-      "name": "test1",
+      "name": "testuser1",
       "email": "test1@example.com",
       "enabled": true,
       "feeds": [
@@ -129,7 +130,7 @@ const getSomeUsersGoldenResponse = `{
     },
     {
       "id": 2,
-      "name": "test2",
+      "name": "testuser2",
       "email": "test2@example.com",
       "enabled": true,
       "feeds": [
@@ -143,7 +144,8 @@ const getSomeUsersGoldenResponse = `{
 
 func TestGetSomeUsers(t *testing.T) {
 	dbh, m := setupTest(t)
-	loadFixtures(t, dbh)
+	db.LoadFixtures(t, dbh)
+	RegisterTestingT(t)
 
 	response := httptest.NewRecorder()
 	req, err := http.NewRequest("GET", "/api/1/users?ids[]=1&ids[]=2", nil)
@@ -155,10 +157,7 @@ func TestGetSomeUsers(t *testing.T) {
 		t.Fatalf("Expected 200 response code, got %d", response.Code)
 	}
 
-	if response.Body.String() != getSomeUsersGoldenResponse {
-		fmt.Println(response.Body.String())
-		t.Fatalf("Response doesn't match golden response")
-	}
+	Expect(response.Body.String()).Should(MatchJSON(getSomeUsersGoldenResponse))
 }
 
 const updateUserReq = `
@@ -167,7 +166,7 @@ const updateUserReq = `
 
 func TestUpdateUser(t *testing.T) {
 	dbh, m := setupTest(t)
-	loadFixtures(t, dbh)
+	db.LoadFixtures(t, dbh)
 
 	_, err := dbh.GetUserByEmail("test1@example.com")
 	failOnError(t, err)
@@ -200,6 +199,7 @@ const addUserGoldenOutput = `{
 }`
 
 func TestAddUser(t *testing.T) {
+	RegisterTestingT(t)
 	u := unmarshalUserJSONContainer{
 		unmarshalUserJSON{
 			Id:       1,
@@ -229,10 +229,7 @@ func TestAddUser(t *testing.T) {
 
 	dbh.GetUserByEmail("test1_changed@example.com")
 
-	if response.Body.String() != addUserGoldenOutput {
-		fmt.Println(response.Body.String())
-		t.Fatalf("Response doesn't match golden response")
-	}
+	Expect(response.Body.String()).Should(MatchJSON(addUserGoldenOutput))
 
 	if response.Header().Get("Location") != "/users/1" {
 		t.Fatalf("Expected location of '/users/1' got %s",
@@ -242,7 +239,7 @@ func TestAddUser(t *testing.T) {
 
 func TestDeleteUser(t *testing.T) {
 	dbh, m := setupTest(t)
-	loadFixtures(t, dbh)
+	db.LoadFixtures(t, dbh)
 
 	users, err := dbh.GetAllUsers()
 	failOnError(t, err)

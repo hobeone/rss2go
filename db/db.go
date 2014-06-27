@@ -554,16 +554,19 @@ func LoadFixtures(t TestReporter, d *DBHandle) ([]*FeedInfo, []*User) {
 			Name:     "testuser1",
 			Email:    "test1@example.com",
 			Password: "pass1",
+			Enabled:  true,
 		},
 		&User{
 			Name:     "testuser2",
 			Email:    "test2@example.com",
 			Password: "pass2",
+			Enabled:  true,
 		},
 		&User{
 			Name:     "testuser3",
 			Email:    "test3@example.com",
 			Password: "pass3",
+			Enabled:  true,
 		},
 	}
 	feeds := []*FeedInfo{

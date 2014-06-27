@@ -27,6 +27,7 @@ func failOnError(t *testing.T, err error) {
 	}
 }
 
+/*
 func loadFixtures(t *testing.T, d *db.DBHandle) {
 	users := [][]string{
 		[]string{"test1", "test1@example.com", "pass"},
@@ -64,3 +65,4 @@ func loadFixtures(t *testing.T, d *db.DBHandle) {
 	}
 	return
 }
+*/
