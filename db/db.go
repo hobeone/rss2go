@@ -6,7 +6,6 @@ import (
 	"net/mail"
 	"net/url"
 	"sync"
-	"testing"
 	"time"
 
 	"code.google.com/p/go.crypto/bcrypt"
@@ -157,18 +156,22 @@ func (d *DBHandle) RemoveFeed(url string) error {
 	if err != nil {
 		return err
 	}
-	err = d.DB.Delete(f).Error
+	tx := d.DB.Begin()
+	err = tx.Delete(f).Error
 	if err == nil {
-		err = d.DB.Where("feed_info_id = ?", f.Id).Delete(FeedItem{}).Error
+		err = tx.Where("feed_info_id = ?", f.Id).Delete(FeedItem{}).Error
 		if err != nil {
+			tx.Rollback()
 			return err
 		}
-		err = d.DB.Where("feed_id = ?", f.Id).Delete(UserFeed{}).Error
+		err = tx.Where("feed_id = ?", f.Id).Delete(UserFeed{}).Error
 		if err != nil {
+			tx.Rollback()
 			return err
 		}
 
 	}
+	tx.Commit()
 	return err
 }
 
@@ -539,8 +542,13 @@ func (d *DBHandle) GetFeedUsers(feedURL string) ([]User, error) {
 // - not sure if there is a better way to do this
 //
 
+type TestReporter interface {
+	Errorf(format string, args ...interface{})
+	Fatalf(format string, args ...interface{})
+}
+
 // LoadFixtures adds a base set of Fixtures to the given database.
-func LoadFixtures(t *testing.T, d *DBHandle) ([]*FeedInfo, []*User) {
+func LoadFixtures(t TestReporter, d *DBHandle) ([]*FeedInfo, []*User) {
 	users := []*User{
 		&User{
 			Name:     "testuser1",

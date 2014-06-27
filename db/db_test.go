@@ -1,237 +1,315 @@
 package db
 
 import (
+	. "github.com/smartystreets/goconvey/convey"
+
 	"testing"
 	"time"
-
-	"github.com/stretchr/testify/assert"
 )
-
-func TestFeedCreation(t *testing.T) {
-	d := NewMemoryDBHandle(false, true)
-	var feed FeedInfo
-	feed.Name = "Test Feed"
-	feed.Url = "https://testfeed.com/test"
-	feed.LastPollTime = time.Now()
-	err := d.DB.Save(&feed).Error
-	if err != nil {
-		t.Fatal("Error saving test feed.")
-	}
-
-	var fetchedFeed FeedInfo
-
-	err = d.DB.Find(&fetchedFeed, feed.Id).Error
-	if err != nil {
-		t.Fatalf("Expected to find just created Feed, got error: %s", err)
-	}
-}
-
-func TestCheckRecordGuid(t *testing.T) {
-	d := NewMemoryDBHandle(false, true)
-	err := d.RecordGuid(1, "123")
-	assert.Nil(t, err)
-}
 
 func TestGetMostRecentGuidsForFeed(t *testing.T) {
 	d := NewMemoryDBHandle(false, true)
 	feeds, _ := LoadFixtures(t, d)
 
-	d.RecordGuid(feeds[0].Id, "123")
-	d.RecordGuid(feeds[0].Id, "1234")
-	d.RecordGuid(feeds[0].Id, "12345")
+	Convey("Given new GUIDs", t, func() {
+		So(d.RecordGuid(feeds[0].Id, "123"), ShouldBeNil)
+		So(d.RecordGuid(feeds[0].Id, "1234"), ShouldBeNil)
+		So(d.RecordGuid(feeds[0].Id, "12345"), ShouldBeNil)
+		Convey("Only get the 2 most recent", func() {
+			maxGuidsToFetch := 2
+			guids, err := d.GetMostRecentGuidsForFeed(feeds[0].Id, maxGuidsToFetch)
+			So(err, ShouldBeNil)
+			So(len(guids), ShouldEqual, maxGuidsToFetch)
+			So(guids, ShouldResemble, []string{"12345", "1234"})
+		})
+		Convey("Get all Guids", func() {
+			guids, err := d.GetMostRecentGuidsForFeed(feeds[0].Id, -1)
+			So(err, ShouldBeNil)
+			So(len(guids), ShouldEqual, 3)
+		})
+	})
 
-	maxGuidsToFetch := 2
-	guids, err := d.GetMostRecentGuidsForFeed(feeds[0].Id, maxGuidsToFetch)
-	assert.Nil(t, err)
-	assert.Equal(t, len(guids), maxGuidsToFetch)
-
-	assert.Equal(t, guids[0], "12345")
-	assert.Equal(t, guids[1], "1234")
-
-	guids, err = d.GetMostRecentGuidsForFeed(feeds[0].Id, -1)
-	assert.Nil(t, err)
-	assert.Equal(t, len(guids), 3)
 }
 
-func TestAddFeedValidation(t *testing.T) {
-	d := NewMemoryDBHandle(false, true)
+func TestFeedValidation(t *testing.T) {
+	Convey("FeedInfo should validate attributes before saving", t, func() {
+		Convey("When a bad arguments are given it should return an error", func() {
+			d := NewMemoryDBHandle(false, true)
+			inputs := [][]string{
+				[]string{"good name", "bad url"},
+				[]string{"good name", "http://"},
+				[]string{"good name", ":badurl"},
+				[]string{"", ""},
+			}
 
-	var inputs = [][]string{
-		[]string{"test", "bad url"},
-		[]string{"test", "http://"},
-		[]string{"", ""},
-	}
+			for _, ins := range inputs {
+				_, err := d.AddFeed(ins[0], ins[1])
+				So(err, ShouldNotBeNil)
+			}
+		})
+		Convey("When an Invalid FeedInfo is given it should return an error", func() {
+			d := NewMemoryDBHandle(false, true)
+			inputs := []FeedInfo{
+				FeedInfo{
+					Name: "",
+					Url:  "bad url",
+				},
+				FeedInfo{},
+				FeedInfo{Url: ":badurl"},
+			}
 
-	for _, ins := range inputs {
-		_, err := d.AddFeed(ins[0], ins[1])
-		assert.NotNil(t, err, "AddFeed should return an error on invalid URL. Inputs: '%s','%s'", ins[0], ins[1])
-	}
+			for _, f := range inputs {
+				err := d.SaveFeed(&f)
+				So(err, ShouldNotBeNil)
+				So(f.Id, ShouldBeZeroValue)
+			}
+		})
+	})
 }
 
 func TestAddAndDeleteFeed(t *testing.T) {
 	d := NewMemoryDBHandle(false, true)
-	feed, err := d.AddFeed("test feed", "http://test/feed.xml")
-
-	assert.Nil(t, err, "AddFeed shouldn't return an error")
-
-	_, err = d.AddFeed("test feed", "http://test/feed.xml")
-
-	assert.NotNil(t, err, "AddFeed should return an error when adding a duplicate feed.")
-
-	err = d.RecordGuid(feed.Id, "abcd")
-	assert.Nil(t, err)
-	user1, err := d.AddUser("name", "email@example.com", "pass")
-	assert.Nil(t, err)
-
-	err = d.AddFeedsToUser(user1, []*FeedInfo{feed})
-	assert.Nil(t, err)
-	err = d.RemoveFeed(feed.Url)
-	assert.Nil(t, err)
-
-	_, err = d.GetFeedByUrl(feed.Url)
-	assert.NotNil(t, err, "Feed with url %s shouldn't exist anymore.", feed.Url)
-
-	i := FeedItem{}
-	err = d.DB.Where("guid = ?", "abcd").Find(&i).Error
-	assert.NotNil(t, err, "FeedItem was not deleted with feed.")
-
-	fu := UserFeed{}
-	err = d.DB.Where("feed_id = ?", feed.Id).Find(&fu).Error
-	assert.NotNil(t, err, "UserFeeds were not deleted with feed.")
+	_, users := LoadFixtures(t, d)
+	f, err := d.AddFeed("test feed", "http://valid/url.xml")
+	Convey("Subject: Add and Delete FeedInfo", t, func() {
+		Convey("When created", func() {
+			Convey("The Feed Should be created", func() {
+				So(err, ShouldBeNil)
+				So(f.Id, ShouldBeGreaterThan, 1)
+			})
+			Convey("should fail on duplicate name", func() {
+				dupFeed, err := d.AddFeed("test feed", "http://valid/url.xml")
+				So(err, ShouldNotBeNil)
+				So(dupFeed.Id, ShouldBeZeroValue)
+			})
+		})
+		Convey("When deleted", func() {
+			err := d.RecordGuid(f.Id, "testGUID")
+			So(err, ShouldBeNil)
+			err = d.AddFeedsToUser(users[0], []*FeedInfo{f})
+			So(err, ShouldBeNil)
+			Convey("should also remove GUIDs and subscriptions", func() {
+				err := d.RemoveFeed(f.Url)
+				So(err, ShouldBeNil)
+				_, err = d.GetFeedByUrl(f.Url)
+				So(err, ShouldNotBeNil)
+				guids, err := d.GetMostRecentGuidsForFeed(f.Id, -1)
+				So(err, ShouldBeNil)
+				So(guids, ShouldBeEmpty)
+				users, err := d.GetFeedUsers(f.Url)
+				So(err, ShouldBeNil)
+				So(users, ShouldBeEmpty)
+			})
+		})
+	})
 }
 
 func TestGetFeedItemByGuid(t *testing.T) {
 	d := NewMemoryDBHandle(false, true)
 	feeds, _ := LoadFixtures(t, d)
+	Convey("Subject: Get FeedItem by GUID", t, func() {
+		Convey("should create GUID", func() {
+			err := d.RecordGuid(feeds[0].Id, "feed0GUID")
+			So(err, ShouldBeNil)
+			err = d.RecordGuid(feeds[1].Id, "feed1GUID")
+			So(err, ShouldBeNil)
+		})
+		Convey("should get by GUID", func() {
+			guid, err := d.GetFeedItemByGuid(feeds[0].Id, "feed0GUID")
+			So(err, ShouldBeNil)
+			So(guid.FeedInfoId, ShouldEqual, 1)
+			So(guid.Guid, ShouldEqual, "feed0GUID")
+		})
+	})
+}
 
-	feed1 := feeds[0]
-	feed2 := feeds[1]
-	d.RecordGuid(feed1.Id, "foobar")
-	d.RecordGuid(feed2.Id, "foobaz")
-	d.RecordGuid(feed2.Id, "foobar")
-	guid, err := d.GetFeedItemByGuid(feed1.Id, "foobar")
-	assert.Nil(t, err, "Error getting guid")
-
-	assert.Equal(t, guid.FeedInfoId, 1)
+func TestRemoveUserByEmail(t *testing.T) {
+	d := NewMemoryDBHandle(false, true)
+	_, users := LoadFixtures(t, d)
+	Convey("Subject: User Model", t, func() {
+		Convey("Should be able to delete by Email", func() {
+			err := d.RemoveUserByEmail(users[0].Email)
+			So(err, ShouldBeNil)
+		})
+	})
 }
 
 func TestGetStaleFeeds(t *testing.T) {
 	d := NewMemoryDBHandle(false, true)
 	feeds, _ := LoadFixtures(t, d)
-	feed1 := feeds[0]
+	Convey("GetStaleFeeds should return stale feed", t, func() {
+		d.RecordGuid(feeds[0].Id, "foobar")
+		d.RecordGuid(feeds[1].Id, "foobaz")
+		d.RecordGuid(feeds[2].Id, "foobaz")
+		guid, err := d.GetFeedItemByGuid(feeds[0].Id, "foobar")
+		So(err, ShouldBeNil)
+		Convey("When all of a feed Items are older than 14 days", func() {
+			guid.AddedOn = *new(time.Time)
+			err = d.DB.Save(guid).Error
+			So(err, ShouldBeNil)
+			Convey("The feed should be returned by GetStaleFeeds", func() {
+				f, err := d.GetStaleFeeds()
+				So(err, ShouldBeNil)
+				So(&f[0], ShouldResemble, feeds[0])
+			})
+		})
 
-	d.RecordGuid(feed1.Id, "foobar")
-	d.RecordGuid(feeds[1].Id, "foobaz")
-	d.RecordGuid(feeds[2].Id, "foobaz")
-	guid, err := d.GetFeedItemByGuid(feed1.Id, "foobar")
-	assert.Nil(t, err, "Error getting guid")
-	guid.AddedOn = *new(time.Time)
-	err = d.DB.Save(guid).Error
-	assert.Nil(t, err)
-
-	f, err := d.GetStaleFeeds()
-	if err != nil {
-		t.Fatalf("Error getting stale feeds: %v", err)
-	}
-
-	assert.Equal(t, f[0].Id, feed1.Id)
+	})
 }
 
 func TestAddUserValidation(t *testing.T) {
 	d := NewMemoryDBHandle(false, true)
-	var inputs = [][]string{
-		[]string{"test", ".bad@address"},
-		[]string{"test", ""},
-		[]string{"", ""},
-	}
-
-	for _, ins := range inputs {
-		_, err := d.AddUser(ins[0], ins[1], "pass")
-		assert.NotNil(t, err, "AddUser should return an error on invalid args. Inputs: '%s','%s'", ins[0], ins[1])
-	}
+	Convey("User attributes are validates before saving", t, func() {
+		Convey("When invalid email address", func() {
+			inputs := [][]string{
+				[]string{"test", ".bad@address"},
+				[]string{"test", ""},
+			}
+			Convey("AddUser should return an error", func() {
+				for _, ins := range inputs {
+					_, err := d.AddUser(ins[0], ins[1], "pass")
+					So(err, ShouldNotBeNil)
+				}
+			})
+		})
+		Convey("When invalid name", func() {
+			Convey("AddUser Should return an error", func() {
+				_, err := d.AddUser("", "email@address.com", "pass")
+				So(err, ShouldNotBeNil)
+			})
+		})
+		Convey("When valid name and email", func() {
+			Convey("AddUser should return a new saved User", func() {
+				u, err := d.AddUser("new user", "newuser@example.com", "pass")
+				So(err, ShouldBeNil)
+				So(u.Id, ShouldBeGreaterThanOrEqualTo, 1)
+			})
+		})
+	})
 }
 
 func TestAddRemoveUser(t *testing.T) {
 	d := NewMemoryDBHandle(false, true)
-	feeds, users := LoadFixtures(t, d)
+	feeds, _ := LoadFixtures(t, d)
 
-	_, err := d.AddUser(users[0].Name, "diff_email@example.com", "")
-	assert.NotNil(t, err, "Should have error on duplicate user name")
+	userName := "test user name"
+	userEmail := "testuser_name@example.com"
+	u, err := d.AddUser(userName, userEmail, "pass")
 
-	_, err = d.AddUser("diff_name", users[0].Email, "")
-	assert.NotNil(t, err, "Should have error on duplicate user email")
+	Convey("AddUser should create users", t, func() {
+		So(err, ShouldBeNil)
+		So(u.Id, ShouldBeGreaterThan, 0)
+		Convey("When creating a duplicate user name", func() {
+			dupUser, err := d.AddUser(userName, "extra"+userEmail, "pass")
+			Convey("AddUser should return an error", func() {
+				So(err, ShouldNotBeNil)
+				So(dupUser.Id, ShouldBeZeroValue)
+			})
+		})
+		Convey("When creating a duplicate email", func() {
+			dupUser, err := d.AddUser("extra"+userName, userEmail, "pass")
+			Convey("AddUser should return an error", func() {
+				So(err, ShouldNotBeNil)
+				So(dupUser.Id, ShouldBeZeroValue)
+			})
+		})
+		Convey("When searching by just created Name", func() {
+			dbUser, err := d.GetUser(u.Name)
+			Convey("GetUser should return created user", func() {
+				So(err, ShouldBeNil)
+				So(dbUser, ShouldResemble, u)
+			})
+		})
+	})
 
-	dbUser, err := d.GetUser(users[0].Name)
-	assert.Nil(t, err)
+	Convey("RemoveUser should remove user and relationships", t, func() {
+		err = d.AddFeedsToUser(u, []*FeedInfo{feeds[0]})
+		So(err, ShouldBeNil)
 
-	err = d.AddFeedsToUser(dbUser, []*FeedInfo{feeds[0]})
-	assert.Nil(t, err)
+		err = d.RemoveUser(u)
+		So(err, ShouldBeNil)
 
-	err = d.RemoveUser(dbUser)
-	assert.Nil(t, err)
-
-	// Check that feed was removed b/c it has no users
-	var u []UserFeed
-	d.DB.Find(&u)
-	assert.NotEqual(t, len(u), 0, "Expecting 0 UserFeeds remaining after deleting user, got %d", len(u))
+		Convey("When removed all UserFeeds are also removed", func() {
+			feeds, err := d.GetUsersFeeds(u)
+			So(err, ShouldBeNil)
+			So(feeds, ShouldBeEmpty)
+		})
+	})
 }
 
-func TestRemoveFeedsFromUser(t *testing.T) {
+func TestAddRemoveFeedsFromUser(t *testing.T) {
 	d := NewMemoryDBHandle(false, true)
-	feeds, users := LoadFixtures(t, d)
-
-	err := d.AddFeedsToUser(users[0], []*FeedInfo{feeds[0]})
-	assert.Nil(t, err, "Error adding feeds to a user")
-
-	err = d.RemoveFeedsFromUser(users[0], []*FeedInfo{feeds[0]})
-	assert.Nil(t, err, "Error removing feeds to a user")
+	_, users := LoadFixtures(t, d)
+	newFeed := &FeedInfo{
+		Name: "new test feed",
+		Url:  "http://new/test.feed",
+	}
+	Convey("Subject: Feed add and removal from a user", t, func() {
+		Convey("When adding a feed", func() {
+			err := d.SaveFeed(newFeed)
+			So(err, ShouldBeNil)
+			err = d.AddFeedsToUser(users[0], []*FeedInfo{newFeed})
+			Convey("A feed should be added to a user", func() {
+				So(err, ShouldBeNil)
+				feeds, err := d.GetUsersFeeds(users[0])
+				So(err, ShouldBeNil)
+				// not sure why ShouldContain doesn't work here
+				So(feeds[0], ShouldResemble, *newFeed)
+			})
+		})
+		Convey("When removing a feed", func() {
+			err := d.RemoveFeedsFromUser(users[0], []*FeedInfo{newFeed})
+			So(err, ShouldBeNil)
+			feeds, err := d.GetUsersFeeds(users[0])
+			So(err, ShouldBeNil)
+			So(feeds, ShouldNotContain, newFeed)
+		})
+	})
 }
 
-func TestGetFeedsWithUsers(t *testing.T) {
+func TestGetUsersFeeds(t *testing.T) {
 	d := NewMemoryDBHandle(false, true)
 	feeds, users := LoadFixtures(t, d)
-
-	userFeeds, err := d.GetUsersFeeds(users[0])
-	assert.Nil(t, err, "Error getting a user's feeds")
-
-	assert.Equal(t, len(userFeeds), 3,
-		"Expected 3 feed for user got %d.", len(userFeeds))
-
-	assert.Equal(t, userFeeds[0].Name, feeds[0].Name)
-	assert.Equal(t, userFeeds[0].Url, feeds[0].Url)
+	Convey("GetFeedsWithUsers should return all of a users feeds ", t, func() {
+		userFeeds, err := d.GetUsersFeeds(users[0])
+		So(err, ShouldBeNil)
+		So(len(userFeeds), ShouldEqual, len(feeds))
+	})
 }
 
 func TestGetFeedUsers(t *testing.T) {
 	d := NewMemoryDBHandle(false, true)
 	feeds, users := LoadFixtures(t, d)
-
-	feedUsers, err := d.GetFeedUsers(feeds[0].Url)
-	assert.Nil(t, err)
-
-	assert.Equal(t, len(feedUsers), 3)
-	assert.Equal(t, feedUsers[0].Email, users[0].Email)
+	Convey("GetFeedUsers should return all users subscribed to a feed", t, func() {
+		feedUsers, err := d.GetFeedUsers(feeds[0].Url)
+		So(err, ShouldBeNil)
+		So(len(feedUsers), ShouldEqual, len(users))
+	})
 }
 
 func TestUpdateUsersFeeds(t *testing.T) {
 	d := NewMemoryDBHandle(false, true)
 	feeds, users := LoadFixtures(t, d)
 
-	err := d.UpdateUsersFeeds(users[0], []int64{})
-	if err != nil {
-		t.Fatalf("Error updating user feeds: %s", err)
-	}
+	dbFeeds, err := d.GetUsersFeeds(users[0])
+	Convey("Subject: UpdateUsersFeeds", t, func() {
+		So(err, ShouldBeNil)
+		Convey("UpdateUsersFeeds should replace the current feeds", func() {
+			So(len(dbFeeds), ShouldNotEqual, 0)
+			err := d.UpdateUsersFeeds(users[0], []int64{})
+			So(err, ShouldBeNil)
+			newFeeds, err := d.GetUsersFeeds(users[0])
+			So(err, ShouldBeNil)
+			So(len(newFeeds), ShouldEqual, 0)
+			feedIDs := make([]int64, len(feeds))
+			for i := range feeds {
+				feedIDs[i] = feeds[i].Id
+			}
+			d.UpdateUsersFeeds(users[0], feedIDs)
 
-	newFeeds, err := d.GetUsersFeeds(users[0])
-	assert.Nil(t, err)
-	assert.Equal(t, len(newFeeds), 0)
-
-	feedIDs := make([]int64, len(feeds))
-	for i := range feeds {
-		feedIDs[i] = feeds[i].Id
-	}
-	d.UpdateUsersFeeds(users[0], feedIDs)
-
-	newFeeds, err = d.GetUsersFeeds(users[0])
-	assert.Nil(t, err)
-	assert.Equal(t, len(newFeeds), 3)
+			newFeeds, err = d.GetUsersFeeds(users[0])
+			So(err, ShouldBeNil)
+			So(len(newFeeds), ShouldEqual, 3)
+		})
+	})
 }
