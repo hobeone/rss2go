@@ -161,7 +161,7 @@ func TestGetSomeUsers(t *testing.T) {
 }
 
 const updateUserReq = `
-{"user":{"name":"test1","email":"test1_changed@example.com","feeds":[154,154,154,154,154]}}
+{"user":{"name":"test1","email":"test1_changed@example.com","feeds":[1,2,3]}}
 `
 
 func TestUpdateUser(t *testing.T) {
@@ -202,7 +202,7 @@ func TestAddUser(t *testing.T) {
 	RegisterTestingT(t)
 	u := unmarshalUserJSONContainer{
 		unmarshalUserJSON{
-			Id:       1,
+			ID:       1,
 			Name:     "test1",
 			Email:    "test1_changed@example.com",
 			Password: "123",

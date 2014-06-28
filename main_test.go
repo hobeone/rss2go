@@ -15,15 +15,15 @@ import (
 	"github.com/hobeone/rss2go/feed_watcher"
 )
 
-func MakeDbFixtures(d *db.DBHandle, local_url string) {
-	all_feeds := []db.FeedInfo{
+func MakeDbFixtures(d *db.DBHandle, localURL string) {
+	allFeeds := []db.FeedInfo{
 		{
 			Name: "Testing1",
-			Url:  local_url + "/test.rss",
+			Url:  localURL + "/test.rss",
 		},
 	}
 
-	for _, f := range all_feeds {
+	for _, f := range allFeeds {
 		err := d.DB.Save(&f).Error
 		if err != nil {
 			panic(err)
@@ -31,15 +31,15 @@ func MakeDbFixtures(d *db.DBHandle, local_url string) {
 	}
 }
 
-var fake_server_handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+var fakeServerHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	var content []byte
 	switch {
 	case strings.HasSuffix(r.URL.Path, "test.rss"):
-		feed_resp, err := ioutil.ReadFile("testdata/ars.rss")
+		feedResp, err := ioutil.ReadFile("testdata/ars.rss")
 		if err != nil {
 			glog.Fatalf("Error reading test feed: %s", err.Error())
 		}
-		content = feed_resp
+		content = feedResp
 	case true:
 		content = []byte("456")
 	}
@@ -48,7 +48,7 @@ var fake_server_handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.R
 })
 
 func TestEndToEndIntegration(t *testing.T) {
-	ts := httptest.NewServer(fake_server_handler)
+	ts := httptest.NewServer(fakeServerHandler)
 	defer ts.Close()
 
 	// Override the sleep function
@@ -59,17 +59,18 @@ func TestEndToEndIntegration(t *testing.T) {
 
 	cfg := config.NewConfig()
 	cfg.Mail.SendMail = false
+	cfg.Db.Verbose = false
 
 	d := commands.NewDaemon(cfg)
 	d.Dbh = db.NewMemoryDBHandle(false, true)
 	MakeDbFixtures(d.Dbh, ts.URL)
-	all_feeds, err := d.Dbh.GetAllFeeds()
+	allFeeds, err := d.Dbh.GetAllFeeds()
 
 	if err != nil {
 		glog.Fatalf("Error reading feeds: %s", err.Error())
 	}
 
-	d.CreateAndStartFeedWatchers(all_feeds)
+	d.CreateAndStartFeedWatchers(allFeeds)
 
 	resp := <-d.RespChan
 	if len(resp.Items) != 25 {

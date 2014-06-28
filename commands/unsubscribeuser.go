@@ -72,7 +72,7 @@ func (self *UnsubscribeUserCommand) UnsubscribeUser(user_email string, feed_urls
 		}
 		feeds = append(feeds, f)
 	}
-	if len(feeds)> 0 {
+	if len(feeds) > 0 {
 		err = self.Dbh.RemoveFeedsFromUser(u, feeds)
 		if err != nil {
 			PrintErrorAndExit(fmt.Sprintf("Error removing feeds from user: %s", err))

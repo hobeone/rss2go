@@ -16,41 +16,41 @@ type userWithFeeds struct {
 	FeedIds []int64 `json:"feeds"`
 }
 
-type UserJSON struct {
+type userJSON struct {
 	User userWithFeeds `json:"user"`
 }
 
-type UsersJSON struct {
+type usersJSON struct {
 	Users []userWithFeeds `json:"users"`
 }
 
 func getUser(rend render.Render, params martini.Params, dbh *db.DBHandle) {
-	user_id, err := strconv.ParseInt(params["id"], 10, 64)
+	userID, err := strconv.ParseInt(params["id"], 10, 64)
 	if err != nil {
-		rend.JSON(500, err.Error())
+		rend.JSON(http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	u, err := dbh.GetUserById(user_id)
+	u, err := dbh.GetUserById(userID)
 	if err != nil {
-		rend.JSON(404, err.Error())
+		rend.JSON(http.StatusNotFound, err.Error())
 		return
 	}
 
 	feeds, err := dbh.GetUsersFeeds(u)
 	if err != nil {
-		rend.JSON(500, err.Error())
+		rend.JSON(http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	feed_ids := make([]int64, len(feeds))
+	feedIDs := make([]int64, len(feeds))
 	for i, f := range feeds {
-		feed_ids[i] = f.Id
+		feedIDs[i] = f.Id
 	}
-	rend.JSON(http.StatusOK, UserJSON{
+	rend.JSON(http.StatusOK, userJSON{
 		User: userWithFeeds{
 			*u,
-			feed_ids,
+			feedIDs,
 		},
 	})
 }
@@ -58,24 +58,24 @@ func getUser(rend render.Render, params martini.Params, dbh *db.DBHandle) {
 func getUsers(rend render.Render, req *http.Request, dbh *db.DBHandle) {
 	err := req.ParseForm()
 	if err != nil {
-		rend.JSON(500, err.Error())
+		rend.JSON(http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	var users []db.User
-	param_ids := req.Form["ids[]"]
-	if len(param_ids) > 0 {
-		user_ids, err := parseParamIds(param_ids)
+	paramIDs := req.Form["ids[]"]
+	if len(paramIDs) > 0 {
+		userIDs, err := parseParamIds(paramIDs)
 		if err != nil {
-			rend.JSON(500, err.Error())
+			rend.JSON(http.StatusInternalServerError, err.Error())
 			return
 		}
 
-		users = make([]db.User, len(user_ids))
-		for i, uid := range user_ids {
+		users = make([]db.User, len(userIDs))
+		for i, uid := range userIDs {
 			u, err := dbh.GetUserById(uid)
 			if err != nil {
-				rend.JSON(404, err.Error())
+				rend.JSON(http.StatusNotFound, err.Error())
 				return
 			}
 
@@ -84,34 +84,34 @@ func getUsers(rend render.Render, req *http.Request, dbh *db.DBHandle) {
 	} else {
 		users, err = dbh.GetAllUsers()
 		if err != nil {
-			rend.JSON(500, err.Error())
+			rend.JSON(http.StatusInternalServerError, err.Error())
 			return
 		}
 
 	}
 
-	users_json := make([]userWithFeeds, len(users))
+	uJSON := make([]userWithFeeds, len(users))
 	for i, u := range users {
 		feeds, err := dbh.GetUsersFeeds(&u)
 		if err != nil {
-			rend.JSON(500, err.Error())
+			rend.JSON(http.StatusInternalServerError, err.Error())
 			return
 		}
 
-		feed_ids := make([]int64, len(feeds))
+		feedIDs := make([]int64, len(feeds))
 		for i, f := range feeds {
-			feed_ids[i] = f.Id
+			feedIDs[i] = f.Id
 		}
 
-		users_json[i] = userWithFeeds{u, feed_ids}
+		uJSON[i] = userWithFeeds{u, feedIDs}
 	}
 
-	rend.JSON(http.StatusOK, UsersJSON{Users: users_json})
+	rend.JSON(http.StatusOK, usersJSON{Users: uJSON})
 	return
 }
 
 type unmarshalUserJSON struct {
-	Id       int     `json:"id"`
+	ID       int     `json:"id"`
 	Name     string  `json:"name"`
 	Email    string  `json:"email"`
 	Enabled  *bool   `json:"enabled"`
@@ -123,15 +123,15 @@ type unmarshalUserJSONContainer struct {
 }
 
 func updateUser(rend render.Render, req *http.Request, dbh *db.DBHandle, params martini.Params) {
-	user_id, err := strconv.ParseInt(params["id"], 10, 64)
+	userID, err := strconv.ParseInt(params["id"], 10, 64)
 	if err != nil {
-		rend.JSON(500, err.Error())
+		rend.JSON(http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	err = req.ParseForm()
 	if err != nil {
-		rend.JSON(500, err.Error())
+		rend.JSON(http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -139,13 +139,13 @@ func updateUser(rend render.Render, req *http.Request, dbh *db.DBHandle, params 
 	u.User.Enabled = nil
 	err = json.NewDecoder(req.Body).Decode(&u)
 	if err != nil {
-		rend.JSON(500, err.Error())
+		rend.JSON(http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	dbuser, err := dbh.GetUserById(user_id)
+	dbuser, err := dbh.GetUserById(userID)
 	if err != nil {
-		rend.JSON(404, err.Error())
+		rend.JSON(http.StatusNotFound, err.Error())
 		return
 	}
 
@@ -158,14 +158,23 @@ func updateUser(rend render.Render, req *http.Request, dbh *db.DBHandle, params 
 	if u.User.Enabled != nil {
 		dbuser.Enabled = *u.User.Enabled
 	}
-	dbh.SaveUser(dbuser)
-	dbh.UpdateUsersFeeds(dbuser, u.User.Feeds)
+	err = dbh.SaveUser(dbuser)
+	if err != nil {
+		rend.JSON(http.StatusInternalServerError, err.Error())
+		return
+	}
+	err = dbh.UpdateUsersFeeds(dbuser, u.User.Feeds)
+	if err != nil {
+		rend.JSON(http.StatusInternalServerError, err.Error())
+		return
+	}
+
 }
 
 func addUser(req *http.Request, w http.ResponseWriter, dbh *db.DBHandle, rend render.Render) {
 	err := req.ParseForm()
 	if err != nil {
-		rend.JSON(500, err.Error())
+		rend.JSON(http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -173,39 +182,47 @@ func addUser(req *http.Request, w http.ResponseWriter, dbh *db.DBHandle, rend re
 
 	err = json.NewDecoder(req.Body).Decode(&u)
 	if err != nil {
-		rend.JSON(500, err.Error())
+		rend.JSON(http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	db_user, err := dbh.AddUser(u.User.Name, u.User.Email, u.User.Password)
+	dbUser, err := dbh.AddUser(u.User.Name, u.User.Email, u.User.Password)
 	if err != nil {
-		rend.JSON(500, err.Error())
+		rend.JSON(http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	w.Header().Set("Location", fmt.Sprintf("/users/%d", db_user.Id))
-	rend.JSON(http.StatusCreated, UserJSON{
+	w.Header().Set("Location", fmt.Sprintf("/users/%d", dbUser.Id))
+	rend.JSON(http.StatusCreated, userJSON{
 		User: userWithFeeds{
-			*db_user,
+			*dbUser,
 			[]int64{},
 		},
 	})
 }
 
 func deleteUser(rend render.Render, params martini.Params, dbh *db.DBHandle) {
-	user_id, err := strconv.ParseInt(params["id"], 10, 64)
+	userID, err := strconv.ParseInt(params["id"], 10, 64)
 	if err != nil {
-		rend.JSON(500, err.Error())
+		rend.JSON(http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	user, err := dbh.GetUserById(user_id)
+	user, err := dbh.GetUserById(userID)
 	if err != nil {
-		rend.JSON(500, err.Error())
+		if err != nil {
+			rend.JSON(http.StatusInternalServerError, err.Error())
+			return
+		}
+		rend.JSON(http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	dbh.RemoveUser(user)
+	err = dbh.RemoveUser(user)
+	if err != nil {
+		rend.JSON(http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	rend.JSON(http.StatusNoContent, "")
 }

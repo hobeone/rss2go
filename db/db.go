@@ -25,6 +25,9 @@ type FeedInfo struct {
 	LastPollError string    `json:"lastPollError"`
 }
 
+// FeedItem represents an individual iteam from a feed.  It only captures the
+// Guid for that item and is mainly used to check if a particular item has been
+// seen before.
 type FeedItem struct {
 	Id         int64
 	FeedInfoId int64     `sql:"not null"`
@@ -32,6 +35,7 @@ type FeedItem struct {
 	AddedOn    time.Time `sql:"not null"`
 }
 
+// User represents a user/email address that can subscribe to Feeds
 type User struct {
 	Id       int64  `json:"id"`
 	Name     string `sql:"size:255;not null;unique" json:"name"`
@@ -40,6 +44,7 @@ type User struct {
 	Password string `json:"-"`
 }
 
+// UserFeed maps between Users and Feeds
 type UserFeed struct {
 	Id     int64
 	UserId int64 `sql:"not null"`
@@ -542,6 +547,8 @@ func (d *DBHandle) GetFeedUsers(feedURL string) ([]User, error) {
 // - not sure if there is a better way to do this
 //
 
+// TestReporter is a shim interface so we don't need to include the testing
+// package in the compiled binary
 type TestReporter interface {
 	Errorf(format string, args ...interface{})
 	Fatalf(format string, args ...interface{})
@@ -550,19 +557,19 @@ type TestReporter interface {
 // LoadFixtures adds a base set of Fixtures to the given database.
 func LoadFixtures(t TestReporter, d *DBHandle) ([]*FeedInfo, []*User) {
 	users := []*User{
-		&User{
+		{
 			Name:     "testuser1",
 			Email:    "test1@example.com",
 			Password: "pass1",
 			Enabled:  true,
 		},
-		&User{
+		{
 			Name:     "testuser2",
 			Email:    "test2@example.com",
 			Password: "pass2",
 			Enabled:  true,
 		},
-		&User{
+		{
 			Name:     "testuser3",
 			Email:    "test3@example.com",
 			Password: "pass3",
@@ -570,15 +577,15 @@ func LoadFixtures(t TestReporter, d *DBHandle) ([]*FeedInfo, []*User) {
 		},
 	}
 	feeds := []*FeedInfo{
-		&FeedInfo{
+		{
 			Name: "testfeed1",
 			Url:  "http://testfeed1/feed.atom",
 		},
-		&FeedInfo{
+		{
 			Name: "testfeed2",
 			Url:  "http://testfeed2/feed.atom",
 		},
-		&FeedInfo{
+		{
 			Name: "testfeed3",
 			Url:  "http://testfeed3/feed.atom",
 		},

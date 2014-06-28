@@ -33,13 +33,13 @@ func getFeeds(rend render.Render, r *http.Request, params martini.Params, dbh *d
 	}
 	var feed_json []FeedJSONItem
 	if len(r.Form["ids[]"]) > 0 {
-		feed_ids, err := parseParamIds(r.Form["ids[]"])
+		feedIDs, err := parseParamIds(r.Form["ids[]"])
 		if err != nil {
 			rend.JSON(500, fmt.Errorf("Couldn't parse request: %s", err.Error()))
 			return
 		}
-		feed_json = make([]FeedJSONItem, len(feed_ids))
-		for i, feed_id := range feed_ids {
+		feed_json = make([]FeedJSONItem, len(feedIDs))
+		for i, feed_id := range feedIDs {
 			feed, err := dbh.GetFeedById(feed_id)
 			if err != nil {
 				rend.JSON(404, err.Error())
@@ -146,6 +146,10 @@ func updateFeed(rend render.Render, req *http.Request, dbh *db.DBHandle, params 
 	dbfeed.Url = f.Feed.Url
 	dbfeed.LastPollTime = f.Feed.LastPollTime
 
-	dbh.SaveFeed(dbfeed)
+	err = dbh.SaveFeed(dbfeed)
+	if err != nil {
+		rend.JSON(http.StatusInternalServerError, err.Error())
+		return
+	}
 	rend.JSON(http.StatusOK, FeedJSON{Feed: dbfeed})
 }
