@@ -56,7 +56,7 @@ func GetFeedAndMakeResponse(url string, client *http.Client) *feed_watcher.FeedC
 		return resp
 	}
 
-	resp.HttpResponseStatus = r.Status
+	resp.HTTPResponseStatus = r.Status
 	if r.ContentLength > 0 {
 		b := make([]byte, r.ContentLength)
 		_, err := io.ReadFull(r.Body, b)
