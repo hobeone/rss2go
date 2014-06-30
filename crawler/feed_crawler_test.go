@@ -15,7 +15,7 @@ import (
 )
 
 func TestFeedCrawler(t *testing.T) {
-	ts := httptest.NewServer(fake_server_handler)
+	ts := httptest.NewServer(fakeServerHandler)
 	defer ts.Close()
 
 	ch := make(chan *feed_watcher.FeedCrawlRequest)
@@ -30,26 +30,25 @@ func TestFeedCrawler(t *testing.T) {
 	ch <- req
 	resp := <-rchan
 	if resp.URI != req.URI {
-		t.Errorf("Response URI differs from request.\n")
+		t.Fatalf("Response URI differs from request.\n")
 	}
 
 	if resp.Error != nil {
-		t.Errorf("Response had an error when it shouldn't have: %s",
+		t.Fatalf("Response had an error when it shouldn't have: %s",
 			resp.Error.Error())
 	}
 }
 
 func TestGetFeed(t *testing.T) {
-	ts := httptest.NewServer(fake_server_handler)
+	ts := httptest.NewServer(fakeServerHandler)
 	defer ts.Close()
 
 	resp, err := GetFeed(fmt.Sprintf("%s/%s", ts.URL, "ars.rss"), nil)
-
 	if err != nil {
 		t.Fatalf("Error getting feed: %s\n", err.Error())
 	}
 	if resp.StatusCode != http.StatusOK {
-		t.Error("GetFeed should return an error when status != 200\n.")
+		t.Fatal("GetFeed should return an error when status != 200\n.")
 	}
 
 	resp, err = GetFeed(fmt.Sprintf("%s/%s", ts.URL, "error.rss"), nil)
@@ -58,13 +57,13 @@ func TestGetFeed(t *testing.T) {
 		t.Fatalf("Should have gotten error for feed: %s\n", "error.rss")
 	}
 	if resp.StatusCode != http.StatusInternalServerError {
-		t.Error("GetFeed should return an error when status != 200\n.")
+		t.Fatal("GetFeed should return an error when status != 200\n.")
 	}
 
 	dialErrorClient := &http.Client{
 		Transport: &http.Transport{
 			Dial: func(netw, addr string) (net.Conn, error) {
-				return nil, fmt.Errorf("Error connecting to host")
+				return nil, fmt.Errorf("error connecting to host")
 			},
 		},
 	}
@@ -79,7 +78,7 @@ func TestGetFeedAndMakeResponse(t *testing.T) {
 	dialErrorClient := &http.Client{
 		Transport: &http.Transport{
 			Dial: func(netw, addr string) (net.Conn, error) {
-				return nil, fmt.Errorf("Error connecting to host")
+				return nil, fmt.Errorf("error connecting to host")
 			},
 		},
 	}
@@ -89,18 +88,44 @@ func TestGetFeedAndMakeResponse(t *testing.T) {
 	if resp.Error == nil {
 		t.Fatalf("Should have returned an error on connect timeout")
 	}
+
+	ts := httptest.NewServer(fakeServerHandler)
+	defer ts.Close()
+
+	resp = GetFeedAndMakeResponse(fmt.Sprintf("%s/%s", ts.URL, "ars.rss"), nil)
+	if resp.Error != nil {
+		t.Fatalf("Error getting feed: %s\n", resp.Error.Error())
+	}
+	bodyWithoutContentLength := string(resp.Body)
+
+	resp = GetFeedAndMakeResponse(fmt.Sprintf("%s/%s", ts.URL, "ars_with_content_length.rss"), nil)
+	if resp.Error != nil {
+		t.Fatalf("Error getting feed: %s\n", resp.Error)
+	}
+	bodyWithContentLength := string(resp.Body)
+	if bodyWithContentLength != bodyWithoutContentLength {
+		t.Fatalf("Responses with and without Content-Length should get the same result")
+	}
+
 }
 
-var fake_server_handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+var fakeServerHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	var content []byte
 	w.Header().Set("Content-Type", "text/html")
 	switch {
 	case strings.HasSuffix(r.URL.Path, "ars.rss"):
-		feed_resp, err := ioutil.ReadFile("../testdata/ars.rss")
+		feedResp, err := ioutil.ReadFile("../testdata/ars.rss")
 		if err != nil {
 			glog.Fatalf("Error reading test feed: %s", err.Error())
 		}
-		content = feed_resp
+		content = feedResp
+	case strings.HasSuffix(r.URL.Path, "ars_with_content_length.rss"):
+		feedResp, err := ioutil.ReadFile("../testdata/ars.rss")
+		if err != nil {
+			glog.Fatalf("Error reading test feed: %s", err.Error())
+		}
+		content = feedResp
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(content)))
 	case strings.HasSuffix(r.URL.Path, "error.rss"):
 		http.Error(w, "Error request", http.StatusInternalServerError)
 
