@@ -1,6 +1,7 @@
 package feed_watcher
 
 import (
+	"fmt"
 	"io/ioutil"
 	"testing"
 	"time"
@@ -16,274 +17,244 @@ func OverrideAfter() {
 	}
 }
 
-func loadTestFixtures(dbh *db.DBHandle) []*db.FeedInfo {
-	feed, err := dbh.AddFeed("Test Feed", "https://testfeed.com/test")
-	if err != nil {
-		panic(err.Error())
-	}
-	return []*db.FeedInfo{feed}
-}
-
-/*
-* Tests
- */
-
-func TestNewFeedWatcher(t *testing.T) {
+func SetupTest(t *testing.T, feedPath string) (*FeedWatcher, []byte) {
 	crawlChan := make(chan *FeedCrawlRequest)
 	responseChan := make(chan *FeedCrawlResponse)
-	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
+	mailChan := mail.CreateAndStartStubMailer().OutgoingMail
 	d := db.NewMemoryDBHandle(false, true)
-	fixtures := loadTestFixtures(d)
-	u := *fixtures[0]
+	feeds, _ := db.LoadFixtures(t, d)
 
-	n := NewFeedWatcher(
-		u, crawlChan, responseChan, mail_chan, d, []string{}, 10, 100)
+	feedResp, err := ioutil.ReadFile(feedPath)
+	if err != nil {
+		t.Fatal("Error reading test feed.")
+	}
+
+	return NewFeedWatcher(*feeds[0], crawlChan, responseChan, mailChan, d, []string{}, 30, 100), feedResp
+}
+
+func TestNewFeedWatcher(t *testing.T) {
+	n, _ := SetupTest(t, "../testdata/empty.rss")
 	if n.polling == true {
-		t.Error("polling attribute set is true")
+		t.Fatal("polling attribute set is true")
 	}
 }
 
 func TestFeedWatcherPollLocking(t *testing.T) {
-	crawlChan := make(chan *FeedCrawlRequest)
-	responseChan := make(chan *FeedCrawlResponse)
-	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
-	d := db.NewMemoryDBHandle(false, true)
-	fixtures := loadTestFixtures(d)
-	u := *fixtures[0]
-
-	n := NewFeedWatcher(u, crawlChan, responseChan, mail_chan, d, make([]string, 50), 10, 100)
-
+	n, _ := SetupTest(t, "../testdata/empty.rss")
 	if n.Polling() {
-		t.Error("A new watcher shouldn't be polling")
+		t.Fatal("A new watcher shouldn't be polling")
 	}
 	n.lockPoll()
 	if !n.Polling() {
-		t.Error("Watching didn't set polling lock")
+		t.Fatal("Watching didn't set polling lock")
 	}
 }
 
 func TestFeedWatcherPolling(t *testing.T) {
-	crawlChan := make(chan *FeedCrawlRequest)
-	responseChan := make(chan *FeedCrawlResponse)
-	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
-	d := db.NewMemoryDBHandle(false, true)
-	fixtures := loadTestFixtures(d)
-	u := *fixtures[0]
-	n := NewFeedWatcher(u, crawlChan, responseChan, mail_chan, d, make([]string, 50), 10, 100)
-
+	n, feedResp := SetupTest(t, "../testdata/ars.rss")
 	OverrideAfter()
-	go n.PollFeed()
-	req := <-crawlChan
-	if req.URI != u.Url {
-		t.Errorf("URI not set on request properly.  Expected: %s Got: %s", u.Url, req.URI)
-	}
 
-	feed_resp, err := ioutil.ReadFile("../testdata/ars.rss")
-	if err != nil {
-		t.Fatal("Error reading test feed.")
+	go n.PollFeed()
+	req := <-n.crawlChan
+	if req.URI != n.FeedInfo.Url {
+		t.Fatalf("URI not set on request properly.  Expected: %s Got: %s", n.FeedInfo.Url, req.URI)
 	}
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   u.Url,
-		Body:  feed_resp,
+		URI:   n.FeedInfo.Url,
+		Body:  feedResp,
 		Error: nil,
 	}
-	resp := <-responseChan
+	resp := <-n.responseChan
 	if len(resp.Items) != 25 {
-		t.Errorf("Expected 25 items from the feed. Got %d", len(resp.Items))
+		t.Fatalf("Expected 25 items from the feed. Got %d", len(resp.Items))
 	}
 	// Second Poll, should not have new items
-	req = <-crawlChan
+	req = <-n.crawlChan
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   u.Url,
-		Body:  feed_resp,
+		URI:   n.FeedInfo.Url,
+		Body:  feedResp,
 		Error: nil,
 	}
 	go n.StopPoll()
-	resp = <-responseChan
+	resp = <-n.responseChan
 	if len(resp.Items) != 0 {
-		t.Errorf("Expected 0 items from the feed. Got %d", len(resp.Items))
+		t.Fatalf("Expected 0 items from the feed. Got %d", len(resp.Items))
 	}
 	if len(n.KnownGuids) != 25 {
-		t.Errorf("Expected 25 known GUIDs got %d", len(n.KnownGuids))
+		t.Fatalf("Expected 25 known GUIDs got %d", len(n.KnownGuids))
 	}
 }
 
 func TestFeedWatcherPollingRssWithNoItemDates(t *testing.T) {
-	crawlChan := make(chan *FeedCrawlRequest)
-	responseChan := make(chan *FeedCrawlResponse)
-	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
-	d := db.NewMemoryDBHandle(false, true)
-	fixtures := loadTestFixtures(d)
-	feed := *fixtures[0]
-	n := NewFeedWatcher(
-		feed, crawlChan, responseChan, mail_chan, d, make([]string, 50), 10, 100)
-
+	n, feedResp := SetupTest(t, "../testdata/bicycling_rss.xml")
 	OverrideAfter()
-	go n.PollFeed()
-	req := <-crawlChan
-	if req.URI != feed.Url {
-		t.Errorf("URI not set on request properly.  Expected: %s Got: %s", feed.Url, req.URI)
-	}
 
-	feed_resp, err := ioutil.ReadFile("../testdata/bicycling_rss.xml")
-	if err != nil {
-		t.Fatal("Error reading test feed.")
-	}
+	go n.PollFeed()
+	req := <-n.crawlChan
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   feed.Url,
-		Body:  feed_resp,
+		URI:   n.FeedInfo.Url,
+		Body:  feedResp,
 		Error: nil,
 	}
-	resp := <-responseChan
+	resp := <-n.responseChan
 	if len(resp.Items) != 20 {
-		t.Errorf("Expected 20 items from the feed. Got %d", len(resp.Items))
+		t.Fatalf("Expected 20 items from the feed. Got %d", len(resp.Items))
 	}
 	// Second Poll, should not have new items
-	req = <-crawlChan
+	req = <-n.crawlChan
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   feed.Url,
-		Body:  feed_resp,
+		URI:   n.FeedInfo.Url,
+		Body:  feedResp,
 		Error: nil,
 	}
 	go n.StopPoll()
-	resp = <-responseChan
+	resp = <-n.responseChan
 	if len(resp.Items) != 0 {
-		t.Errorf("Expected 0 items from the feed. Got %d", len(resp.Items))
+		t.Fatalf("Expected 0 items from the feed. Got %d", len(resp.Items))
 	}
 }
 
 func TestFeedWatcherWithMalformedFeed(t *testing.T) {
-	crawlChan := make(chan *FeedCrawlRequest)
-	responseChan := make(chan *FeedCrawlResponse)
-	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
-	d := db.NewMemoryDBHandle(false, true)
-	fixtures := loadTestFixtures(d)
-	u := *fixtures[0]
-
-	n := NewFeedWatcher(u, crawlChan, responseChan, mail_chan, d, make([]string,
-		50), 10, 100)
-
+	n, _ := SetupTest(t, "../testdata/ars.rss")
 	OverrideAfter()
 	go n.PollFeed()
-	req := <-crawlChan
 
+	req := <-n.crawlChan
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   u.Url,
+		URI:   n.FeedInfo.Url,
 		Body:  []byte("Testing"),
 		Error: nil,
 	}
 	go n.StopPoll()
-	response := <-responseChan
+	response := <-n.responseChan
 	if response.Error == nil {
 		t.Error("Expected error parsing invalid feed.")
 	}
 
-	db_feed, err := d.GetFeedByUrl(u.Url)
+	dbFeed, err := n.dbh.GetFeedByUrl(n.FeedInfo.Url)
 	if err != nil {
 		t.Error(err.Error())
 	}
-	if db_feed.LastPollError == "" {
+	if dbFeed.LastPollError == "" {
 		t.Error("Feed should have error set")
 	}
 }
 
-func TestFeedWithBadEntity(t *testing.T) {
-	d := db.NewMemoryDBHandle(false, true)
-	fixtures := loadTestFixtures(d)
-	u := *fixtures[0]
-
-	feed_resp, err := ioutil.ReadFile("../testdata/bad_entity.rss")
-	if err != nil {
-		t.Fatal("Error reading test feed.")
-	}
-	_, _, err = feed.ParseFeed(u.Url, feed_resp)
-
-	if err != nil {
-		t.Error("Feed should be able to parse feeds with unescaped entities")
-	}
-}
-
 func TestFeedWatcherWithGuidsSet(t *testing.T) {
-	crawlChan := make(chan *FeedCrawlRequest)
-	responseChan := make(chan *FeedCrawlResponse)
-	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
-	d := db.NewMemoryDBHandle(false, true)
-	fixtures := loadTestFixtures(d)
-	u := *fixtures[0]
-
+	n, feedResp := SetupTest(t, "../testdata/ars.rss")
 	OverrideAfter()
 
-	feed_resp, err := ioutil.ReadFile("../testdata/ars.rss")
-	if err != nil {
-		t.Fatal("Error reading test feed.")
-	}
-	_, stories, _ := feed.ParseFeed(u.Url, feed_resp)
-	guids := make([]string, 25)
+	_, stories, _ := feed.ParseFeed(n.FeedInfo.Url, feedResp)
+	guids := make(map[string]bool, 25)
 	for _, i := range stories {
-		guids = append(guids, i.Id)
+		guids[i.Id] = true
 	}
-	n := NewFeedWatcher(u, crawlChan, responseChan, mail_chan, d, guids, 30, 100)
+	n.KnownGuids = guids
 	go n.PollFeed()
-	req := <-crawlChan
+	req := <-n.crawlChan
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   u.Url,
-		Body:  feed_resp,
+		URI:   n.FeedInfo.Url,
+		Body:  feedResp,
 		Error: nil,
 	}
-	resp := <-responseChan
+	resp := <-n.responseChan
 	if len(resp.Items) != 0 {
-		t.Errorf("Expected 0 items from the feed but got %d.", len(resp.Items))
+		t.Fatalf("Expected 0 items from the feed but got %d.", len(resp.Items))
 	}
 	// Second poll with an new items.
 	n.KnownGuids = map[string]bool{}
-	req = <-crawlChan
+	req = <-n.crawlChan
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   u.Url,
-		Body:  feed_resp,
+		URI:   n.FeedInfo.Url,
+		Body:  feedResp,
 		Error: nil,
 	}
-	resp = <-responseChan
+	resp = <-n.responseChan
 	if len(resp.Items) != 25 {
-		t.Errorf("Expected 25 items from the feed but got %d.", len(resp.Items))
+		t.Fatalf("Expected 25 items from the feed but got %d.", len(resp.Items))
 	}
 }
 
 func TestFeedWatcherWithTooRecentLastPoll(t *testing.T) {
-	crawlChan := make(chan *FeedCrawlRequest)
-	responseChan := make(chan *FeedCrawlResponse)
-	mail_chan := mail.CreateAndStartStubMailer().OutgoingMail
-	d := db.NewMemoryDBHandle(false, true)
-	fixtures := loadTestFixtures(d)
-	u := *fixtures[0]
-	u.LastPollTime = time.Now()
+	n, feedResp := SetupTest(t, "../testdata/ars.rss")
+	n.FeedInfo.LastPollTime = time.Now()
 
-	feed_resp, err := ioutil.ReadFile("../testdata/ars.rss")
-	if err != nil {
-		t.Fatal("Error reading test feed.")
-	}
-
-	after_calls := 0
+	afterCalls := 0
 	After = func(d time.Duration) <-chan time.Time {
-		after_calls++
+		afterCalls++
 		return time.After(time.Duration(0))
 	}
 
-	n := NewFeedWatcher(u, crawlChan, responseChan, mail_chan, d, []string{}, 30, 100)
 	go n.PollFeed()
-	req := <-crawlChan
+	req := <-n.crawlChan
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   u.Url,
-		Body:  feed_resp,
+		URI:   n.FeedInfo.Url,
+		Body:  feedResp,
 		Error: nil,
 	}
-	_ = <-responseChan
+	_ = <-n.responseChan
 
-	if after_calls != 2 {
-		t.Error("After not called exactly twice.")
+	if afterCalls != 2 {
+		t.Fatalf("After not called exactly twice.")
+	}
+}
+
+func TestWithEmptyFeed(t *testing.T) {
+	n, feedResp := SetupTest(t, "../testdata/empty.rss")
+	OverrideAfter()
+	go n.PollFeed()
+	req := <-n.crawlChan
+
+	req.ResponseChan <- &FeedCrawlResponse{
+		URI:   n.FeedInfo.Url,
+		Body:  feedResp,
+		Error: nil,
+	}
+	resp := <-n.responseChan
+	if resp.Error == nil {
+		t.Fatalf("Expected and error on an empty feed. Got %d items", len(resp.Items))
+	}
+}
+
+func TestWithErrorOnCrawl(t *testing.T) {
+	n, feedResp := SetupTest(t, "../testdata/empty.rss")
+	OverrideAfter()
+	go n.PollFeed()
+	req := <-n.crawlChan
+
+	req.ResponseChan <- &FeedCrawlResponse{
+		URI:   n.FeedInfo.Url,
+		Body:  feedResp,
+		Error: fmt.Errorf("error crawling feed"),
+	}
+	resp := <-n.responseChan
+	if resp.Error == nil {
+		t.Fatalf("Expected and error on an empty feed. Got %d items", len(resp.Items))
+	}
+}
+func TestWithDoublePollFeed(t *testing.T) {
+	n, feedResp := SetupTest(t, "../testdata/empty.rss")
+	OverrideAfter()
+	go n.PollFeed()
+
+	req := <-n.crawlChan
+
+	req.ResponseChan <- &FeedCrawlResponse{
+		URI:   n.FeedInfo.Url,
+		Body:  feedResp,
+		Error: nil,
+	}
+	resp := <-n.responseChan
+	if len(resp.Items) != 0 {
+		t.Fatalf("Expected 0 items from the feed but got %d.", len(resp.Items))
+	}
+	r := n.PollFeed()
+	if r {
+		t.Fatal("Calling PollFeed twice should return false")
 	}
 }

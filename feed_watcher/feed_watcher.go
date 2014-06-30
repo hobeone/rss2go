@@ -167,7 +167,7 @@ func (fw *FeedWatcher) updateFeed() *FeedCrawlResponse {
 		len(resp.Body))
 	feed, stories, err := feed.ParseFeed(resp.URI, resp.Body)
 
-	if feed == nil || stories == nil {
+	if feed == nil || stories == nil || len(stories) == 0 {
 		if err != nil {
 			glog.Infof("Error parsing response from %s: %#v", resp.URI, err)
 			resp.Error = err
@@ -347,6 +347,7 @@ func (fw *FeedWatcher) doCrawl() (r *FeedCrawlResponse) {
 		URI:          fw.FeedInfo.Url,
 		ResponseChan: make(chan *FeedCrawlResponse),
 	}
+	//TODO: make this timeout if there's nobody listening
 	fw.crawlChan <- req
 	resp := <-req.ResponseChan
 	return resp
