@@ -25,7 +25,7 @@ func TestConfigUpdater(t *testing.T) {
 		t.Fatal("Error saving test feed.")
 	}
 
-	d.Feeds["http://test/url"] = feed_watcher.NewFeedWatcher(
+	d.Feeds["http://test/url"] = feedwatcher.NewFeedWatcher(
 		f, d.CrawlChan, d.RespChan, d.MailChan, d.Dbh, []string{}, 300, 600,
 	)
 

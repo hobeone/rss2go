@@ -1,4 +1,4 @@
-package feed_watcher
+package feedwatcher
 
 import (
 	"fmt"

@@ -42,8 +42,8 @@ func GetFeed(url string, client *http.Client) (*http.Response, error) {
 
 // GetFeedAndMakeResponse gets a URL and returns a FeedCrawlResponse
 // Sets FeedCrawlResponse.Error if there was a problem retreiving the URL.
-func GetFeedAndMakeResponse(url string, client *http.Client) *feed_watcher.FeedCrawlResponse {
-	resp := &feed_watcher.FeedCrawlResponse{
+func GetFeedAndMakeResponse(url string, client *http.Client) *feedwatcher.FeedCrawlResponse {
+	resp := &feedwatcher.FeedCrawlResponse{
 		URI: url,
 	}
 	r, err := GetFeed(url, client)
@@ -75,7 +75,7 @@ func GetFeedAndMakeResponse(url string, client *http.Client) *feed_watcher.FeedC
 
 // FeedCrawler pulls FeedCrawlRequests from the crawl_requests channel,
 // gets the given URL and returns a response
-func FeedCrawler(crawlRequests chan *feed_watcher.FeedCrawlRequest) {
+func FeedCrawler(crawlRequests chan *feedwatcher.FeedCrawlRequest) {
 	for {
 		glog.Info("Waiting on request")
 		select {
@@ -86,7 +86,7 @@ func FeedCrawler(crawlRequests chan *feed_watcher.FeedCrawlRequest) {
 }
 
 // StartCrawlerPool creates a pool of num http crawlers listening to the crawl_channel.
-func StartCrawlerPool(num int, crawlChannel chan *feed_watcher.FeedCrawlRequest) {
+func StartCrawlerPool(num int, crawlChannel chan *feedwatcher.FeedCrawlRequest) {
 	for i := 0; i < num; i++ {
 		glog.Infof("Starting Crawler %d", i)
 		go FeedCrawler(crawlChannel)

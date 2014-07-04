@@ -83,7 +83,7 @@ func parseParamIds(strIds []string) ([]int64, error) {
 	return intIds, nil
 }
 
-func createMartini(dbh *db.DBHandle, feeds map[string]*feed_watcher.FeedWatcher) *martini.Martini {
+func createMartini(dbh *db.DBHandle, feeds map[string]*feedwatcher.FeedWatcher) *martini.Martini {
 	m := martini.New()
 	m.Use(martini.Logger())
 	m.Use(
@@ -145,7 +145,7 @@ func send200() int {
 	return http.StatusOK
 }
 
-func RunWebUi(config *config.Config, dbh *db.DBHandle, feeds map[string]*feed_watcher.FeedWatcher) {
+func RunWebUi(config *config.Config, dbh *db.DBHandle, feeds map[string]*feedwatcher.FeedWatcher) {
 	if config.WebServer.EnableAPI {
 		m := createMartini(dbh, feeds)
 		glog.Fatal(http.ListenAndServe(config.WebServer.ListenAddress, m))

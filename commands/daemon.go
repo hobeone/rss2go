@@ -35,10 +35,10 @@ func MakeCmdDaemon() *flagutil.Command {
 
 type Daemon struct {
 	Config    *config.Config
-	CrawlChan chan *feed_watcher.FeedCrawlRequest
-	RespChan  chan *feed_watcher.FeedCrawlResponse
+	CrawlChan chan *feedwatcher.FeedCrawlRequest
+	RespChan  chan *feedwatcher.FeedCrawlResponse
 	MailChan  chan *mail.MailRequest
-	Feeds     map[string]*feed_watcher.FeedWatcher
+	Feeds     map[string]*feedwatcher.FeedWatcher
 	Dbh       *db.DBHandle
 	PollFeeds bool
 }
@@ -50,8 +50,8 @@ func NewDaemon(cfg *config.Config) *Daemon {
 	} else {
 		dbh = db.NewDBHandle(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 	}
-	cc := make(chan *feed_watcher.FeedCrawlRequest, 1)
-	rc := make(chan *feed_watcher.FeedCrawlResponse)
+	cc := make(chan *feedwatcher.FeedCrawlRequest, 1)
+	rc := make(chan *feedwatcher.FeedCrawlResponse)
 	mc := mail.CreateAndStartMailer(dbh, cfg).OutgoingMail
 
 	return &Daemon{
@@ -60,7 +60,7 @@ func NewDaemon(cfg *config.Config) *Daemon {
 		RespChan:  rc,
 		MailChan:  mc,
 		Dbh:       dbh,
-		Feeds:     make(map[string]*feed_watcher.FeedWatcher),
+		Feeds:     make(map[string]*feedwatcher.FeedWatcher),
 		PollFeeds: true,
 	}
 }
@@ -113,7 +113,7 @@ func (d *Daemon) startPollers(new_feeds []db.FeedInfo) {
 			continue
 		}
 
-		d.Feeds[f.Url] = feed_watcher.NewFeedWatcher(
+		d.Feeds[f.Url] = feedwatcher.NewFeedWatcher(
 			f,
 			d.CrawlChan,
 			d.RespChan,

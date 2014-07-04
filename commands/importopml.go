@@ -96,8 +96,8 @@ func importOPML(cmd *flagutil.Command, args []string) {
 		fmt.Printf("Added feed \"%s\" at url \"%s\"\n", v, k)
 	}
 	if len(new_feeds) > 0 && update_feeds {
-		httpCrawlChannel := make(chan *feed_watcher.FeedCrawlRequest, 1)
-		responseChannel := make(chan *feed_watcher.FeedCrawlResponse)
+		httpCrawlChannel := make(chan *feedwatcher.FeedCrawlRequest, 1)
+		responseChannel := make(chan *feedwatcher.FeedCrawlResponse)
 		crawler.StartCrawlerPool(cfg.Crawl.MaxCrawlers, httpCrawlChannel)
 
 		wg := sync.WaitGroup{}
@@ -107,7 +107,7 @@ func importOPML(cmd *flagutil.Command, args []string) {
 				PrintErrorAndExit(err.Error())
 			}
 
-			fw := feed_watcher.NewFeedWatcher(
+			fw := feedwatcher.NewFeedWatcher(
 				*feed,
 				httpCrawlChannel,
 				responseChannel,

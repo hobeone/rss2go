@@ -57,13 +57,13 @@ func runOne(cmd *flagutil.Command, args []string) {
 		PrintErrorAndExit(err.Error())
 	}
 
-	httpCrawlChannel := make(chan *feed_watcher.FeedCrawlRequest, 1)
-	responseChannel := make(chan *feed_watcher.FeedCrawlResponse)
+	httpCrawlChannel := make(chan *feedwatcher.FeedCrawlRequest, 1)
+	responseChannel := make(chan *feedwatcher.FeedCrawlResponse)
 
 	// start crawler pool
 	crawler.StartCrawlerPool(1, httpCrawlChannel)
 
-	fw := feed_watcher.NewFeedWatcher(
+	fw := feedwatcher.NewFeedWatcher(
 		*feed,
 		httpCrawlChannel,
 		responseChannel,
@@ -73,7 +73,7 @@ func runOne(cmd *flagutil.Command, args []string) {
 		10,
 		100,
 	)
-	feeds := make(map[string]*feed_watcher.FeedWatcher)
+	feeds := make(map[string]*feedwatcher.FeedWatcher)
 	feeds[fw.FeedInfo.Url] = fw
 	if loops == -1 {
 		for {

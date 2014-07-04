@@ -18,11 +18,11 @@ func TestFeedCrawler(t *testing.T) {
 	ts := httptest.NewServer(fakeServerHandler)
 	defer ts.Close()
 
-	ch := make(chan *feed_watcher.FeedCrawlRequest)
-	rchan := make(chan *feed_watcher.FeedCrawlResponse)
+	ch := make(chan *feedwatcher.FeedCrawlRequest)
+	rchan := make(chan *feedwatcher.FeedCrawlResponse)
 	go FeedCrawler(ch)
 
-	req := &feed_watcher.FeedCrawlRequest{
+	req := &feedwatcher.FeedCrawlRequest{
 		URI:          fmt.Sprintf("%s/%s", ts.URL, "ars.rss"),
 		ResponseChan: rchan,
 	}

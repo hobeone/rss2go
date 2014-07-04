@@ -11,7 +11,7 @@
 //
 //See bin/runone.go or bin/daemon.go for example usage.
 
-package feed_watcher
+package feedwatcher
 
 import (
 	"errors"
