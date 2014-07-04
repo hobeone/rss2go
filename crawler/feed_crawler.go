@@ -77,6 +77,7 @@ func GetFeedAndMakeResponse(url string, client *http.Client) *feed_watcher.FeedC
 // gets the given URL and returns a response
 func FeedCrawler(crawlRequests chan *feed_watcher.FeedCrawlRequest) {
 	for {
+		glog.Info("Waiting on request")
 		select {
 		case req := <-crawlRequests:
 			req.ResponseChan <- GetFeedAndMakeResponse(req.URI, nil)
@@ -87,6 +88,7 @@ func FeedCrawler(crawlRequests chan *feed_watcher.FeedCrawlRequest) {
 // StartCrawlerPool creates a pool of num http crawlers listening to the crawl_channel.
 func StartCrawlerPool(num int, crawlChannel chan *feed_watcher.FeedCrawlRequest) {
 	for i := 0; i < num; i++ {
+		glog.Infof("Starting Crawler %d", i)
 		go FeedCrawler(crawlChannel)
 	}
 }

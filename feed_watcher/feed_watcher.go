@@ -26,7 +26,13 @@ import (
 	"github.com/hobeone/rss2go/mail"
 )
 
-// Allow for mocking out in test.
+// CrawlerNotAvailable is when the crawler channel would block
+var ErrCrawlerNotAvailable = errors.New("no crawler available")
+
+// Already Crawling a feed
+var ErrAlreadyCrawlingFeed = errors.New("already crawling feed")
+
+// To allow stubbing out
 var After = func(d time.Duration) <-chan time.Time {
 	return time.After(d)
 }
@@ -66,6 +72,7 @@ type FeedWatcher struct {
 	dbh               *db.DBHandle
 	KnownGuids        map[string]bool
 	LastCrawlResponse *FeedCrawlResponse
+	After             func(d time.Duration) <-chan time.Time // Allow for mocking out in test.
 }
 
 // NewFeedWatcher returns a new FeedWatcher instance.
@@ -96,6 +103,7 @@ func NewFeedWatcher(
 		dbh:               dbh,
 		KnownGuids:        guids,
 		LastCrawlResponse: &FeedCrawlResponse{},
+		After:             After,
 	}
 }
 
@@ -138,8 +146,8 @@ func (fw *FeedWatcher) Crawling() (r bool) {
 
 // UpdateFeed will crawl the feed, check for new items, mail them out and
 // update the database with the new information
-func (fw *FeedWatcher) UpdateFeed() *FeedCrawlResponse {
-	resp := fw.updateFeed()
+func (fw *FeedWatcher) UpdateFeed(resp *FeedCrawlResponse) error {
+	fw.updateFeed(resp)
 	// Update DB Record
 	fw.FeedInfo.LastPollTime = time.Now()
 	fw.FeedInfo.LastPollError = ""
@@ -150,21 +158,12 @@ func (fw *FeedWatcher) UpdateFeed() *FeedCrawlResponse {
 	if err != nil {
 		resp.Error = err
 	}
-	return resp
+	return resp.Error
 }
 
 // Core logic to poll a feed, find new items, add those to the database, and
 // send them for mail.
-func (fw *FeedWatcher) updateFeed() *FeedCrawlResponse {
-	glog.Infof("Polling feed %v", fw.FeedInfo.Url)
-	resp := fw.doCrawl()
-
-	if resp.Error != nil {
-		glog.Infof("Error getting feed %v: %v", fw.FeedInfo.Url, resp.Error)
-		return resp
-	}
-	glog.Infof("Got response to crawl of %v of length (%d)", resp.URI,
-		len(resp.Body))
+func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 	feed, stories, err := feed.ParseFeed(resp.URI, resp.Body)
 
 	if feed == nil || stories == nil || len(stories) == 0 {
@@ -176,7 +175,7 @@ func (fw *FeedWatcher) updateFeed() *FeedCrawlResponse {
 			glog.Info(e)
 			resp.Error = e
 		}
-		return resp
+		return resp.Error
 	}
 
 	/*
@@ -203,7 +202,7 @@ func (fw *FeedWatcher) updateFeed() *FeedCrawlResponse {
 			e := fmt.Errorf("error getting Guids from DB: %s", err)
 			glog.Info(e)
 			resp.Error = e
-			return resp
+			return resp.Error
 		}
 		glog.Infof("Loaded %d known guids for Feed %s.",
 			len(fw.KnownGuids), fw.FeedInfo.Url)
@@ -241,7 +240,7 @@ func (fw *FeedWatcher) updateFeed() *FeedCrawlResponse {
 		}
 	}
 
-	return resp
+	return resp.Error
 }
 
 // PollFeed is designed to be called as a Goroutine.  Use UpdateFeed to just update once.
@@ -261,12 +260,23 @@ func (fw *FeedWatcher) PollFeed() bool {
 			fw.FeedInfo.Url, timeSinceLastPoll, toSleep)
 	}
 	for {
+		// To have exit signals handled properly non of the other cases can block
+		//
 		select {
 		case <-fw.exitChan:
 			glog.Infof("Got exit signal, stopping poll of %v", fw.FeedInfo.Url)
 			return true
 		case <-fw.afterWithJitter(toSleep):
-			fw.LastCrawlResponse = fw.UpdateFeed()
+			// see if we can crawl
+			// if not sleep some small amount of time to try again - assumes that all crawlers are busy
+			resp := fw.CrawlFeed()
+			if resp.Error == ErrCrawlerNotAvailable {
+				toSleep = fw.minSleepTime
+				glog.Infof("No crawler available, sleeping.")
+				break
+			}
+			fw.LastCrawlResponse = resp
+			fw.UpdateFeed(resp)
 			fw.responseChan <- fw.LastCrawlResponse
 			toSleep = fw.minSleepTime
 			if fw.LastCrawlResponse.Error != nil {
@@ -282,7 +292,7 @@ func (fw *FeedWatcher) PollFeed() bool {
 func (fw *FeedWatcher) afterWithJitter(d time.Duration) <-chan time.Time {
 	s := d + time.Duration(rand.Int63n(60))*time.Second
 	glog.Infof("Waiting %v until next poll of %s", s, fw.FeedInfo.Url)
-	return After(s)
+	return fw.After(s)
 }
 
 // LoadGuidsFromDb populates the internal cache of GUIDs by getting the most
@@ -333,11 +343,12 @@ func (fw *FeedWatcher) sendMail(item *feed.Story) error {
 	return resp
 }
 
-func (fw *FeedWatcher) doCrawl() (r *FeedCrawlResponse) {
+// CrawlFeed will send a request to crawl a feed over it's crawl channel
+func (fw *FeedWatcher) CrawlFeed() (r *FeedCrawlResponse) {
 	if fw.crawling {
 		return &FeedCrawlResponse{
 			URI:   fw.FeedInfo.Url,
-			Error: errors.New("Already crawling " + fw.FeedInfo.Url),
+			Error: ErrAlreadyCrawlingFeed,
 		}
 	}
 	fw.lockCrawl()
@@ -347,10 +358,19 @@ func (fw *FeedWatcher) doCrawl() (r *FeedCrawlResponse) {
 		URI:          fw.FeedInfo.Url,
 		ResponseChan: make(chan *FeedCrawlResponse),
 	}
-	//TODO: make this timeout if there's nobody listening
-	fw.crawlChan <- req
-	resp := <-req.ResponseChan
-	return resp
+	resp := &FeedCrawlResponse{}
+	for {
+		select {
+		case fw.crawlChan <- req:
+			glog.Infof("Requesting crawl of feed %v", fw.FeedInfo.Url)
+			resp = <-req.ResponseChan
+			glog.Infof("Got response to crawl of %v of length (%d)", resp.URI, len(resp.Body))
+			return resp
+		default:
+			resp.Error = ErrCrawlerNotAvailable
+			return resp
+		}
+	}
 }
 
 // StopPoll will cause the PollFeed loop to exit.

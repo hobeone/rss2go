@@ -59,25 +59,48 @@ type DBHandle struct {
 	syncMutex    sync.Mutex
 }
 
+func openDB(dbType string, dbArgs string, verbose bool) gorm.DB {
+	glog.Infof("Opening database %s:%s", dbType, dbArgs)
+	// Error only returns from this if it is an unknown driver.
+	d, err := gorm.Open(dbType, dbArgs)
+	if err != nil {
+		panic(err.Error())
+	}
+	d.SingularTable(true)
+	d.LogMode(verbose)
+	// Actually test that we have a working connection
+	err = d.DB().Ping()
+	if err != nil {
+		panic(err.Error())
+	}
+	return d
+}
+
+func setupDB(db gorm.DB) error {
+	models := []interface{}{User{}, UserFeed{}, FeedInfo{}, FeedItem{}}
+	tx := db.Begin()
+	for _, m := range models {
+		err := tx.AutoMigrate(m).Error
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	tx.Commit()
+	return nil
+}
+
 func createAndOpenDb(dbPath string, verbose bool, memory bool) *DBHandle {
 	mode := "rwc"
 	if memory {
 		mode = "memory"
 	}
 	constructedPath := fmt.Sprintf("file:%s?mode=%s", dbPath, mode)
-	glog.Infof("Opening database %s", constructedPath)
-
-	db, err := gorm.Open("sqlite3", constructedPath)
+	db := openDB("sqlite3", constructedPath, verbose)
+	err := setupDB(db)
 	if err != nil {
-		glog.Fatal(err)
+		panic(err.Error())
 	}
-	db.SingularTable(true)
-	db.LogMode(verbose)
-	db.AutoMigrate(User{})
-	db.AutoMigrate(UserFeed{})
-	db.AutoMigrate(FeedInfo{})
-	db.AutoMigrate(FeedItem{})
-
 	return &DBHandle{DB: db}
 }
 
@@ -197,6 +220,9 @@ func (d *DBHandle) GetFeedsWithErrors() ([]FeedInfo, error) {
 	var feeds []FeedInfo
 	err := d.DB.Where(
 		"last_poll_error IS NOT NULL and last_poll_error <> ''").Find(&feeds).Error
+	if err == gorm.RecordNotFound {
+		err = nil
+	}
 
 	return feeds, err
 }
@@ -211,10 +237,7 @@ func (d *DBHandle) GetStaleFeeds() ([]FeedInfo, error) {
 	err := d.DB.Raw(`
 	select feed_info.id, feed_info.name, feed_info.url,  r.MaxTime, feed_info.last_poll_error FROM (SELECT feed_info_id, MAX(added_on) as MaxTime FROM feed_item GROUP BY feed_info_id) r, feed_info INNER JOIN feed_item f ON f.feed_info_id = r.feed_info_id AND f.added_on = r.MaxTime AND r.MaxTime < datetime('now','-14 days') AND f.feed_info_id = feed_info.id group by f.feed_info_id;
 	`).Scan(&res).Error
-	if err != nil {
-		return nil, err
-	}
-	return res, nil
+	return res, err
 }
 
 // GetFeedById returns the FeedInfo for the given id.  It returns a
@@ -291,15 +314,12 @@ func (d *DBHandle) GetMostRecentGuidsForFeed(feedID int64, max int) ([]string, e
 	if err == gorm.RecordNotFound {
 		err = nil
 	}
-	if err != nil {
-		return []string{}, err
-	}
 	glog.Infof("Got last %d guids for feed_id: %d.", len(items), feedID)
 	knownGuids := make([]string, len(items))
 	for i, v := range items {
 		knownGuids[i] = v.Guid
 	}
-	return knownGuids, nil
+	return knownGuids, err
 }
 
 /*
@@ -335,7 +355,7 @@ func (d *DBHandle) AddUser(name string, email string, pass string) (*User, error
 
 	bcryptPassword, err := bcrypt.GenerateFromPassword([]byte(pass), 10)
 	if err != nil {
-		return nil, err
+		return u, err
 	}
 	u.Password = string(bcryptPassword)
 
@@ -430,12 +450,12 @@ func (d *DBHandle) RemoveUserByEmail(email string) error {
 func (d *DBHandle) AddFeedsToUser(u *User, feeds []*FeedInfo) error {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
-
 	for _, f := range feeds {
 		uf := &UserFeed{
 			UserId: u.Id,
 			FeedId: f.Id,
 		}
+		//err := d.DB.Where(uf).FirstOrCreate(uf).Error
 		err := d.DB.Save(uf).Error
 		if err != nil {
 			return err
@@ -590,17 +610,16 @@ func LoadFixtures(t TestReporter, d *DBHandle) ([]*FeedInfo, []*User) {
 			Url:  "http://testfeed3/feed.atom",
 		},
 	}
-
-	for _, u := range feeds {
-		err := d.DB.Save(u).Error
+	for _, f := range feeds {
+		err := d.SaveFeed(f)
 		if err != nil {
-			t.Fatalf("Error saving fixture to db: %s", err)
+			t.Fatalf("Error saving feed fixture to db: %s", err)
 		}
 	}
 	for _, u := range users {
-		err := d.DB.Save(u).Error
+		err := d.SaveUser(u)
 		if err != nil {
-			t.Fatalf("Error saving fixture to db: %s", err)
+			t.Fatalf("Error saving user fixture to db: %s", err)
 		}
 		err = d.AddFeedsToUser(u, feeds)
 		if err != nil {

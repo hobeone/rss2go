@@ -2,11 +2,14 @@ package commands
 
 import (
 	"bytes"
-	"code.google.com/p/go-charset/charset"
-	_ "code.google.com/p/go-charset/data"
 	"encoding/xml"
 	"flag"
 	"fmt"
+	"io/ioutil"
+	"sync"
+
+	"code.google.com/p/go-charset/charset"
+	_ "code.google.com/p/go-charset/data"
 	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/db"
@@ -15,8 +18,6 @@ import (
 	"github.com/hobeone/rss2go/mail"
 	"github.com/hobeone/rss2go/opml"
 	"github.com/mattn/go-sqlite3"
-	"io/ioutil"
-	"sync"
 )
 
 func MakeCmdImportOpml() *flagutil.Command {
@@ -95,9 +96,9 @@ func importOPML(cmd *flagutil.Command, args []string) {
 		fmt.Printf("Added feed \"%s\" at url \"%s\"\n", v, k)
 	}
 	if len(new_feeds) > 0 && update_feeds {
-		http_crawl_channel := make(chan *feed_watcher.FeedCrawlRequest)
-		response_channel := make(chan *feed_watcher.FeedCrawlResponse)
-		crawler.StartCrawlerPool(cfg.Crawl.MaxCrawlers, http_crawl_channel)
+		httpCrawlChannel := make(chan *feed_watcher.FeedCrawlRequest, 1)
+		responseChannel := make(chan *feed_watcher.FeedCrawlResponse)
+		crawler.StartCrawlerPool(cfg.Crawl.MaxCrawlers, httpCrawlChannel)
 
 		wg := sync.WaitGroup{}
 		for _, feed := range new_feeds {
@@ -108,8 +109,8 @@ func importOPML(cmd *flagutil.Command, args []string) {
 
 			fw := feed_watcher.NewFeedWatcher(
 				*feed,
-				http_crawl_channel,
-				response_channel,
+				httpCrawlChannel,
+				responseChannel,
 				mailer.OutgoingMail,
 				dbh,
 				guids,
@@ -120,7 +121,8 @@ func importOPML(cmd *flagutil.Command, args []string) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				fw.UpdateFeed()
+				resp := fw.CrawlFeed()
+				fw.UpdateFeed(resp)
 			}()
 		}
 		wg.Wait()

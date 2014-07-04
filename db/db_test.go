@@ -1,17 +1,101 @@
 package db
 
 import (
-	. "github.com/smartystreets/goconvey/convey"
-
+	"database/sql/driver"
+	"errors"
 	"testing"
 	"time"
+
+	testdb "github.com/erikstmartin/go-testdb"
+	. "github.com/smartystreets/goconvey/convey"
 )
 
-func TestGetMostRecentGuidsForFeed(t *testing.T) {
-	d := NewMemoryDBHandle(false, true)
-	feeds, _ := LoadFixtures(t, d)
+func NewTestDBHandle(t *testing.T, verbose bool, w bool) *DBHandle {
+	db := openDB("testdb", "", verbose)
+	return &DBHandle{DB: db}
+}
 
+func TestConnectionError(t *testing.T) {
+	defer testdb.Reset()
+
+	testdb.SetOpenFunc(func(dsn string) (driver.Conn, error) {
+		return testdb.Conn(), errors.New("failed to connect")
+	})
+
+	Convey("Given database open error", t, func() {
+		So(func() { NewTestDBHandle(t, false, false) }, ShouldPanic)
+	})
+}
+
+func TestGettingFeed(t *testing.T) {
+	Convey("Get All Feeds", t, func() {
+		d := NewTestDBHandle(t, false, true)
+		Convey("Should get all feeds", func() {
+			sql := "SELECT * FROM `feed_info`"
+			columns := []string{"id", "name", "url"}
+			result := `
+			1,testfeed1,http://testfeed1/feed.atom
+			2,testfeed2,http://testfeed2/feed.rss
+			3,testfeed3,http://testfeed3/feed.rdf
+			`
+			testdb.StubQuery(sql, testdb.RowsFromCSVString(columns, result))
+
+			feeds, err := d.GetAllFeeds()
+			So(err, ShouldBeNil)
+			So(len(feeds), ShouldEqual, 3)
+		})
+	})
+	Convey("GetFeedsWithErrors", t, func() {
+		d := NewMemoryDBHandle(false, true)
+		fixtureFeeds, _ := LoadFixtures(t, d)
+
+		feeds, err := d.GetFeedsWithErrors()
+		So(err, ShouldBeNil)
+		So(len(feeds), ShouldEqual, 0)
+
+		fixtureFeeds[0].LastPollError = "Error"
+		err = d.SaveFeed(fixtureFeeds[0])
+		So(err, ShouldBeNil)
+
+		feeds, err = d.GetFeedsWithErrors()
+		So(err, ShouldBeNil)
+		So(len(feeds), ShouldEqual, 1)
+	})
+}
+
+func TestGettingUsers(t *testing.T) {
+	d := NewMemoryDBHandle(false, true)
+	_, users := LoadFixtures(t, d)
+
+	Convey("GetAllUsers", t, func() {
+		Convey("Should get all users", func() {
+			users, err := d.GetAllUsers()
+			So(err, ShouldBeNil)
+			So(len(users), ShouldEqual, 3)
+		})
+	})
+	Convey("GetUserById", t, func() {
+		Convey("Should get user given an Id", func() {
+			u, err := d.GetUserById(1)
+			So(err, ShouldBeNil)
+			So(u.Id, ShouldEqual, 1)
+		})
+	})
+	Convey("GetUserByEmail", t, func() {
+		Convey("Should get user given an email", func() {
+			u, err := d.GetUserByEmail(users[0].Email)
+			So(err, ShouldBeNil)
+			So(u.Email, ShouldEqual, users[0].Email)
+		})
+	})
+
+}
+
+func TestGetMostRecentGuidsForFeed(t *testing.T) {
 	Convey("Given new GUIDs", t, func() {
+		d := NewMemoryDBHandle(false, true)
+		feeds, _ := LoadFixtures(t, d)
+
 		So(d.RecordGuid(feeds[0].Id, "123"), ShouldBeNil)
 		So(d.RecordGuid(feeds[0].Id, "1234"), ShouldBeNil)
 		So(d.RecordGuid(feeds[0].Id, "12345"), ShouldBeNil)
@@ -28,7 +112,16 @@ func TestGetMostRecentGuidsForFeed(t *testing.T) {
 			So(len(guids), ShouldEqual, 3)
 		})
 	})
+	Convey("Given no Records", t, func() {
+		d := NewMemoryDBHandle(false, true)
+		feeds, _ := LoadFixtures(t, d)
 
+		Convey("Get all Guids", func() {
+			guids, err := d.GetMostRecentGuidsForFeed(feeds[0].Id, -1)
+			So(err, ShouldBeNil)
+			So(len(guids), ShouldEqual, 0)
+		})
+	})
 }
 
 func TestFeedValidation(t *testing.T) {

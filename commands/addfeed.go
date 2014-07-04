@@ -3,6 +3,7 @@ package commands
 import (
 	"flag"
 	"fmt"
+
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
@@ -62,16 +63,16 @@ func addFeed(cmd *flagutil.Command, args []string) {
 			PrintErrorAndExit(err.Error())
 		}
 
-		http_crawl_channel := make(chan *feed_watcher.FeedCrawlRequest)
-		response_channel := make(chan *feed_watcher.FeedCrawlResponse)
+		httpCrawlChannel := make(chan *feed_watcher.FeedCrawlRequest, 1)
+		responseChannel := make(chan *feed_watcher.FeedCrawlResponse)
 
 		// start crawler pool
-		crawler.StartCrawlerPool(1, http_crawl_channel)
+		crawler.StartCrawlerPool(1, httpCrawlChannel)
 
 		fw := feed_watcher.NewFeedWatcher(
 			*feed,
-			http_crawl_channel,
-			response_channel,
+			httpCrawlChannel,
+			responseChannel,
 			mailer.OutgoingMail,
 			dbh,
 			[]string{},
@@ -79,6 +80,7 @@ func addFeed(cmd *flagutil.Command, args []string) {
 			100,
 		)
 
-		fw.UpdateFeed()
+		resp := fw.CrawlFeed()
+		fw.UpdateFeed(resp)
 	}
 }

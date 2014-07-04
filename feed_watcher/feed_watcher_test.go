@@ -9,10 +9,11 @@ import (
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed"
 	"github.com/hobeone/rss2go/mail"
+	. "github.com/smartystreets/goconvey/convey"
 )
 
-func OverrideAfter() {
-	After = func(d time.Duration) <-chan time.Time {
+func OverrideAfter(fw *FeedWatcher) {
+	fw.After = func(d time.Duration) <-chan time.Time {
 		return time.After(time.Duration(0))
 	}
 }
@@ -52,7 +53,7 @@ func TestFeedWatcherPollLocking(t *testing.T) {
 
 func TestFeedWatcherPolling(t *testing.T) {
 	n, feedResp := SetupTest(t, "../testdata/ars.rss")
-	OverrideAfter()
+	OverrideAfter(n)
 
 	go n.PollFeed()
 	req := <-n.crawlChan
@@ -88,7 +89,7 @@ func TestFeedWatcherPolling(t *testing.T) {
 
 func TestFeedWatcherPollingRssWithNoItemDates(t *testing.T) {
 	n, feedResp := SetupTest(t, "../testdata/bicycling_rss.xml")
-	OverrideAfter()
+	OverrideAfter(n)
 
 	go n.PollFeed()
 	req := <-n.crawlChan
@@ -118,7 +119,7 @@ func TestFeedWatcherPollingRssWithNoItemDates(t *testing.T) {
 
 func TestFeedWatcherWithMalformedFeed(t *testing.T) {
 	n, _ := SetupTest(t, "../testdata/ars.rss")
-	OverrideAfter()
+	OverrideAfter(n)
 	go n.PollFeed()
 
 	req := <-n.crawlChan
@@ -144,7 +145,7 @@ func TestFeedWatcherWithMalformedFeed(t *testing.T) {
 
 func TestFeedWatcherWithGuidsSet(t *testing.T) {
 	n, feedResp := SetupTest(t, "../testdata/ars.rss")
-	OverrideAfter()
+	OverrideAfter(n)
 
 	_, stories, _ := feed.ParseFeed(n.FeedInfo.Url, feedResp)
 	guids := make(map[string]bool, 25)
@@ -184,7 +185,7 @@ func TestFeedWatcherWithTooRecentLastPoll(t *testing.T) {
 	n.FeedInfo.LastPollTime = time.Now()
 
 	afterCalls := 0
-	After = func(d time.Duration) <-chan time.Time {
+	n.After = func(d time.Duration) <-chan time.Time {
 		afterCalls++
 		return time.After(time.Duration(0))
 	}
@@ -200,13 +201,13 @@ func TestFeedWatcherWithTooRecentLastPoll(t *testing.T) {
 	_ = <-n.responseChan
 
 	if afterCalls != 2 {
-		t.Fatalf("After not called exactly twice.")
+		t.Fatalf("Expecting after to be called twice, called %d times", afterCalls)
 	}
 }
 
 func TestWithEmptyFeed(t *testing.T) {
 	n, feedResp := SetupTest(t, "../testdata/empty.rss")
-	OverrideAfter()
+	OverrideAfter(n)
 	go n.PollFeed()
 	req := <-n.crawlChan
 
@@ -223,7 +224,7 @@ func TestWithEmptyFeed(t *testing.T) {
 
 func TestWithErrorOnCrawl(t *testing.T) {
 	n, feedResp := SetupTest(t, "../testdata/empty.rss")
-	OverrideAfter()
+	OverrideAfter(n)
 	go n.PollFeed()
 	req := <-n.crawlChan
 
@@ -239,7 +240,7 @@ func TestWithErrorOnCrawl(t *testing.T) {
 }
 func TestWithDoublePollFeed(t *testing.T) {
 	n, feedResp := SetupTest(t, "../testdata/empty.rss")
-	OverrideAfter()
+	OverrideAfter(n)
 	go n.PollFeed()
 
 	req := <-n.crawlChan
@@ -257,4 +258,14 @@ func TestWithDoublePollFeed(t *testing.T) {
 	if r {
 		t.Fatal("Calling PollFeed twice should return false")
 	}
+}
+
+func TestCrawlLock(t *testing.T) {
+	Convey("Subject FeedWatcher Crawl Lock:", t, func() {
+		n, _ := SetupTest(t, "../testdata/empty.rss")
+		Convey("Given already crawling", func() {
+			n.lockCrawl()
+			So(n.CrawlFeed().Error, ShouldEqual, ErrAlreadyCrawlingFeed)
+		})
+	})
 }

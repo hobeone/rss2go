@@ -2,6 +2,8 @@ package commands
 
 import (
 	"flag"
+	"time"
+
 	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/crawler"
@@ -10,7 +12,6 @@ import (
 	"github.com/hobeone/rss2go/flagutil"
 	"github.com/hobeone/rss2go/mail"
 	"github.com/hobeone/rss2go/webui"
-	"time"
 )
 
 func MakeCmdDaemon() *flagutil.Command {
@@ -49,7 +50,7 @@ func NewDaemon(cfg *config.Config) *Daemon {
 	} else {
 		dbh = db.NewDBHandle(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 	}
-	cc := make(chan *feed_watcher.FeedCrawlRequest)
+	cc := make(chan *feed_watcher.FeedCrawlRequest, 1)
 	rc := make(chan *feed_watcher.FeedCrawlResponse)
 	mc := mail.CreateAndStartMailer(dbh, cfg).OutgoingMail
 
