@@ -365,6 +365,8 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 		}
 		const snipLen = 100
 
+		s.Content = html.UnescapeString(s.Content)
+		s.Content = html.UnescapeString(s.Content)
 		// Most mail readers disallow IFRAMES in mail content.  This breaks
 		// embedding of things like youtube videos.  By changing them to anchor
 		// tags things like Gmail will do their own embedding when reading the
@@ -374,6 +376,8 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 			glog.Errorf("Error replacing IFRAMES with Anchor tags: %s", err)
 		}
 		s.Content, s.Summary = sanitizer.Sanitize(s.Content, su)
+		s.Summary = html.UnescapeString(s.Summary)
+		s.Summary = html.UnescapeString(s.Summary)
 		s.Summary = sanitizer.SnipText(s.Summary, snipLen)
 	}
 

@@ -11,6 +11,8 @@ import (
 	"encoding/xml"
 	"html"
 	"time"
+
+	"github.com/mjibson/goread/sanitizer"
 )
 
 type Feed struct {
@@ -56,8 +58,11 @@ type Text struct {
 }
 
 func (t *Text) ToString() string {
-	if t.Type == "text" {
+	switch t.Type {
+	case "text":
 		return html.UnescapeString(t.Body)
+	case "html":
+		return html.UnescapeString(sanitizer.StripTags(t.Body))
 	}
 	return t.Body
 }

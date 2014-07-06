@@ -19,10 +19,10 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/hobeone/gophermail" // Fix for subjects showing up quoted after go1.3
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed"
-	"github.com/jpoehls/gophermail"
 )
 
 const MTA_BINARY = "sendmail"
@@ -41,7 +41,7 @@ type LocalMTASender struct {
 }
 
 func (self *LocalMTASender) SendMail(msg *gophermail.Message) error {
-	cmd := exec.Command(self.MTAPath, "-t")
+	cmd := exec.Command(self.MTAPath, "-t", "-i")
 
 	msgBytes, err := msg.Bytes()
 	if err != nil {
