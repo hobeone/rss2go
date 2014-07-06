@@ -1,6 +1,10 @@
 package mail
 
 import (
+	"fmt"
+	"net/mail"
+	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/hobeone/gophermail"
@@ -75,8 +79,35 @@ func TestSendToUsers(t *testing.T) {
 	}
 }
 
-/*
-* Need to figure out how to have a sendmail analog to call
+type TestCommandRunner struct {
+	TestToRun string
+}
+
+func (r TestCommandRunner) Run(input []byte) ([]byte, error) {
+	cs := []string{fmt.Sprintf("-test.run=%s", r.TestToRun), "--"}
+	cs = append(cs)
+	cmd := exec.Command(os.Args[0], cs...)
+	cmd.Env = []string{"GO_WANT_HELPER_PROCESS=1"}
+	out, err := cmd.CombinedOutput()
+	return out, err
+}
+
+func TestHelperProcessSuccess(*testing.T) {
+	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
+		return
+	}
+	defer os.Exit(0)
+	fmt.Println("testing helper process")
+}
+
+func TestHelperProcessFail(*testing.T) {
+	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
+		return
+	}
+	defer os.Exit(1)
+	fmt.Println("testing helper process")
+}
+
 func TestLocalMTASender(t *testing.T) {
 	msg := &gophermail.Message{
 		From:    mail.Address{Address: "from@example.com"},
@@ -85,16 +116,18 @@ func TestLocalMTASender(t *testing.T) {
 		Body:    "Test Body",
 	}
 
-	mta := NewLocalMTASender("/bin/true")
+	mta := NewLocalMTASender("")
+	mta.Runner = TestCommandRunner{"TestHelperProcessSuccess"}
+
 	err := mta.SendMail(msg)
 	if err != nil {
-		t.Fatalf("Error sending mail with /bin/true which should always work. Err: %s", err)
+		t.Fatalf("Unexpected error on SendMail: %s", err)
 	}
 
-	mta = NewLocalMTASender("/bin/false")
+	mta.Runner = TestCommandRunner{"TestHelperProcessFail"}
+
 	err = mta.SendMail(msg)
 	if err == nil {
-		t.Fatalf("Sending mail with /bin/false which should always fail.")
+		t.Fatalf("Unexpected success with SendMail.")
 	}
 }
-*/

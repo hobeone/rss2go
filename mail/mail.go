@@ -36,42 +36,53 @@ type MailSender interface {
 	SendMail(*gophermail.Message) error
 }
 
+type CommandRunner interface {
+	Run([]byte) ([]byte, error)
+}
+
+type SendmailRunner struct {
+	SendmailPath string
+}
+
+func (r SendmailRunner) Run(input []byte) ([]byte, error) {
+	cmd := exec.Command(r.SendmailPath, "-t", "-i")
+	cmd.Stdin = bytes.NewReader(input)
+	glog.Infof("Running command %#v", cmd)
+	return cmd.CombinedOutput()
+}
+
 type LocalMTASender struct {
-	MTAPath string
+	Runner CommandRunner
 }
 
 func (self *LocalMTASender) SendMail(msg *gophermail.Message) error {
-	cmd := exec.Command(self.MTAPath, "-t", "-i")
-
 	msgBytes, err := msg.Bytes()
 	if err != nil {
 		return fmt.Errorf("error converting message to text: %s", err.Error())
 	}
-	cmd.Stdin = bytes.NewReader(msgBytes)
-
-	_, err = cmd.CombinedOutput()
+	_, err = self.Runner.Run(msgBytes)
 	if err != nil {
-		return fmt.Errorf("error running command %#v: %s", cmd.Args, err.Error())
+		return fmt.Errorf("error running command %s", err.Error())
 	}
 	glog.Infof("Successfully sent mail: %s to %v", msg.Subject, msg.To)
 	return nil
 }
 
-func NewLocalMTASender(mta_path string) MailSender {
-	if mta_path == "" {
-		mta_path = MTA_BINARY
+func NewLocalMTASender(mtaPath string) *LocalMTASender {
+	if mtaPath == "" {
+		mtaPath = MTA_BINARY
 	}
 
-	c, err := exec.LookPath(mta_path)
+	c, err := exec.LookPath(mtaPath)
 	if err != nil {
 		panic(fmt.Sprintf("Couldn't find specified MTA: %s", err.Error()))
 	} else {
-		glog.Infof("Found %s at %s.", mta_path, c)
+		glog.Infof("Found %s at %s.", mtaPath, c)
 	}
-	mta_path = c
+	mtaPath = c
 
 	return &LocalMTASender{
-		MTAPath: mta_path,
+		Runner: SendmailRunner{mtaPath},
 	}
 }
 
