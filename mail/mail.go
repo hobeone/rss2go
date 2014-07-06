@@ -45,15 +45,13 @@ func (self *LocalMTASender) SendMail(msg *gophermail.Message) error {
 
 	msgBytes, err := msg.Bytes()
 	if err != nil {
-		return fmt.Errorf(
-			"Error converting message to text: %s", err.Error())
+		return fmt.Errorf("error converting message to text: %s", err.Error())
 	}
 	cmd.Stdin = bytes.NewReader(msgBytes)
 
 	_, err = cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("Error running command %#v: %s",
-			cmd.Args, err)
+		return fmt.Errorf("error running command %#v: %s", cmd.Args, err.Error())
 	}
 	glog.Infof("Successfully sent mail: %s to %v", msg.Subject, msg.To)
 	return nil
