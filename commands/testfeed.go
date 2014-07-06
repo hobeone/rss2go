@@ -14,7 +14,7 @@ import (
 func MakeCmdTestFeed() *flagutil.Command {
 	cmd := &flagutil.Command{
 		Run:       testFeed,
-		UsageLine: "test_feed",
+		UsageLine: "testfeed",
 		Short:     "Crawl and try to parse a feed from the command line.",
 		Long: `
 		Test crawl and parse one feed.  Doesn't need to exist in the database.
@@ -23,7 +23,7 @@ func MakeCmdTestFeed() *flagutil.Command {
 
 		test_feed http://test/feed.rss
 		`,
-		Flag: *flag.NewFlagSet("test_feed", flag.ExitOnError),
+		Flag: *flag.NewFlagSet("testfeed", flag.ExitOnError),
 	}
 
 	return cmd

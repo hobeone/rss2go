@@ -10,13 +10,16 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
-	"html"
 	"net/url"
 	"strings"
 	"time"
 
 	"code.google.com/p/go-charset/charset"
 	_ "code.google.com/p/go-charset/data"
+	"code.google.com/p/go-html-transform/h5"
+	"code.google.com/p/go-html-transform/html/transform"
+	"code.google.com/p/go.net/html"
+
 	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/atom"
 	"github.com/hobeone/rss2go/rdf"
@@ -24,6 +27,7 @@ import (
 	"github.com/mjibson/goread/sanitizer"
 )
 
+// Feed represents the basic information for a RSS, Atom or RDF feed.
 type Feed struct {
 	Url        string
 	Title      string
@@ -35,7 +39,7 @@ type Feed struct {
 	Hub        string
 }
 
-// parent: Feed, key: story ID
+// Story represents in individual item from a feed.
 type Story struct {
 	Id           string
 	Title        string
@@ -56,11 +60,11 @@ func parseAtom(u string, b []byte) (*Feed, []*Story, error) {
 	a := atom.Feed{}
 	var fb, eb *url.URL
 
-	xml_decoder := xml.NewDecoder(bytes.NewReader(b))
-	xml_decoder.Strict = false
-	xml_decoder.CharsetReader = charset.NewReader
-	xml_decoder.Entity = xml.HTMLEntity
-	err := xml_decoder.Decode(&a)
+	xmlDecoder := xml.NewDecoder(bytes.NewReader(b))
+	xmlDecoder.Strict = false
+	xmlDecoder.CharsetReader = charset.NewReader
+	xmlDecoder.Entity = xml.HTMLEntity
+	err := xmlDecoder.Decode(&a)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -97,7 +101,7 @@ func parseAtom(u string, b []byte) (*Feed, []*Story, error) {
 		}
 		st := Story{
 			Id:    i.ID,
-			Title: i.Title,
+			Title: i.Title.ToString(),
 			Feed:  &f,
 		}
 		if t, err := parseDate(&f, string(i.Updated)); err == nil {
@@ -150,7 +154,7 @@ func parseRss(u string, b []byte) (*Feed, []*Story, error) {
 	s := []*Story{}
 
 	f.Title = r.Title
-	f.Link = r.Link
+	f.Link = r.BaseLink()
 	if t, err := parseDate(&f, r.LastBuildDate, r.PubDate); err == nil {
 		f.Updated = t
 	} else {
@@ -234,7 +238,8 @@ func parseRdf(u string, b []byte) (*Feed, []*Story, error) {
 	return parseFix(&f, s)
 }
 
-func ParseFeed(u string, b []byte) (*Feed, []*Story, error) {
+// ParseFeed will try to find an Atom, RSS or RDF feed in the given byte array (in that order).
+func ParseFeed(url string, b []byte) (*Feed, []*Story, error) {
 	tr, err := charset.TranslatorTo("utf-8")
 	if err != nil {
 		return nil, nil, err
@@ -244,25 +249,25 @@ func ParseFeed(u string, b []byte) (*Feed, []*Story, error) {
 		return nil, nil, err
 	}
 
-	feed, stories, atomerr := parseAtom(u, b)
+	feed, stories, atomerr := parseAtom(url, b)
 	if atomerr == nil {
-		glog.Infof("Parsed %s as Atom", u)
+		glog.Infof("Parsed %s as Atom", url)
 		return feed, stories, nil
 	}
 
-	feed, stories, rsserr := parseRss(u, b)
+	feed, stories, rsserr := parseRss(url, b)
 	if rsserr == nil {
-		glog.Infof("Parsed %s as RSS", u)
+		glog.Infof("Parsed %s as RSS", url)
 		return feed, stories, nil
 	}
 
-	feed, stories, rdferr := parseRdf(u, b)
+	feed, stories, rdferr := parseRdf(url, b)
 	if rdferr == nil {
-		glog.Infof("Parsed %s as RDF", u)
+		glog.Infof("Parsed %s as RDF", url)
 		return feed, stories, nil
 	}
 
-	err = fmt.Errorf("Error parsing feed. Couldn't find ATOM, RSS or RDF feed. ATOM Error: %s, RSS Error: %s, RDF Error: %s\n", atomerr, rsserr, rdferr)
+	err = fmt.Errorf("couldn't find ATOM, RSS or RDF feed for %s. ATOM Error: %s, RSS Error: %s, RDF Error: %s\n", url, atomerr, rsserr, rdferr)
 
 	glog.Info(err.Error())
 	return nil, nil, err
@@ -350,7 +355,7 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 			if err == nil {
 				s.Link = link.String()
 			} else {
-				glog.Infof("unable to resolve link: %v", s.Link)
+				glog.Infof("unable to resolve link: %s: %v", err, s.Link)
 			}
 		}
 		su, serr := url.Parse(s.Link)
@@ -359,9 +364,50 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 			s.Link = ""
 		}
 		const snipLen = 100
+
+		// Most mail readers disallow IFRAMES in mail content.  This breaks
+		// embedding of things like youtube videos.  By changing them to anchor
+		// tags things like Gmail will do their own embedding when reading the
+		// mail.
+		s.Content, err = replaceIframes(s.Content)
+		if err != nil {
+			glog.Errorf("Error replacing IFRAMES with Anchor tags: %s", err)
+		}
 		s.Content, s.Summary = sanitizer.Sanitize(s.Content, su)
 		s.Summary = sanitizer.SnipText(s.Summary, snipLen)
 	}
 
 	return f, ss, nil
+}
+
+func convertIframeToAnchor(n *html.Node) {
+	p := n.Parent
+	if n.Parent == nil {
+		// Won't mess with the root node
+		return
+	}
+	linkSrc := ""
+	for i, attr := range n.Attr {
+		if attr.Key == "src" {
+			linkSrc = n.Attr[i].Val
+		}
+	}
+	if linkSrc != "" {
+		if !strings.HasPrefix(linkSrc, "http") {
+			linkSrc = fmt.Sprintf("%s%s", "http:", linkSrc)
+		}
+		p.InsertBefore(h5.Anchor(linkSrc, linkSrc), n)
+		p.RemoveChild(n)
+	}
+}
+
+func replaceIframes(htmlFrag string) (string, error) {
+	doc, err := transform.NewFromReader(strings.NewReader(htmlFrag))
+	if err != nil {
+		return htmlFrag, err
+	}
+	doc.ApplyAll(
+		transform.MustTrans(convertIframeToAnchor, "iframe"),
+	)
+	return doc.String(), nil
 }

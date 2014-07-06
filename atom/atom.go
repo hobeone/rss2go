@@ -9,22 +9,23 @@ package atom
 
 import (
 	"encoding/xml"
+	"html"
 	"time"
 )
 
 type Feed struct {
-	XMLName xml.Name `xml:"http://www.w3.org/2005/Atom feed"`
+	XMLName xml.Name `xml:"feed"`
 	Title   string   `xml:"title"`
 	ID      string   `xml:"id"`
 	Link    []Link   `xml:"link"`
 	Updated TimeStr  `xml:"updated"`
 	Author  *Person  `xml:"author"`
 	Entry   []*Entry `xml:"entry"`
-	XMLBase string   `xml:"http://www.w3.org/XML/1998/namespace base,attr"`
+	XMLBase string   `xml:"base,attr"`
 }
 
 type Entry struct {
-	Title     string  `xml:"title"`
+	Title     *Text   `xml:"title"`
 	ID        string  `xml:"id"`
 	Link      []Link  `xml:"link"`
 	Published TimeStr `xml:"published"`
@@ -32,7 +33,7 @@ type Entry struct {
 	Author    *Person `xml:"author"`
 	Summary   *Text   `xml:"summary"`
 	Content   *Text   `xml:"content"`
-	XMLBase   string  `xml:"http://www.w3.org/XML/1998/namespace base,attr"`
+	XMLBase   string  `xml:"base,attr"`
 }
 
 type Link struct {
@@ -52,6 +53,13 @@ type Text struct {
 	Type     string `xml:"type,attr"`
 	Body     string `xml:",chardata"`
 	InnerXML string `xml:",innerxml"`
+}
+
+func (t *Text) ToString() string {
+	if t.Type == "text" {
+		return html.UnescapeString(t.Body)
+	}
+	return t.Body
 }
 
 type TimeStr string

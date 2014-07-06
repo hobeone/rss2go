@@ -3,6 +3,7 @@ package feed
 import (
 	"fmt"
 	"io/ioutil"
+	"strings"
 	"testing"
 	"unicode/utf8"
 
@@ -63,5 +64,25 @@ func TestFeedWithBadEntity(t *testing.T) {
 
 	if err != nil {
 		t.Fatal("Feed should be able to parse feeds with unescaped entities")
+	}
+}
+
+func TestFeedIframeExtraction(t *testing.T) {
+	feedResp, err := ioutil.ReadFile("../testdata/milanofixed.rss")
+	if err != nil {
+		t.Fatal("Error reading test feed.")
+	}
+	_, s, _ := ParseFeed("http://localhost/feed.rss", feedResp)
+
+	if len(s) != 1 {
+		t.Fatalf("Expected 1 story from feed, got %d", len(s))
+	}
+	replaced, err := replaceIframes(s[0].Content)
+	if err != nil {
+		t.Fatalf("Error replacing Iframes: %s", err)
+	}
+	expected := `<a href="http://www.youtube.com/embed/dwcwjXLSw00"`
+	if !strings.Contains(replaced, expected) {
+		t.Fatalf("Couldn't find %v in %v", expected, replaced)
 	}
 }

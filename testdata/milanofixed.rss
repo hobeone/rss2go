@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+	xmlns:content="http://purl.org/rss/1.0/modules/content/"
+	xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+	xmlns:dc="http://purl.org/dc/elements/1.1/"
+	xmlns:atom="http://www.w3.org/2005/Atom"
+	xmlns:sy="http://purl.org/rss/1.0/modules/syndication/"
+	xmlns:slash="http://purl.org/rss/1.0/modules/slash/"
+	>
+
+<channel>
+	<title>Milano Fixed</title>
+	<atom:link href="http://www.milanofixed.com/feed/" rel="self" type="application/rss+xml" />
+	<link>http://www.milanofixed.com</link>
+	<description></description>
+	<lastBuildDate>Fri, 04 Jul 2014 13:27:04 +0000</lastBuildDate>
+	<language>en</language>
+	<sy:updatePeriod>hourly</sy:updatePeriod>
+	<sy:updateFrequency>1</sy:updateFrequency>
+	<generator>http://wordpress.org/?v=3.2.1</generator>
+		<item>
+		<title>Angel Race NYC 1999</title>
+		<link>http://www.milanofixed.com/angel-race-nyc-1999/</link>
+		<comments>http://www.milanofixed.com/angel-race-nyc-1999/#comments</comments>
+		<pubDate>Fri, 04 Jul 2014 12:58:57 +0000</pubDate>
+		<dc:creator>roy</dc:creator>
+				<category><![CDATA[Video]]></category>
+		<category><![CDATA[angel race]]></category>
+		<category><![CDATA[hardcore]]></category>
+		<category><![CDATA[old school]]></category>
+		<category><![CDATA[true school]]></category>
+
+		<guid isPermaLink="false">http://www.milanofixed.com/?p=30036</guid>
+		<description><![CDATA[via keirin berlin]]></description>
+			<content:encoded><![CDATA[<p><iframe src="//www.youtube.com/embed/dwcwjXLSw00" frameborder="0" width="560" height="420"></iframe></p>
+<p>via <a href="http://www.keirinberlin.de/?p=8785" target="_blank">keirin berlin</a></p>
+]]></content:encoded>
+			<wfw:commentRss>http://www.milanofixed.com/angel-race-nyc-1999/feed/</wfw:commentRss>
+		<slash:comments>1</slash:comments>
+		</item>
+	</channel>
+</rss>
