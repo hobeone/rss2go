@@ -116,7 +116,7 @@ func TestLocalMTASender(t *testing.T) {
 		Body:    "Test Body",
 	}
 
-	mta := NewLocalMTASender("")
+	mta := NewLocalMTASender("/bin/true")
 	mta.Runner = TestCommandRunner{"TestHelperProcessSuccess"}
 
 	err := mta.SendMail(msg)
