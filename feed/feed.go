@@ -19,12 +19,12 @@ import (
 	"code.google.com/p/go-html-transform/h5"
 	"code.google.com/p/go-html-transform/html/transform"
 	"code.google.com/p/go.net/html"
+	"github.com/microcosm-cc/bluemonday"
 
 	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/atom"
 	"github.com/hobeone/rss2go/rdf"
 	"github.com/hobeone/rss2go/rss"
-	"github.com/mjibson/goread/sanitizer"
 )
 
 // Feed represents the basic information for a RSS, Atom or RDF feed.
@@ -49,7 +49,6 @@ type Story struct {
 	Updated      time.Time
 	Date         int64
 	Author       string
-	Summary      string
 	MediaContent string
 	Feed         *Feed
 
@@ -359,12 +358,10 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 				glog.Infof("unable to resolve link: %s: %v", err, s.Link)
 			}
 		}
-		su, serr := url.Parse(s.Link)
+		_, serr := url.Parse(s.Link)
 		if serr != nil {
-			su = &url.URL{}
 			s.Link = ""
 		}
-		const snipLen = 100
 
 		// Most mail readers disallow IFRAMES in mail content.  This breaks
 		// embedding of things like youtube videos.  By changing them to anchor
@@ -374,10 +371,8 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 		if err != nil {
 			glog.Errorf("Error replacing IFRAMES with Anchor tags: %s", err)
 		}
-		s.Content, s.Summary = sanitizer.Sanitize(s.Content, su)
-		s.Summary = sanitizer.SnipText(s.Summary, snipLen)
-		s.Content = fullyUnescape(s.Content)
-		s.Summary = fullyUnescape(s.Summary)
+		p := bluemonday.UGCPolicy()
+		s.Content = fullyUnescape(p.Sanitize(s.Content))
 	}
 
 	return f, ss, nil
@@ -390,12 +385,10 @@ func fullyUnescape(orig string) string {
 	for i := 0; i < 10; i++ {
 		mod = html.UnescapeString(orig)
 		if orig == mod {
-			fmt.Printf("Had to unesca[e %d times\n", i)
 			return mod
 		}
 		orig = mod
 	}
-	fmt.Printf("Had to unesca[e %d times\n", 10)
 	return mod
 }
 

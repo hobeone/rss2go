@@ -47,7 +47,7 @@ type SendmailRunner struct {
 func (r SendmailRunner) Run(input []byte) ([]byte, error) {
 	cmd := exec.Command(r.SendmailPath, "-t", "-i")
 	cmd.Stdin = bytes.NewReader(input)
-	glog.Infof("Running command %#v", cmd)
+	glog.Infof("Running command %#v", cmd.Args)
 	return cmd.CombinedOutput()
 }
 
@@ -180,7 +180,7 @@ func (self *MailDispatcher) getUsersForFeed(feed_url string) ([]db.User, error) 
 
 func (self *MailDispatcher) sendToUsers(m *feed.Story) error {
 	if self.MailSender == nil {
-		return fmt.Errorf("No MailSender set, can not send mail.")
+		return fmt.Errorf("no MailSender set, can not send mail")
 	}
 	// email addresses subscribed to this feed -> []*db.User
 	users, err := self.getUsersForFeed(m.Feed.Url)
