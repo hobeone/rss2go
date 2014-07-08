@@ -81,7 +81,7 @@ func TestFeedIframeExtraction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error replacing Iframes: %s", err)
 	}
-	expected := `<a href="http://www.youtube.com/embed/dwcwjXLSw00"`
+	expected := `<a href="//www.youtube.com/embed/dwcwjXLSw00"`
 	if !strings.Contains(replaced, expected) {
 		t.Fatalf("Couldn't find %v in %v", expected, replaced)
 	}
