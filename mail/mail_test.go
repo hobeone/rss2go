@@ -16,7 +16,7 @@ type MockedMailer struct {
 	Called int
 }
 
-func (m *MockedMailer) SendMail(msg *gophermail.Message) error {
+func (m *MockedMailer) SendMail(msg Message) error {
 	m.Called++
 	return nil
 }
@@ -24,7 +24,7 @@ func (m *MockedMailer) SendMail(msg *gophermail.Message) error {
 func TestSendToUsersWithNoMailSender(t *testing.T) {
 	mr := &MailRequest{}
 	md := &MailDispatcher{}
-	err := md.sendRequest(mr)
+	err := md.handleMailRequest(mr)
 
 	if err == nil {
 		t.Errorf("Sending mail with no MailSender should be an error.")
@@ -54,7 +54,7 @@ func TestSendToUsers(t *testing.T) {
 			mail.Address{Address: users[1].Email},
 		},
 	}
-	err := md.sendRequest(&mr)
+	err := md.handleMailRequest(&mr)
 	if err != nil {
 		t.Fatalf("Error sending to users: %s", err)
 	}
@@ -93,11 +93,13 @@ func TestHelperProcessFail(*testing.T) {
 }
 
 func TestLocalMTASender(t *testing.T) {
-	msg := &gophermail.Message{
-		From:    mail.Address{Address: "from@example.com"},
-		To:      []mail.Address{mail.Address{Address: "to@example.com"}},
-		Subject: "Testing subject",
-		Body:    "Test Body",
+	msg := &MailMessage{
+		gophermail.Message{
+			From:    mail.Address{Address: "from@example.com"},
+			To:      []mail.Address{mail.Address{Address: "to@example.com"}},
+			Subject: "Testing subject",
+			Body:    "Test Body",
+		},
 	}
 
 	mta := NewLocalMTASender("/bin/true")

@@ -6,12 +6,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hobeone/gophermail"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed"
 	"github.com/hobeone/rss2go/mail"
 	. "github.com/smartystreets/goconvey/convey"
 )
+
+type FailMailer struct{}
+
+func (m *FailMailer) SendMail(msg mail.Message) error {
+	return fmt.Errorf("testing error")
+}
 
 func OverrideAfter(fw *FeedWatcher) {
 	fw.After = func(d time.Duration) <-chan time.Time {
@@ -95,12 +100,6 @@ func TestFeedWatcherPolling(t *testing.T) {
 	if c != 75 {
 		t.Fatalf("Expected 75 mails to have been sent, got %d", c)
 	}
-}
-
-type FailMailer struct{}
-
-func (m *FailMailer) SendMail(msg *gophermail.Message) error {
-	return fmt.Errorf("testing error")
 }
 
 func TestFeedWatcherWithEmailErrors(t *testing.T) {

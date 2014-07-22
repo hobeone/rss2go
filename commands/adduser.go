@@ -3,6 +3,7 @@ package commands
 import (
 	"flag"
 	"fmt"
+
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/flagutil"
@@ -36,7 +37,7 @@ type AddUserCommand struct {
 
 func runAddUser(cmd *flagutil.Command, args []string) {
 	if len(args) < 3 {
-		PrintErrorAndExit("Must give a username an email address and a password")
+		PrintErrorAndExit("Must give: username email@address and_a_password")
 	}
 	user_name := args[0]
 	user_email := args[1]
