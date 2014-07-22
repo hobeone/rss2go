@@ -53,7 +53,7 @@ func TestParseFeedInvalidUTF(t *testing.T) {
 
 func TestFeedWithBadEntity(t *testing.T) {
 	d := db.NewMemoryDBHandle(false, true)
-	feeds, _ := db.LoadFixtures(t, d)
+	feeds, _ := db.LoadFixtures(t, d, "http://localhost")
 	u := *feeds[0]
 
 	feedResp, err := ioutil.ReadFile("../testdata/bad_entity.rss")

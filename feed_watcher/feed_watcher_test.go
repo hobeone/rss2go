@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hobeone/gophermail"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed"
 	"github.com/hobeone/rss2go/mail"
@@ -18,30 +19,30 @@ func OverrideAfter(fw *FeedWatcher) {
 	}
 }
 
-func SetupTest(t *testing.T, feedPath string) (*FeedWatcher, []byte) {
+func SetupTest(t *testing.T, feedPath string) (*FeedWatcher, []byte, *mail.MailDispatcher) {
 	crawlChan := make(chan *FeedCrawlRequest)
 	responseChan := make(chan *FeedCrawlResponse)
-	mailChan := mail.CreateAndStartStubMailer().OutgoingMail
+	mailDispatcher := mail.CreateAndStartStubMailer()
 	d := db.NewMemoryDBHandle(false, true)
-	feeds, _ := db.LoadFixtures(t, d)
+	feeds, _ := db.LoadFixtures(t, d, "http://localhost")
 
 	feedResp, err := ioutil.ReadFile(feedPath)
 	if err != nil {
 		t.Fatal("Error reading test feed.")
 	}
 
-	return NewFeedWatcher(*feeds[0], crawlChan, responseChan, mailChan, d, []string{}, 30, 100), feedResp
+	return NewFeedWatcher(*feeds[0], crawlChan, responseChan, mailDispatcher.OutgoingMail, d, []string{}, 30, 100), feedResp, mailDispatcher
 }
 
 func TestNewFeedWatcher(t *testing.T) {
-	n, _ := SetupTest(t, "../testdata/empty.rss")
+	n, _, _ := SetupTest(t, "../testdata/empty.rss")
 	if n.polling == true {
 		t.Fatal("polling attribute set is true")
 	}
 }
 
 func TestFeedWatcherPollLocking(t *testing.T) {
-	n, _ := SetupTest(t, "../testdata/empty.rss")
+	n, _, _ := SetupTest(t, "../testdata/empty.rss")
 	if n.Polling() {
 		t.Fatal("A new watcher shouldn't be polling")
 	}
@@ -52,7 +53,7 @@ func TestFeedWatcherPollLocking(t *testing.T) {
 }
 
 func TestFeedWatcherPolling(t *testing.T) {
-	n, feedResp := SetupTest(t, "../testdata/ars.rss")
+	n, feedResp, mailDispatcher := SetupTest(t, "../testdata/ars.rss")
 	OverrideAfter(n)
 
 	go n.PollFeed()
@@ -67,6 +68,9 @@ func TestFeedWatcherPolling(t *testing.T) {
 		Error: nil,
 	}
 	resp := <-n.responseChan
+	if resp.Error != nil {
+		t.Fatalf("Should not have gotten an error. got: %s", resp.Error)
+	}
 	if len(resp.Items) != 25 {
 		t.Fatalf("Expected 25 items from the feed. Got %d", len(resp.Items))
 	}
@@ -85,10 +89,56 @@ func TestFeedWatcherPolling(t *testing.T) {
 	if len(n.KnownGuids) != 25 {
 		t.Fatalf("Expected 25 known GUIDs got %d", len(n.KnownGuids))
 	}
+	// Hella Ghetto?
+	c := mailDispatcher.MailSender.(*mail.NullMailSender).Count
+	// 1 feed * 25 items * 3 users
+	if c != 75 {
+		t.Fatalf("Expected 75 mails to have been sent, got %d", c)
+	}
+}
+
+type FailMailer struct{}
+
+func (m *FailMailer) SendMail(msg *gophermail.Message) error {
+	return fmt.Errorf("testing error")
+}
+
+func TestFeedWatcherWithEmailErrors(t *testing.T) {
+	n, feedResp, _ := SetupTest(t, "../testdata/bicycling_rss.xml")
+	OverrideAfter(n)
+
+	mailer := mail.NewMailDispatcher(
+		"from@example.com",
+		&FailMailer{},
+	)
+	go mailer.DispatchLoop()
+	n.mailerChan = mailer.OutgoingMail
+
+	go n.PollFeed()
+	req := <-n.crawlChan
+
+	req.ResponseChan <- &FeedCrawlResponse{
+		URI:   n.FeedInfo.Url,
+		Body:  feedResp,
+		Error: nil,
+	}
+	resp := <-n.responseChan
+
+	if resp.Error == nil {
+		t.Fatalf("Should have gotten an error.")
+	}
+
+	if len(resp.Items) != 20 {
+		t.Fatalf("Expected 20 items from the feed. Got %d", len(resp.Items))
+	}
+
+	if len(n.KnownGuids) != 0 {
+		t.Fatalf("Expected no known guids, got %d", len(n.KnownGuids))
+	}
 }
 
 func TestFeedWatcherPollingRssWithNoItemDates(t *testing.T) {
-	n, feedResp := SetupTest(t, "../testdata/bicycling_rss.xml")
+	n, feedResp, _ := SetupTest(t, "../testdata/bicycling_rss.xml")
 	OverrideAfter(n)
 
 	go n.PollFeed()
@@ -112,13 +162,17 @@ func TestFeedWatcherPollingRssWithNoItemDates(t *testing.T) {
 	}
 	go n.StopPoll()
 	resp = <-n.responseChan
+	if resp.Error != nil {
+		t.Fatalf("Should not have gotten an error. got: %s", resp.Error)
+	}
+
 	if len(resp.Items) != 0 {
 		t.Fatalf("Expected 0 items from the feed. Got %d", len(resp.Items))
 	}
 }
 
 func TestFeedWatcherWithMalformedFeed(t *testing.T) {
-	n, _ := SetupTest(t, "../testdata/ars.rss")
+	n, _, _ := SetupTest(t, "../testdata/ars.rss")
 	OverrideAfter(n)
 	go n.PollFeed()
 
@@ -144,7 +198,7 @@ func TestFeedWatcherWithMalformedFeed(t *testing.T) {
 }
 
 func TestFeedWatcherWithGuidsSet(t *testing.T) {
-	n, feedResp := SetupTest(t, "../testdata/ars.rss")
+	n, feedResp, _ := SetupTest(t, "../testdata/ars.rss")
 	OverrideAfter(n)
 
 	_, stories, _ := feed.ParseFeed(n.FeedInfo.Url, feedResp)
@@ -181,7 +235,7 @@ func TestFeedWatcherWithGuidsSet(t *testing.T) {
 }
 
 func TestFeedWatcherWithTooRecentLastPoll(t *testing.T) {
-	n, feedResp := SetupTest(t, "../testdata/ars.rss")
+	n, feedResp, _ := SetupTest(t, "../testdata/ars.rss")
 	n.FeedInfo.LastPollTime = time.Now()
 
 	afterCalls := 0
@@ -206,7 +260,7 @@ func TestFeedWatcherWithTooRecentLastPoll(t *testing.T) {
 }
 
 func TestWithEmptyFeed(t *testing.T) {
-	n, feedResp := SetupTest(t, "../testdata/empty.rss")
+	n, feedResp, _ := SetupTest(t, "../testdata/empty.rss")
 	OverrideAfter(n)
 	go n.PollFeed()
 	req := <-n.crawlChan
@@ -223,7 +277,7 @@ func TestWithEmptyFeed(t *testing.T) {
 }
 
 func TestWithErrorOnCrawl(t *testing.T) {
-	n, feedResp := SetupTest(t, "../testdata/empty.rss")
+	n, feedResp, _ := SetupTest(t, "../testdata/empty.rss")
 	OverrideAfter(n)
 	go n.PollFeed()
 	req := <-n.crawlChan
@@ -239,7 +293,7 @@ func TestWithErrorOnCrawl(t *testing.T) {
 	}
 }
 func TestWithDoublePollFeed(t *testing.T) {
-	n, feedResp := SetupTest(t, "../testdata/empty.rss")
+	n, feedResp, _ := SetupTest(t, "../testdata/empty.rss")
 	OverrideAfter(n)
 	go n.PollFeed()
 
@@ -262,7 +316,7 @@ func TestWithDoublePollFeed(t *testing.T) {
 
 func TestCrawlLock(t *testing.T) {
 	Convey("Subject FeedWatcher Crawl Lock:", t, func() {
-		n, _ := SetupTest(t, "../testdata/empty.rss")
+		n, _, _ := SetupTest(t, "../testdata/empty.rss")
 		Convey("Given already crawling", func() {
 			n.lockCrawl()
 			So(n.CrawlFeed().Error, ShouldEqual, ErrAlreadyCrawlingFeed)

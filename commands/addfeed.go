@@ -48,7 +48,7 @@ func addFeed(cmd *flagutil.Command, args []string) {
 
 	dbh := db.NewDBHandle(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 
-	mailer := mail.CreateAndStartMailer(dbh, cfg)
+	mailer := mail.CreateAndStartMailer(cfg)
 
 	_, err := dbh.AddFeed(feed_name, feed_url)
 	if err != nil {

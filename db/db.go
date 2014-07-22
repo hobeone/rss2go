@@ -575,7 +575,10 @@ type TestReporter interface {
 }
 
 // LoadFixtures adds a base set of Fixtures to the given database.
-func LoadFixtures(t TestReporter, d *DBHandle) ([]*FeedInfo, []*User) {
+func LoadFixtures(t TestReporter, d *DBHandle, feedHost string) ([]*FeedInfo, []*User) {
+	if feedHost == "" {
+		feedHost = "http://localhost"
+	}
 	users := []*User{
 		{
 			Name:     "testuser1",
@@ -599,15 +602,15 @@ func LoadFixtures(t TestReporter, d *DBHandle) ([]*FeedInfo, []*User) {
 	feeds := []*FeedInfo{
 		{
 			Name: "testfeed1",
-			Url:  "http://testfeed1/feed.atom",
+			Url:  fmt.Sprintf("%s/feed1.atom", feedHost),
 		},
 		{
 			Name: "testfeed2",
-			Url:  "http://testfeed2/feed.atom",
+			Url:  fmt.Sprintf("%s/feed2.atom", feedHost),
 		},
 		{
 			Name: "testfeed3",
-			Url:  "http://testfeed3/feed.atom",
+			Url:  fmt.Sprintf("%s/feed3.atom", feedHost),
 		},
 	}
 	for _, f := range feeds {

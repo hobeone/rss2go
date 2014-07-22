@@ -52,7 +52,7 @@ func NewDaemon(cfg *config.Config) *Daemon {
 	}
 	cc := make(chan *feedwatcher.FeedCrawlRequest, 1)
 	rc := make(chan *feedwatcher.FeedCrawlResponse)
-	mc := mail.CreateAndStartMailer(dbh, cfg).OutgoingMail
+	mc := mail.CreateAndStartMailer(cfg).OutgoingMail
 
 	return &Daemon{
 		Config:    cfg,

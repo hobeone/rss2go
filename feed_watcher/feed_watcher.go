@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	netmail "net/mail"
 	"time"
 
 	"github.com/golang/glog"
@@ -217,6 +218,7 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 		err := fw.sendMail(item)
 		if err != nil {
 			glog.Infof("Error sending mail: %s", err.Error())
+			resp.Error = err
 		} else {
 			err := fw.recordGuid(item.Id)
 			if err != nil {
@@ -334,8 +336,18 @@ func (fw *FeedWatcher) sendMail(item *feed.Story) error {
 		return nil
 	}
 
+	users, err := fw.dbh.GetFeedUsers(fw.FeedInfo.Url)
+	if err != nil {
+		return err
+	}
+
+	sendTo := make([]netmail.Address, len(users))
+	for i, u := range users {
+		sendTo[i] = netmail.Address{Address: u.Email}
+	}
 	req := &mail.MailRequest{
 		Item:       item,
+		Addresses:  sendTo,
 		ResultChan: make(chan error),
 	}
 	fw.mailerChan <- req

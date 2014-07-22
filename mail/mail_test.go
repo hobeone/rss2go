@@ -22,10 +22,9 @@ func (m *MockedMailer) SendMail(msg *gophermail.Message) error {
 }
 
 func TestSendToUsersWithNoMailSender(t *testing.T) {
-	s := &feed.Story{}
-
+	mr := &MailRequest{}
 	md := &MailDispatcher{}
-	err := md.sendToUsers(s)
+	err := md.sendRequest(mr)
 
 	if err == nil {
 		t.Errorf("Sending mail with no MailSender should be an error.")
@@ -34,43 +33,28 @@ func TestSendToUsersWithNoMailSender(t *testing.T) {
 
 func TestSendToUsers(t *testing.T) {
 	dbh := db.NewMemoryDBHandle(false, false)
-	feed1, err := dbh.AddFeed("test1", "http://foo.bar/")
-	if err != nil {
-		t.Fatalf("Error creating test feed: %s", err)
-	}
+	feeds, users := db.LoadFixtures(t, dbh, "http://localhost")
 
-	user1, err := dbh.AddUser("name", "email@example.com", "pass")
-	if err != nil {
-		t.Fatalf("Error creating test user: %s", err)
-	}
-	user2, err := dbh.AddUser("nam2", "email2@example.com", "pass")
-	if err != nil {
-		t.Fatalf("Error creating test user: %s", err)
-	}
-
-	err = dbh.AddFeedsToUser(user1, []*db.FeedInfo{feed1})
-	if err != nil {
-		t.Fatalf("Error adding feeds to user: %s", err)
-	}
-	err = dbh.AddFeedsToUser(user2, []*db.FeedInfo{feed1})
-	if err != nil {
-		t.Fatalf("Error adding feeds to user: %s", err)
-	}
-
-	mm := new(MockedMailer)
+	mm := &MockedMailer{}
 	md := NewMailDispatcher(
-		dbh,
 		"recipient@test.com",
 		mm,
 	)
 
 	f := &feed.Feed{
-		Url: feed1.Url,
+		Url: feeds[0].Url,
 	}
 	s := &feed.Story{
 		Feed: f,
 	}
-	err = md.sendToUsers(s)
+	mr := MailRequest{
+		Item: s,
+		Addresses: []mail.Address{
+			mail.Address{Address: users[0].Email},
+			mail.Address{Address: users[1].Email},
+		},
+	}
+	err := md.sendRequest(&mr)
 	if err != nil {
 		t.Fatalf("Error sending to users: %s", err)
 	}

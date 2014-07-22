@@ -6,6 +6,7 @@
 // Designed to run as a goroutine and centralize mail sending.
 //
 // TODO: add mail batching support
+// Change use of gophermail.Message to an interface
 
 package mail
 
@@ -21,7 +22,6 @@ import (
 	"github.com/golang/glog"
 	"github.com/hobeone/gophermail" // Fix for subjects showing up quoted after go1.3
 	"github.com/hobeone/rss2go/config"
-	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed"
 )
 
@@ -29,6 +29,7 @@ const MTA_BINARY = "sendmail"
 
 type MailRequest struct {
 	Item       *feed.Story
+	Addresses  []mail.Address
 	ResultChan chan error
 }
 
@@ -109,28 +110,29 @@ func NewSMTPSender(server string, username string, password string) MailSender {
 
 type MailDispatcher struct {
 	OutgoingMail chan *MailRequest
-	Dbh          *db.DBHandle
 	FromAddress  string
 	MailSender   MailSender
 }
 
-func NewMailDispatcher(dbh *db.DBHandle, from_address string, sender MailSender) *MailDispatcher {
+func NewMailDispatcher(from_address string, sender MailSender) *MailDispatcher {
 	return &MailDispatcher{
 		OutgoingMail: make(chan *MailRequest),
-		Dbh:          dbh,
 		FromAddress:  from_address,
 		MailSender:   sender,
 	}
 }
 
-type NullMailSender struct{}
+type NullMailSender struct {
+	Count int
+}
 
 func (self *NullMailSender) SendMail(m *gophermail.Message) error {
+	self.Count++
 	glog.Infof("NullMailer faked sending mail: %s to %v", m.Subject, m.To)
 	return nil
 }
 
-func CreateAndStartMailer(dbh *db.DBHandle, config *config.Config) *MailDispatcher {
+func CreateAndStartMailer(config *config.Config) *MailDispatcher {
 	// Create mail sender
 	var sender MailSender
 
@@ -147,7 +149,6 @@ func CreateAndStartMailer(dbh *db.DBHandle, config *config.Config) *MailDispatch
 
 	// Start Mailer
 	mailer := NewMailDispatcher(
-		dbh,
 		config.Mail.FromAddress,
 		sender,
 	)
@@ -159,7 +160,6 @@ func CreateAndStartMailer(dbh *db.DBHandle, config *config.Config) *MailDispatch
 func CreateAndStartStubMailer() *MailDispatcher {
 	// Start Mailer
 	mailer := NewMailDispatcher(
-		db.NewMemoryDBHandle(false, false),
 		"from@example.com",
 		&NullMailSender{},
 	)
@@ -170,26 +170,20 @@ func CreateAndStartStubMailer() *MailDispatcher {
 func (self *MailDispatcher) DispatchLoop() {
 	for {
 		request := <-self.OutgoingMail
-		request.ResultChan <- self.sendToUsers(request.Item)
+		request.ResultChan <- self.sendRequest(request)
 	}
 }
 
-func (self *MailDispatcher) getUsersForFeed(feed_url string) ([]db.User, error) {
-	return self.Dbh.GetFeedUsers(feed_url)
-}
-
-func (self *MailDispatcher) sendToUsers(m *feed.Story) error {
+func (self *MailDispatcher) sendRequest(m *MailRequest) error {
 	if self.MailSender == nil {
 		return fmt.Errorf("no MailSender set, can not send mail")
 	}
-	// email addresses subscribed to this feed -> []*db.User
-	users, err := self.getUsersForFeed(m.Feed.Url)
-	if err != nil {
-		return err
+	if len(m.Addresses) == 0 {
+		return fmt.Errorf("no recipients for mail given")
 	}
-	for _, u := range users {
-		msg := CreateMailFromItem(self.FromAddress, u.Email, m)
-		err = self.MailSender.SendMail(msg)
+	for _, a := range m.Addresses {
+		msg := CreateMailFromItem(self.FromAddress, a, m.Item)
+		err := self.MailSender.SendMail(msg)
 		if err != nil {
 			return err
 		}
@@ -197,13 +191,13 @@ func (self *MailDispatcher) sendToUsers(m *feed.Story) error {
 	return nil
 }
 
-func CreateMailFromItem(from string, to string, item *feed.Story) *gophermail.Message {
+func CreateMailFromItem(from string, to mail.Address, item *feed.Story) *gophermail.Message {
 	content := FormatMessageBody(item)
 	msg := &gophermail.Message{
 		From: mail.Address{
 			Address: from,
 		},
-		To:       []mail.Address{mail.Address{Address: to}},
+		To:       []mail.Address{to},
 		Subject:  item.Title,
 		Body:     content, //TODO Convert to plain text
 		HTMLBody: content,

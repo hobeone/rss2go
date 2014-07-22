@@ -47,7 +47,7 @@ func TestGettingFeed(t *testing.T) {
 	})
 	Convey("GetFeedsWithErrors", t, func() {
 		d := NewMemoryDBHandle(false, true)
-		fixtureFeeds, _ := LoadFixtures(t, d)
+		fixtureFeeds, _ := LoadFixtures(t, d, "http://localhost")
 
 		feeds, err := d.GetFeedsWithErrors()
 		So(err, ShouldBeNil)
@@ -65,7 +65,7 @@ func TestGettingFeed(t *testing.T) {
 
 func TestGettingUsers(t *testing.T) {
 	d := NewMemoryDBHandle(false, true)
-	_, users := LoadFixtures(t, d)
+	_, users := LoadFixtures(t, d, "http://localhost")
 
 	Convey("GetAllUsers", t, func() {
 		Convey("Should get all users", func() {
@@ -94,7 +94,7 @@ func TestGettingUsers(t *testing.T) {
 func TestGetMostRecentGuidsForFeed(t *testing.T) {
 	Convey("Given new GUIDs", t, func() {
 		d := NewMemoryDBHandle(false, true)
-		feeds, _ := LoadFixtures(t, d)
+		feeds, _ := LoadFixtures(t, d, "http://localhost")
 
 		So(d.RecordGuid(feeds[0].Id, "123"), ShouldBeNil)
 		So(d.RecordGuid(feeds[0].Id, "1234"), ShouldBeNil)
@@ -114,7 +114,7 @@ func TestGetMostRecentGuidsForFeed(t *testing.T) {
 	})
 	Convey("Given no Records", t, func() {
 		d := NewMemoryDBHandle(false, true)
-		feeds, _ := LoadFixtures(t, d)
+		feeds, _ := LoadFixtures(t, d, "http://localhost")
 
 		Convey("Get all Guids", func() {
 			guids, err := d.GetMostRecentGuidsForFeed(feeds[0].Id, -1)
@@ -162,7 +162,7 @@ func TestFeedValidation(t *testing.T) {
 
 func TestAddAndDeleteFeed(t *testing.T) {
 	d := NewMemoryDBHandle(false, true)
-	_, users := LoadFixtures(t, d)
+	_, users := LoadFixtures(t, d, "http://localhost")
 	f, err := d.AddFeed("test feed", "http://valid/url.xml")
 	Convey("Subject: Add and Delete FeedInfo", t, func() {
 		Convey("When created", func() {
@@ -199,7 +199,7 @@ func TestAddAndDeleteFeed(t *testing.T) {
 
 func TestGetFeedItemByGuid(t *testing.T) {
 	d := NewMemoryDBHandle(false, true)
-	feeds, _ := LoadFixtures(t, d)
+	feeds, _ := LoadFixtures(t, d, "http://localhost")
 	Convey("Subject: Get FeedItem by GUID", t, func() {
 		Convey("should create GUID", func() {
 			err := d.RecordGuid(feeds[0].Id, "feed0GUID")
@@ -218,7 +218,7 @@ func TestGetFeedItemByGuid(t *testing.T) {
 
 func TestRemoveUserByEmail(t *testing.T) {
 	d := NewMemoryDBHandle(false, true)
-	_, users := LoadFixtures(t, d)
+	_, users := LoadFixtures(t, d, "http://localhost")
 	Convey("Subject: User Model", t, func() {
 		Convey("Should be able to delete by Email", func() {
 			err := d.RemoveUserByEmail(users[0].Email)
@@ -229,7 +229,7 @@ func TestRemoveUserByEmail(t *testing.T) {
 
 func TestGetStaleFeeds(t *testing.T) {
 	d := NewMemoryDBHandle(false, true)
-	feeds, _ := LoadFixtures(t, d)
+	feeds, _ := LoadFixtures(t, d, "http://localhost")
 	Convey("GetStaleFeeds should return stale feed", t, func() {
 		d.RecordGuid(feeds[0].Id, "foobar")
 		d.RecordGuid(feeds[1].Id, "foobaz")
@@ -283,7 +283,7 @@ func TestAddUserValidation(t *testing.T) {
 
 func TestAddRemoveUser(t *testing.T) {
 	d := NewMemoryDBHandle(false, true)
-	feeds, _ := LoadFixtures(t, d)
+	feeds, _ := LoadFixtures(t, d, "http://localhost")
 
 	userName := "test user name"
 	userEmail := "testuser_name@example.com"
@@ -332,7 +332,7 @@ func TestAddRemoveUser(t *testing.T) {
 
 func TestAddRemoveFeedsFromUser(t *testing.T) {
 	d := NewMemoryDBHandle(false, true)
-	_, users := LoadFixtures(t, d)
+	_, users := LoadFixtures(t, d, "http://localhost")
 	newFeed := &FeedInfo{
 		Name: "new test feed",
 		Url:  "http://new/test.feed",
@@ -362,7 +362,7 @@ func TestAddRemoveFeedsFromUser(t *testing.T) {
 
 func TestGetUsersFeeds(t *testing.T) {
 	d := NewMemoryDBHandle(false, true)
-	feeds, users := LoadFixtures(t, d)
+	feeds, users := LoadFixtures(t, d, "http://localhost")
 	Convey("GetFeedsWithUsers should return all of a users feeds ", t, func() {
 		userFeeds, err := d.GetUsersFeeds(users[0])
 		So(err, ShouldBeNil)
@@ -372,7 +372,7 @@ func TestGetUsersFeeds(t *testing.T) {
 
 func TestGetFeedUsers(t *testing.T) {
 	d := NewMemoryDBHandle(false, true)
-	feeds, users := LoadFixtures(t, d)
+	feeds, users := LoadFixtures(t, d, "http://localhost")
 	Convey("GetFeedUsers should return all users subscribed to a feed", t, func() {
 		feedUsers, err := d.GetFeedUsers(feeds[0].Url)
 		So(err, ShouldBeNil)
@@ -382,7 +382,7 @@ func TestGetFeedUsers(t *testing.T) {
 
 func TestUpdateUsersFeeds(t *testing.T) {
 	d := NewMemoryDBHandle(false, true)
-	feeds, users := LoadFixtures(t, d)
+	feeds, users := LoadFixtures(t, d, "http://localhost")
 
 	dbFeeds, err := d.GetUsersFeeds(users[0])
 	Convey("Subject: UpdateUsersFeeds", t, func() {

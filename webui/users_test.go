@@ -100,7 +100,7 @@ const testAllUsersGoldenResponse = `{
 
 func TestGetAllUsers(t *testing.T) {
 	dbh, m := setupTest(t)
-	db.LoadFixtures(t, dbh)
+	db.LoadFixtures(t, dbh, "http://localhost")
 	RegisterTestingT(t)
 
 	response := httptest.NewRecorder()
@@ -144,7 +144,7 @@ const getSomeUsersGoldenResponse = `{
 
 func TestGetSomeUsers(t *testing.T) {
 	dbh, m := setupTest(t)
-	db.LoadFixtures(t, dbh)
+	db.LoadFixtures(t, dbh, "http://localhost")
 	RegisterTestingT(t)
 
 	response := httptest.NewRecorder()
@@ -166,7 +166,7 @@ const updateUserReq = `
 
 func TestUpdateUser(t *testing.T) {
 	dbh, m := setupTest(t)
-	db.LoadFixtures(t, dbh)
+	db.LoadFixtures(t, dbh, "http://localhost")
 
 	_, err := dbh.GetUserByEmail("test1@example.com")
 	failOnError(t, err)
@@ -239,7 +239,7 @@ func TestAddUser(t *testing.T) {
 
 func TestDeleteUser(t *testing.T) {
 	dbh, m := setupTest(t)
-	db.LoadFixtures(t, dbh)
+	db.LoadFixtures(t, dbh, "http://localhost")
 
 	users, err := dbh.GetAllUsers()
 	failOnError(t, err)

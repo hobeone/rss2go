@@ -15,26 +15,10 @@ import (
 	"github.com/hobeone/rss2go/feed_watcher"
 )
 
-func MakeDbFixtures(d *db.DBHandle, localURL string) {
-	allFeeds := []db.FeedInfo{
-		{
-			Name: "Testing1",
-			Url:  localURL + "/test.rss",
-		},
-	}
-
-	for _, f := range allFeeds {
-		err := d.SaveFeed(&f)
-		if err != nil {
-			panic(err)
-		}
-	}
-}
-
 var fakeServerHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	var content []byte
 	switch {
-	case strings.HasSuffix(r.URL.Path, "test.rss"):
+	case strings.HasSuffix(r.URL.Path, "feed1.atom"):
 		feedResp, err := ioutil.ReadFile("testdata/ars.rss")
 		if err != nil {
 			glog.Fatalf("Error reading test feed: %s", err.Error())
@@ -63,21 +47,27 @@ func TestEndToEndIntegration(t *testing.T) {
 
 	d := commands.NewDaemon(cfg)
 	d.Dbh = db.NewMemoryDBHandle(false, true)
-	MakeDbFixtures(d.Dbh, ts.URL)
+	db.LoadFixtures(t, d.Dbh, ts.URL)
 	allFeeds, err := d.Dbh.GetAllFeeds()
 
 	if err != nil {
 		glog.Fatalf("Error reading feeds: %s", err.Error())
 	}
 
-	d.CreateAndStartFeedWatchers(allFeeds)
+	d.CreateAndStartFeedWatchers(allFeeds[0:1])
 
 	resp := <-d.RespChan
+	if resp.Error != nil {
+		t.Fatalf("Should not have gotten an error. got: %s", resp.Error)
+	}
 	if len(resp.Items) != 25 {
 		t.Errorf("Expected 25 items from the feed. Got %d", len(resp.Items))
 	}
 
 	resp = <-d.RespChan
+	if resp.Error != nil {
+		t.Fatalf("Should not have gotten an error. got: %s", resp.Error)
+	}
 	if len(resp.Items) != 0 {
 		t.Errorf("Expected 0 items from the feed. Got %d", len(resp.Items))
 	}

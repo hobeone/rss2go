@@ -50,7 +50,7 @@ func runOne(cmd *flagutil.Command, args []string) {
 	cfg.Db.UpdateDb = updateDb
 	dbh := db.NewDBHandle(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 
-	mailer := mail.CreateAndStartMailer(dbh, cfg)
+	mailer := mail.CreateAndStartMailer(cfg)
 
 	feed, err := dbh.GetFeedByUrl(feedURL)
 	if err != nil {
