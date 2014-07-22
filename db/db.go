@@ -54,7 +54,7 @@ type UserFeed struct {
 // DBHandle controls access to the database and makes sure only one
 // operation is in process at a time.
 type DBHandle struct {
-	DB           gorm.DB
+	db           gorm.DB
 	writeUpdates bool
 	syncMutex    sync.Mutex
 }
@@ -101,7 +101,7 @@ func createAndOpenDb(dbPath string, verbose bool, memory bool) *DBHandle {
 	if err != nil {
 		panic(err.Error())
 	}
-	return &DBHandle{DB: db}
+	return &DBHandle{db: db}
 }
 
 // NewDBHandle creates a new DBHandle
@@ -157,7 +157,7 @@ func (d *DBHandle) AddFeed(name string, feedURL string) (*FeedInfo, error) {
 
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
-	err = d.DB.Save(f).Error
+	err = d.db.Save(f).Error
 	return f, err
 }
 
@@ -169,7 +169,7 @@ func (d *DBHandle) SaveFeed(f *FeedInfo) error {
 	}
 
 	if d.writeUpdates {
-		return d.DB.Save(f).Error
+		return d.db.Save(f).Error
 	}
 	return nil
 }
@@ -184,7 +184,7 @@ func (d *DBHandle) RemoveFeed(url string) error {
 	if err != nil {
 		return err
 	}
-	tx := d.DB.Begin()
+	tx := d.db.Begin()
 	err = tx.Delete(f).Error
 	if err == nil {
 		err = tx.Where("feed_info_id = ?", f.Id).Delete(FeedItem{}).Error
@@ -207,7 +207,7 @@ func (d *DBHandle) RemoveFeed(url string) error {
 func (d *DBHandle) GetAllFeeds() (feeds []FeedInfo, err error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
-	err = d.DB.Find(&feeds).Error
+	err = d.db.Find(&feeds).Error
 	return
 }
 
@@ -218,7 +218,7 @@ func (d *DBHandle) GetFeedsWithErrors() ([]FeedInfo, error) {
 	defer d.syncMutex.Unlock()
 
 	var feeds []FeedInfo
-	err := d.DB.Where(
+	err := d.db.Where(
 		"last_poll_error IS NOT NULL and last_poll_error <> ''").Find(&feeds).Error
 	if err == gorm.RecordNotFound {
 		err = nil
@@ -234,7 +234,7 @@ func (d *DBHandle) GetStaleFeeds() ([]FeedInfo, error) {
 	defer d.syncMutex.Unlock()
 
 	var res []FeedInfo
-	err := d.DB.Raw(`
+	err := d.db.Raw(`
 	select feed_info.id, feed_info.name, feed_info.url,  r.MaxTime, feed_info.last_poll_error FROM (SELECT feed_info_id, MAX(added_on) as MaxTime FROM feed_item GROUP BY feed_info_id) r, feed_info INNER JOIN feed_item f ON f.feed_info_id = r.feed_info_id AND f.added_on = r.MaxTime AND r.MaxTime < datetime('now','-14 days') AND f.feed_info_id = feed_info.id group by f.feed_info_id;
 	`).Scan(&res).Error
 	return res, err
@@ -246,7 +246,7 @@ func (d *DBHandle) GetFeedById(id int64) (*FeedInfo, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	var f FeedInfo
-	err := d.DB.First(&f, id).Error
+	err := d.db.First(&f, id).Error
 	return &f, err
 }
 
@@ -260,7 +260,7 @@ func (d *DBHandle) GetFeedByUrl(url string) (*FeedInfo, error) {
 
 func (d *DBHandle) unsafeGetFeedByURL(url string) (*FeedInfo, error) {
 	feed := FeedInfo{}
-	err := d.DB.Where("url = ?", url).First(&feed).Error
+	err := d.db.Where("url = ?", url).First(&feed).Error
 	return &feed, err
 }
 
@@ -277,7 +277,7 @@ func (d *DBHandle) GetFeedItemByGuid(feedID int64, guid string) (*FeedItem, erro
 	fi := FeedItem{}
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
-	err := d.DB.Where("feed_info_id = ? AND guid = ?", feedID, guid).First(&fi).Error
+	err := d.db.Where("feed_info_id = ? AND guid = ?", feedID, guid).First(&fi).Error
 	return &fi, err
 }
 
@@ -293,7 +293,7 @@ func (d *DBHandle) RecordGuid(feedID int64, guid string) (err error) {
 		d.syncMutex.Lock()
 		defer d.syncMutex.Unlock()
 
-		return d.DB.Save(&f).Error
+		return d.db.Save(&f).Error
 	}
 	return nil
 }
@@ -305,7 +305,7 @@ func (d *DBHandle) GetMostRecentGuidsForFeed(feedID int64, max int) ([]string, e
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 
-	err := d.DB.Where("feed_info_id=?", feedID).
+	err := d.db.Where("feed_info_id=?", feedID).
 		Group("guid").
 		Order("added_on DESC").
 		Limit(max).
@@ -361,7 +361,7 @@ func (d *DBHandle) AddUser(name string, email string, pass string) (*User, error
 
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
-	err = d.DB.Save(u).Error
+	err = d.db.Save(u).Error
 	return u, err
 }
 
@@ -373,13 +373,13 @@ func (d *DBHandle) SaveUser(u *User) error {
 	}
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
-	return d.DB.Save(u).Error
+	return d.db.Save(u).Error
 }
 
 // GetAllUsers returns all Users from the database.
 func (d *DBHandle) GetAllUsers() ([]User, error) {
 	var all []User
-	err := d.DB.Find(&all).Error
+	err := d.db.Find(&all).Error
 	return all, err
 }
 
@@ -388,7 +388,7 @@ func (d *DBHandle) GetUser(name string) (*User, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	u := &User{}
-	err := d.DB.Where("name = ?", name).First(u).Error
+	err := d.db.Where("name = ?", name).First(u).Error
 
 	return u, err
 }
@@ -398,7 +398,7 @@ func (d *DBHandle) GetUserById(id int64) (*User, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	u := &User{}
-	err := d.DB.First(u, id).Error
+	err := d.db.First(u, id).Error
 
 	return u, err
 }
@@ -412,7 +412,7 @@ func (d *DBHandle) GetUserByEmail(email string) (*User, error) {
 
 func (d *DBHandle) unsafeGetUserByEmail(email string) (*User, error) {
 	u := &User{}
-	err := d.DB.Where("email = ?", email).Find(u).Error
+	err := d.db.Where("email = ?", email).Find(u).Error
 	return u, err
 }
 
@@ -424,9 +424,9 @@ func (d *DBHandle) RemoveUser(user *User) error {
 }
 
 func (d *DBHandle) unsafeRemoveUser(user *User) error {
-	err := d.DB.Delete(user).Error
+	err := d.db.Delete(user).Error
 	if err == nil {
-		err = d.DB.Where("user_id = ?", user.Id).Delete(UserFeed{}).Error
+		err = d.db.Where("user_id = ?", user.Id).Delete(UserFeed{}).Error
 	}
 	return err
 }
@@ -456,7 +456,7 @@ func (d *DBHandle) AddFeedsToUser(u *User, feeds []*FeedInfo) error {
 			FeedId: f.Id,
 		}
 		//err := d.DB.Where(uf).FirstOrCreate(uf).Error
-		err := d.DB.Save(uf).Error
+		err := d.db.Save(uf).Error
 		if err != nil {
 			return err
 		}
@@ -470,7 +470,7 @@ func (d *DBHandle) RemoveFeedsFromUser(u *User, feeds []*FeedInfo) error {
 	defer d.syncMutex.Unlock()
 
 	for _, f := range feeds {
-		err := d.DB.Where("feed_id = ? and user_id = ?", f.Id, u.Id).Delete(UserFeed{}).Error
+		err := d.db.Where("feed_id = ? and user_id = ?", f.Id, u.Id).Delete(UserFeed{}).Error
 		if err != nil {
 			return err
 		}
@@ -485,7 +485,7 @@ func (d *DBHandle) GetUsersFeeds(u *User) ([]FeedInfo, error) {
 
 	var feedInfos []FeedInfo
 
-	err := d.DB.Table("feed_info").
+	err := d.db.Table("feed_info").
 		Select("feed_info.id,feed_info.name,feed_info.url").
 		Joins("INNER join user_feed on user_feed.feed_id = feed_info.id").
 		Where("user_feed.user_id = ?", u.Id).
@@ -551,7 +551,7 @@ func (d *DBHandle) GetFeedUsers(feedURL string) ([]User, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	var all []User
-	err := d.DB.Table("user").
+	err := d.db.Table("user").
 		Select("user.id, user.name, user.email, user.enabled").
 		Joins("inner join user_feed on user.id=user_feed.user_id inner join feed_info on feed_info.id=user_feed.feed_id").
 		Where("feed_info.url = ?", feedURL).

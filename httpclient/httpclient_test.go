@@ -25,7 +25,7 @@ func testDelayedHandler(w http.ResponseWriter, req *http.Request) {
 func setupMockServer(t *testing.T) {
 	http.HandleFunc("/test", testHandler)
 	http.HandleFunc("/test-delayed", testDelayedHandler)
-	ln, err := net.Listen("tcp", ":0")
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to listen - %s", err.Error())
 	}

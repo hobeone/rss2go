@@ -12,7 +12,7 @@ import (
 
 func NewTestDBHandle(t *testing.T, verbose bool, w bool) *DBHandle {
 	db := openDB("testdb", "", verbose)
-	return &DBHandle{DB: db}
+	return &DBHandle{db: db}
 }
 
 func TestConnectionError(t *testing.T) {
@@ -129,10 +129,10 @@ func TestFeedValidation(t *testing.T) {
 		Convey("When a bad arguments are given it should return an error", func() {
 			d := NewMemoryDBHandle(false, true)
 			inputs := [][]string{
-				[]string{"good name", "bad url"},
-				[]string{"good name", "http://"},
-				[]string{"good name", ":badurl"},
-				[]string{"", ""},
+				{"good name", "bad url"},
+				{"good name", "http://"},
+				{"good name", ":badurl"},
+				{"", ""},
 			}
 
 			for _, ins := range inputs {
@@ -143,12 +143,12 @@ func TestFeedValidation(t *testing.T) {
 		Convey("When an Invalid FeedInfo is given it should return an error", func() {
 			d := NewMemoryDBHandle(false, true)
 			inputs := []FeedInfo{
-				FeedInfo{
+				{
 					Name: "",
 					Url:  "bad url",
 				},
-				FeedInfo{},
-				FeedInfo{Url: ":badurl"},
+				{},
+				{Url: ":badurl"},
 			}
 
 			for _, f := range inputs {
@@ -238,7 +238,7 @@ func TestGetStaleFeeds(t *testing.T) {
 		So(err, ShouldBeNil)
 		Convey("When all of a feed Items are older than 14 days", func() {
 			guid.AddedOn = *new(time.Time)
-			err = d.DB.Save(guid).Error
+			err = d.db.Save(guid).Error
 			So(err, ShouldBeNil)
 			Convey("The feed should be returned by GetStaleFeeds", func() {
 				f, err := d.GetStaleFeeds()
@@ -255,8 +255,8 @@ func TestAddUserValidation(t *testing.T) {
 	Convey("User attributes are validates before saving", t, func() {
 		Convey("When invalid email address", func() {
 			inputs := [][]string{
-				[]string{"test", ".bad@address"},
-				[]string{"test", ""},
+				{"test", ".bad@address"},
+				{"test", ""},
 			}
 			Convey("AddUser should return an error", func() {
 				for _, ins := range inputs {

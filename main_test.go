@@ -24,7 +24,7 @@ func MakeDbFixtures(d *db.DBHandle, localURL string) {
 	}
 
 	for _, f := range allFeeds {
-		err := d.DB.Save(&f).Error
+		err := d.SaveFeed(&f)
 		if err != nil {
 			panic(err)
 		}
