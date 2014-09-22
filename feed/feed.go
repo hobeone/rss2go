@@ -343,7 +343,7 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 				return nil, nil, fmt.Errorf("story has no id: %v", s)
 			}
 		}
-		s.Title = fullyUnescape(s.Title)
+		s.Title = fullyHTMLUnescape(s.Title)
 		// if a story doesn't have a link, see if its id is a URL
 		if s.Link == "" {
 			if u, err := url.Parse(s.Id); err == nil {
@@ -367,12 +367,12 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 		// embedding of things like youtube videos.  By changing them to anchor
 		// tags things like Gmail will do their own embedding when reading the
 		// mail.
-		s.Content, err = replaceIframes(s.Content)
+		s.Content, err = cleanFeedContent(s.Content)
 		if err != nil {
-			glog.Errorf("Error replacing IFRAMES with Anchor tags: %s", err)
+			glog.Errorf("Error cleaning up content: %s", err)
 		}
 		p := bluemonday.UGCPolicy()
-		s.Content = fullyUnescape(p.Sanitize(s.Content))
+		s.Content = fullyHTMLUnescape(p.Sanitize(s.Content))
 	}
 
 	return f, ss, nil
@@ -380,7 +380,7 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 
 // Try to (up to 10 times) to unescape a string.
 // Some feeds are double escaped with things like: &amp;amp;
-func fullyUnescape(orig string) string {
+func fullyHTMLUnescape(orig string) string {
 	mod := orig
 	for i := 0; i < 10; i++ {
 		mod = html.UnescapeString(orig)
@@ -405,18 +405,42 @@ func convertIframeToAnchor(n *html.Node) {
 		}
 	}
 	if linkSrc != "" {
+		escLinkSrc, err := url.QueryUnescape(linkSrc)
+		if err == nil {
+			linkSrc = escLinkSrc
+		} else {
+			glog.Info("Error unescaping url. Error: %s, Url: %#v", err, linkSrc)
+		}
 		p.InsertBefore(h5.Anchor(linkSrc, linkSrc), n)
 		p.RemoveChild(n)
 	}
 }
 
-func replaceIframes(htmlFrag string) (string, error) {
+func removeFeedPortalJunk(n *html.Node) {
+	p := n.Parent
+	if n.Parent == nil {
+		return
+	}
+
+	linkSrc := ""
+	for i, attr := range n.Attr {
+		if attr.Key == "href" {
+			linkSrc = n.Attr[i].Val
+		}
+	}
+	if strings.Contains(linkSrc, "da.feedsportal.com") {
+		p.RemoveChild(n)
+	}
+}
+
+func cleanFeedContent(htmlFrag string) (string, error) {
 	doc, err := transform.NewFromReader(strings.NewReader(htmlFrag))
 	if err != nil {
 		return htmlFrag, err
 	}
 	doc.ApplyAll(
 		transform.MustTrans(convertIframeToAnchor, "iframe"),
+		transform.MustTrans(removeFeedPortalJunk, "a"),
 	)
 	return doc.String(), nil
 }
