@@ -32,7 +32,7 @@ func TestSendToUsersWithNoMailSender(t *testing.T) {
 }
 
 func TestSendToUsers(t *testing.T) {
-	dbh := db.NewMemoryDBHandle(false, false)
+	dbh := db.NewMemoryDBHandle(true, true)
 	feeds, users := db.LoadFixtures(t, dbh, "http://localhost")
 
 	mm := &MockedMailer{}

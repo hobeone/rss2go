@@ -282,7 +282,7 @@ func TestAddUserValidation(t *testing.T) {
 }
 
 func TestAddRemoveUser(t *testing.T) {
-	d := NewMemoryDBHandle(false, true)
+	d := NewMemoryDBHandle(true, true)
 	feeds, _ := LoadFixtures(t, d, "http://localhost")
 
 	userName := "test user name"
@@ -341,15 +341,20 @@ func TestAddRemoveFeedsFromUser(t *testing.T) {
 		Convey("When adding a feed", func() {
 			err := d.SaveFeed(newFeed)
 			So(err, ShouldBeNil)
+			feeds, err := d.GetUsersFeeds(users[0])
+			So(err, ShouldBeNil)
+			So(len(feeds), ShouldEqual, 3)
+
 			err = d.AddFeedsToUser(users[0], []*FeedInfo{newFeed})
 			Convey("A feed should be added to a user", func() {
 				So(err, ShouldBeNil)
 				feeds, err := d.GetUsersFeeds(users[0])
 				So(err, ShouldBeNil)
-				// not sure why ShouldContain doesn't work here
-				So(feeds[0], ShouldResemble, *newFeed)
+				So(feeds, ShouldNotBeEmpty)
+				So(len(feeds), ShouldEqual, 4)
 			})
 		})
+
 		Convey("When removing a feed", func() {
 			err := d.RemoveFeedsFromUser(users[0], []*FeedInfo{newFeed})
 			So(err, ShouldBeNil)
@@ -357,6 +362,7 @@ func TestAddRemoveFeedsFromUser(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(feeds, ShouldNotContain, newFeed)
 		})
+
 	})
 }
 

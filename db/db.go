@@ -23,6 +23,7 @@ type FeedInfo struct {
 	Url           string    `sql:"not null;unique" json:"url" binding:"required"`
 	LastPollTime  time.Time `json:"lastPollTime"`
 	LastPollError string    `json:"lastPollError"`
+	Users         []User    `gorm:"many2many:user_feeds;" json:"-"`
 }
 
 // FeedItem represents an individual iteam from a feed.  It only captures the
@@ -37,18 +38,12 @@ type FeedItem struct {
 
 // User represents a user/email address that can subscribe to Feeds
 type User struct {
-	Id       int64  `json:"id"`
-	Name     string `sql:"size:255;not null;unique" json:"name"`
-	Email    string `sql:"size:255;not null;unique" json:"email"`
-	Enabled  bool   `json:"enabled"`
-	Password string `json:"-"`
-}
-
-// UserFeed maps between Users and Feeds
-type UserFeed struct {
-	Id     int64
-	UserId int64 `sql:"not null"`
-	FeedId int64 `sql:"not null"`
+	Id       int64      `json:"id"`
+	Name     string     `sql:"size:255;not null;unique" json:"name"`
+	Email    string     `sql:"size:255;not null;unique" json:"email"`
+	Enabled  bool       `json:"enabled"`
+	Password string     `json:"-"`
+	Feeds    []FeedInfo `gorm:"many2many:user_feeds;" json:"-"`
 }
 
 // DBService defines the interface that the RSS2Go database provides.
@@ -88,7 +83,7 @@ func openDB(dbType string, dbArgs string, verbose bool) gorm.DB {
 }
 
 func setupDB(db gorm.DB) error {
-	models := []interface{}{User{}, UserFeed{}, FeedInfo{}, FeedItem{}}
+	models := []interface{}{User{}, FeedInfo{}, FeedItem{}}
 	tx := db.Begin()
 	for _, m := range models {
 		err := tx.AutoMigrate(m).Error
@@ -178,7 +173,6 @@ func (d *DBHandle) SaveFeed(f *FeedInfo) error {
 	if err != nil {
 		return err
 	}
-
 	if d.writeUpdates {
 		return d.db.Save(f).Error
 	}
@@ -203,7 +197,8 @@ func (d *DBHandle) RemoveFeed(url string) error {
 			tx.Rollback()
 			return err
 		}
-		err = tx.Where("feed_id = ?", f.Id).Delete(UserFeed{}).Error
+		err = tx.Model(f).Association("Users").Clear().Error
+		//err = tx.Where("feed_id = ?", f.Id).Delete(UserFeed{}).Error
 		if err != nil {
 			tx.Rollback()
 			return err
@@ -293,7 +288,7 @@ func (d *DBHandle) GetFeedItemByGuid(feedID int64, guid string) (*FeedItem, erro
 }
 
 // RecordGuid adds a FeedItem record for the given feedID and guid.
-func (d *DBHandle) RecordGuid(feedID int64, guid string) (err error) {
+func (d *DBHandle) RecordGuid(feedID int64, guid string) error {
 	if d.writeUpdates {
 		glog.Infof("Adding GUID '%s' for feed %d", guid, feedID)
 		f := FeedItem{
@@ -435,11 +430,20 @@ func (d *DBHandle) RemoveUser(user *User) error {
 }
 
 func (d *DBHandle) unsafeRemoveUser(user *User) error {
-	err := d.db.Delete(user).Error
-	if err == nil {
-		err = d.db.Where("user_id = ?", user.Id).Delete(UserFeed{}).Error
+
+	tx := d.db.Begin()
+	err := tx.Model(user).Association("Feeds").Clear().Error
+	if err != nil {
+		tx.Rollback()
+		return err
 	}
-	return err
+	err = tx.Delete(user).Error
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	tx.Commit()
+	return nil
 }
 
 // RemoveUserByEmail removes the user with the given email from the database.
@@ -462,12 +466,7 @@ func (d *DBHandle) AddFeedsToUser(u *User, feeds []*FeedInfo) error {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	for _, f := range feeds {
-		uf := &UserFeed{
-			UserId: u.Id,
-			FeedId: f.Id,
-		}
-		//err := d.DB.Where(uf).FirstOrCreate(uf).Error
-		err := d.db.Save(uf).Error
+		err := d.db.Model(u).Association("Feeds").Append(*f).Error
 		if err != nil {
 			return err
 		}
@@ -481,7 +480,7 @@ func (d *DBHandle) RemoveFeedsFromUser(u *User, feeds []*FeedInfo) error {
 	defer d.syncMutex.Unlock()
 
 	for _, f := range feeds {
-		err := d.db.Where("feed_id = ? and user_id = ?", f.Id, u.Id).Delete(UserFeed{}).Error
+		err := d.db.Model(u).Association("Feeds").Delete(*f).Error
 		if err != nil {
 			return err
 		}
@@ -496,13 +495,7 @@ func (d *DBHandle) GetUsersFeeds(u *User) ([]FeedInfo, error) {
 
 	var feedInfos []FeedInfo
 
-	err := d.db.Table("feed_info").
-		Select("feed_info.id,feed_info.name,feed_info.url").
-		Joins("INNER join user_feed on user_feed.feed_id = feed_info.id").
-		Where("user_feed.user_id = ?", u.Id).
-		Order("feed_info.name").
-		Group("feed_info.id").
-		Scan(&feedInfos).Error
+	err := d.db.Model(u).Association("Feeds").Find(&feedInfos).Error
 	if err == gorm.RecordNotFound {
 		err = nil
 	}
@@ -562,11 +555,14 @@ func (d *DBHandle) GetFeedUsers(feedURL string) ([]User, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	var all []User
-	err := d.db.Table("user").
-		Select("user.id, user.name, user.email, user.enabled").
-		Joins("inner join user_feed on user.id=user_feed.user_id inner join feed_info on feed_info.id=user_feed.feed_id").
-		Where("feed_info.url = ?", feedURL).
-		Group("user.id").Scan(&all).Error
+	feed, err := d.unsafeGetFeedByURL(feedURL)
+	if err == gorm.RecordNotFound {
+		return all, nil
+	}
+	if err != nil {
+		return all, err
+	}
+	err = d.db.Model(feed).Association("Users").Find(&all).Error
 	if err == gorm.RecordNotFound {
 		err = nil
 	}

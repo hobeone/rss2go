@@ -35,13 +35,13 @@ func runUnsubscribeUser(cmd *flagutil.Command, args []string) {
 	if len(args) < 2 {
 		PrintErrorAndExit("Must give an email address and a feed url")
 	}
-	user_email := args[0]
-	feed_urls := args[1:]
+	userEmail := args[0]
+	feedURLs := args[1:]
 
 	cfg := loadConfig(cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
 
 	su := NewUnsubscribeUserCommand(cfg)
-	su.UnsubscribeUser(user_email, feed_urls)
+	su.UnsubscribeUser(userEmail, feedURLs)
 }
 
 func NewUnsubscribeUserCommand(cfg *config.Config) *UnsubscribeUserCommand {
@@ -65,10 +65,11 @@ func (self *UnsubscribeUserCommand) UnsubscribeUser(user_email string, feed_urls
 	}
 
 	feeds := []*db.FeedInfo{}
-	for _, feed_url := range feed_urls {
-		f, err := self.Dbh.GetFeedByUrl(feed_url)
+	for _, feedURL := range feed_urls {
+		f, err := self.Dbh.GetFeedByUrl(feedURL)
 		if err != nil {
-			fmt.Printf("Feed %s doesn't exist in db, skipping.\n", feed_url)
+			fmt.Printf("Feed %s doesn't exist in db, skipping.\n", feedURL)
+			continue
 		}
 		feeds = append(feeds, f)
 	}
