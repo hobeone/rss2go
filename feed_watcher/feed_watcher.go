@@ -70,7 +70,7 @@ type FeedWatcher struct {
 	crawling          bool // make sure only one crawl outstanding at a time
 	minSleepTime      time.Duration
 	maxSleepTime      time.Duration
-	dbh               *db.DBHandle
+	dbh               db.DBService
 	KnownGuids        map[string]bool
 	LastCrawlResponse *FeedCrawlResponse
 	After             func(d time.Duration) <-chan time.Time // Allow for mocking out in test.
@@ -82,7 +82,7 @@ func NewFeedWatcher(
 	crawlChan chan *FeedCrawlRequest,
 	responseChan chan *FeedCrawlResponse,
 	mailChan chan *mail.MailRequest,
-	dbh *db.DBHandle,
+	dbh db.DBService,
 	knownGUIDs []string,
 	minSleep int64,
 	maxSleep int64,

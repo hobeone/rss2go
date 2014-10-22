@@ -182,7 +182,7 @@ var dateFormats = []string{
 	"Updated January 2, 2006",
 }
 
-func parseDate(feed *Feed, ds ...string) (t time.Time, err error) {
+func parseDate(ds ...string) (t time.Time, err error) {
 	for _, d := range ds {
 		d = strings.TrimSpace(d)
 		if d == "" {

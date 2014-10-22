@@ -74,7 +74,7 @@ func parseAtom(u string, b []byte) (*Feed, []*Story, error) {
 	s := []*Story{}
 
 	f.Title = a.Title
-	if t, err := parseDate(&f, string(a.Updated)); err == nil {
+	if t, err := parseDate(string(a.Updated)); err == nil {
 		f.Updated = t
 	}
 
@@ -103,10 +103,10 @@ func parseAtom(u string, b []byte) (*Feed, []*Story, error) {
 			Title: i.Title.ToString(),
 			Feed:  &f,
 		}
-		if t, err := parseDate(&f, string(i.Updated)); err == nil {
+		if t, err := parseDate(string(i.Updated)); err == nil {
 			st.Updated = t
 		}
-		if t, err := parseDate(&f, string(i.Published)); err == nil {
+		if t, err := parseDate(string(i.Published)); err == nil {
 			st.Published = t
 		}
 		if len(i.Link) > 0 {
@@ -154,7 +154,7 @@ func parseRss(u string, b []byte) (*Feed, []*Story, error) {
 
 	f.Title = r.Title
 	f.Link = r.BaseLink()
-	if t, err := parseDate(&f, r.LastBuildDate, r.PubDate); err == nil {
+	if t, err := parseDate(r.LastBuildDate, r.PubDate); err == nil {
 		f.Updated = t
 	} else {
 		glog.Infof("no rss feed date: %v", f.Link)
@@ -182,7 +182,7 @@ func parseRss(u string, b []byte) (*Feed, []*Story, error) {
 		if i.Media != nil {
 			st.MediaContent = i.Media.URL
 		}
-		if t, err := parseDate(&f, i.PubDate, i.Date, i.Published); err == nil {
+		if t, err := parseDate(i.PubDate, i.Date, i.Published); err == nil {
 			st.Published = t
 			st.Updated = t
 		}
@@ -213,7 +213,7 @@ func parseRdf(u string, b []byte) (*Feed, []*Story, error) {
 	if rd.Channel != nil {
 		f.Title = rd.Channel.Title
 		f.Link = rd.Channel.Link
-		if t, err := parseDate(&f, rd.Channel.Date); err == nil {
+		if t, err := parseDate(rd.Channel.Date); err == nil {
 			f.Updated = t
 		}
 	}
@@ -227,7 +227,7 @@ func parseRdf(u string, b []byte) (*Feed, []*Story, error) {
 			Feed:   &f,
 		}
 		st.Content = html.UnescapeString(i.Description)
-		if t, err := parseDate(&f, i.Date); err == nil {
+		if t, err := parseDate(i.Date); err == nil {
 			st.Published = t
 			st.Updated = t
 		}

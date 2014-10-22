@@ -51,6 +51,17 @@ type UserFeed struct {
 	FeedId int64 `sql:"not null"`
 }
 
+// DBService defines the interface that the RSS2Go database provides.
+// Useful for mocking out the databse layer in tests.
+type DBService interface {
+	GetFeedByUrl(string) (*FeedInfo, error)
+	GetFeedUsers(string) ([]User, error)
+	SaveFeed(*FeedInfo) error
+	GetMostRecentGuidsForFeed(int64, int) ([]string, error)
+	RecordGuid(int64, string) error
+	GetFeedItemByGuid(int64, string) (*FeedItem, error)
+}
+
 // DBHandle controls access to the database and makes sure only one
 // operation is in process at a time.
 type DBHandle struct {

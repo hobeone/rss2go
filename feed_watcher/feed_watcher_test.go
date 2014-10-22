@@ -18,6 +18,19 @@ func (m *FailMailer) SendMail(msg mail.Message) error {
 	return fmt.Errorf("testing error")
 }
 
+// Mock Database handler to throw errors.
+// TODO: rework so failures can be set per test
+type MockDBFailer struct{}
+
+func (d *MockDBFailer) GetFeedByUrl(string) (*db.FeedInfo, error)             { return nil, nil }
+func (d *MockDBFailer) GetFeedUsers(string) ([]db.User, error)                { return nil, nil }
+func (d *MockDBFailer) SaveFeed(*db.FeedInfo) error                           { return nil }
+func (d *MockDBFailer) RecordGuid(int64, string) error                        { return nil }
+func (d *MockDBFailer) GetFeedItemByGuid(int64, string) (*db.FeedItem, error) { return nil, nil }
+func (d *MockDBFailer) GetMostRecentGuidsForFeed(i int64, m int) ([]string, error) {
+	return []string{}, fmt.Errorf("test error")
+}
+
 func OverrideAfter(fw *FeedWatcher) {
 	fw.After = func(d time.Duration) <-chan time.Time {
 		return time.After(time.Duration(0))
@@ -55,6 +68,25 @@ func TestFeedWatcherPollLocking(t *testing.T) {
 	if !n.Polling() {
 		t.Fatal("Watching didn't set polling lock")
 	}
+}
+
+func TestPollFeedWithDBErrors(t *testing.T) {
+	n, feedResp, _ := SetupTest(t, "../testdata/ars.rss")
+	OverrideAfter(n)
+
+	n.dbh = &MockDBFailer{}
+	go n.PollFeed()
+	req := <-n.crawlChan
+	req.ResponseChan <- &FeedCrawlResponse{
+		URI:   n.FeedInfo.Url,
+		Body:  feedResp,
+		Error: nil,
+	}
+	resp := <-n.responseChan
+	if resp.Error == nil {
+		t.Fatal("Should have gotten an error got nothing")
+	}
+
 }
 
 func TestFeedWatcherPolling(t *testing.T) {
