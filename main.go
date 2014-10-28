@@ -10,6 +10,7 @@ import (
 
 func main() {
 	c := flagutil.NewCommands("rss2go command suite",
+		commands.MakeCmdShowConfig(),
 		commands.MakeCmdTestFeed(),
 		commands.MakeCmdDaemon(),
 		commands.MakeCmdRunOne(),
