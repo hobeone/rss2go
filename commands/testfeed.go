@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	netmail "net/mail"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/feed"
 	"github.com/hobeone/rss2go/flagutil"
@@ -67,11 +68,8 @@ func testFeed(cmd *flagutil.Command, args []string) {
 		fmt.Printf("Mail Message for %s:\n", s.Title)
 		fmt.Println()
 		m := mail.CreateMailFromItem("From@Address", netmail.Address{Address: "To@Address"}, s)
-		b, err := m.Bytes()
-		if err != nil {
-			fmt.Printf("Error converting %s to mail: %s\n", s.Title, err)
-			continue
-		}
-		fmt.Println(string(b[:]))
+		fmt.Println("****** Mail Message *******")
+		spew.Dump(m.Export())
+		fmt.Println("****** ++++++++++++ *******")
 	}
 }

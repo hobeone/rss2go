@@ -27,14 +27,15 @@ type webConfig struct {
 }
 
 type mailConfig struct {
-	SendMail     bool
-	UseSendmail  bool
-	UseSmtp      bool
-	MtaPath      string
-	SmtpServer   string
-	SmtpUsername string
-	SmtpPassword string
-	FromAddress  string
+	SendMail    bool
+	UseSendmail bool
+	UseSMTP     bool
+	MtaPath     string
+	Hostname    string
+	Port        int
+	Username    string
+	Password    string
+	FromAddress string
 }
 
 type dbConfig struct {
@@ -59,7 +60,7 @@ func NewConfig() *Config {
 	return &Config{
 		Mail: mailConfig{
 			UseSendmail: true,
-			UseSmtp:     false,
+			UseSMTP:     false,
 			FromAddress: "rss2go@localhost.localdomain",
 			SendMail:    true,
 		},
@@ -85,7 +86,7 @@ func NewConfig() *Config {
 func NewTestConfig() *Config {
 	c := NewConfig()
 	c.Mail.UseSendmail = false
-	c.Mail.UseSmtp = false
+	c.Mail.UseSMTP = false
 	c.Mail.SendMail = false
 	c.Db.Type = "memory"
 	c.Db.Verbose = false

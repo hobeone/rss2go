@@ -26,15 +26,15 @@ func TestReadConfigFailsOnBadFormat(t *testing.T) {
 
 func TestDefaultsGetOverridden(t *testing.T) {
 	c := NewConfig()
-	if c.Mail.UseSmtp {
-		t.Fatal("Expected UseSmtp to be false")
+	if c.Mail.UseSMTP {
+		t.Fatal("Expected UseSMTP to be false")
 	}
 	path := "../testdata/configs/test_config.json"
 	err := c.ReadConfig(path)
 	if err != nil {
 		t.Fatalf("Expected no errors when parsing: %s, got %s", path, err)
 	}
-	if !c.Mail.UseSmtp {
-		t.Fatal("Expected c.Mail.UseSmtp to be true")
+	if !c.Mail.UseSMTP {
+		t.Fatal("Expected c.Mail.UseSMTP to be true")
 	}
 }

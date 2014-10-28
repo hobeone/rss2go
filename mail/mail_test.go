@@ -3,20 +3,21 @@ package mail
 import (
 	"fmt"
 	"net/mail"
+	"net/smtp"
 	"os"
 	"os/exec"
 	"testing"
 
-	"github.com/hobeone/gophermail"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed"
+	"gopkg.in/gomail.v1"
 )
 
 type MockedMailer struct {
 	Called int
 }
 
-func (m *MockedMailer) SendMail(msg Message) error {
+func (m *MockedMailer) SendMail(msg *gomail.Message) error {
 	m.Called++
 	return nil
 }
@@ -32,7 +33,7 @@ func TestSendToUsersWithNoMailSender(t *testing.T) {
 }
 
 func TestSendToUsers(t *testing.T) {
-	dbh := db.NewMemoryDBHandle(true, true)
+	dbh := db.NewMemoryDBHandle(false, true)
 	feeds, users := db.LoadFixtures(t, dbh, "http://localhost")
 
 	mm := &MockedMailer{}
@@ -67,13 +68,13 @@ type TestCommandRunner struct {
 	TestToRun string
 }
 
-func (r TestCommandRunner) Run(input []byte) ([]byte, error) {
+func (r TestCommandRunner) Run(addr string, a smtp.Auth, from string, to []string, msg []byte) error {
 	cs := []string{fmt.Sprintf("-test.run=%s", r.TestToRun), "--"}
 	cs = append(cs)
 	cmd := exec.Command(os.Args[0], cs...)
 	cmd.Env = []string{"GO_WANT_HELPER_PROCESS=1"}
-	out, err := cmd.CombinedOutput()
-	return out, err
+	_, err := cmd.CombinedOutput()
+	return err
 }
 
 func TestHelperProcessSuccess(*testing.T) {
@@ -93,26 +94,23 @@ func TestHelperProcessFail(*testing.T) {
 }
 
 func TestLocalMTASender(t *testing.T) {
-	msg := &MailMessage{
-		gophermail.Message{
-			From:    mail.Address{Address: "from@example.com"},
-			To:      []mail.Address{mail.Address{Address: "to@example.com"}},
-			Subject: "Testing subject",
-			Body:    "Test Body",
-		},
-	}
+	gmsg := gomail.NewMessage()
+	gmsg.SetHeader("From", "from@example.com")
+	gmsg.SetHeader("To", "to@example.com")
+	gmsg.SetHeader("Subject", "Testing subject")
+	gmsg.SetBody("text/html", "Test Body")
 
 	mta := NewLocalMTASender("/bin/true")
 	mta.Runner = TestCommandRunner{"TestHelperProcessSuccess"}
 
-	err := mta.SendMail(msg)
+	err := mta.SendMail(gmsg)
 	if err != nil {
 		t.Fatalf("Unexpected error on SendMail: %s", err)
 	}
 
 	mta.Runner = TestCommandRunner{"TestHelperProcessFail"}
 
-	err = mta.SendMail(msg)
+	err = mta.SendMail(gmsg)
 	if err == nil {
 		t.Fatalf("Unexpected success with SendMail.")
 	}

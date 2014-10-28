@@ -15,46 +15,17 @@ import (
 	"net/mail"
 	"net/smtp"
 	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/hobeone/gophermail" // Fix for subjects showing up quoted after go1.3
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/feed"
+	"gopkg.in/gomail.v1"
 )
 
 // Default MTA binary to exec when sending mail locally.
 // sendmail is supported by sendmail and postfix
 const MTA_BINARY = "sendmail"
-
-// Message defines the interface that mail messages should implement
-type Message interface {
-	Bytes() ([]byte, error)
-	MailSubject() string
-	MailTo() []mail.Address
-	MailFrom() *mail.Address
-}
-
-// MailMessage wraps gophermail.Message for the Message interface
-type MailMessage struct {
-	gophermail.Message
-}
-
-// MailSubject returns the Subject of a message
-func (m *MailMessage) MailSubject() string {
-	return m.Subject
-}
-
-// MailTo returns the To addresses of an email
-func (m *MailMessage) MailTo() []mail.Address {
-	return m.To
-}
-
-// MailFrom returns the From address of an email
-func (m *MailMessage) MailFrom() *mail.Address {
-	return &m.From
-}
 
 // MailRequest defines a request for a Feed Story to be mailed to a list of email addresses
 type MailRequest struct {
@@ -65,7 +36,8 @@ type MailRequest struct {
 
 // CommandRunner is the interface for running an external command (to send mail).
 type CommandRunner interface {
-	Run([]byte) ([]byte, error)
+	//	Run([]byte) ([]byte, error)
+	Run(addr string, a smtp.Auth, from string, to []string, msg []byte) error
 }
 
 // SendmailRunner sends email through the sendmail binary
@@ -74,16 +46,21 @@ type SendmailRunner struct {
 }
 
 // Run sends the given byte array to sendmail over the command line.
-func (r SendmailRunner) Run(input []byte) ([]byte, error) {
+func (r SendmailRunner) Run(addr string, a smtp.Auth, from string, to []string, msg []byte) error {
+	//func (r SendmailRunner) Run(input []byte) ([]byte, error) {
 	cmd := exec.Command(r.SendmailPath, "-t", "-i")
-	cmd.Stdin = bytes.NewReader(input)
+	cmd.Stdin = bytes.NewReader(msg)
 	glog.Infof("Running command %#v", cmd.Args)
-	return cmd.CombinedOutput()
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		glog.Info("Error running command %#v, output %s", cmd.Args, output)
+	}
+	return err
 }
 
 // MailSender is the interface for something that can send mail.
 type MailSender interface {
-	SendMail(Message) error
+	SendMail(*gomail.Message) error
 }
 
 // LocalMTASender can send mail using a local binary (rather than over SMTP)
@@ -92,16 +69,13 @@ type LocalMTASender struct {
 }
 
 // SendMail sends mail using a local binary
-func (self *LocalMTASender) SendMail(msg Message) error {
-	msgBytes, err := msg.Bytes()
-	if err != nil {
-		return fmt.Errorf("error converting message to text: %s", err.Error())
-	}
-	_, err = self.Runner.Run(msgBytes)
+func (self *LocalMTASender) SendMail(msg *gomail.Message) error {
+	mailer := gomail.NewMailer("host", "user", "pwd", 465, gomail.SetSendMail(self.Runner.Run))
+	err := mailer.Send(msg)
 	if err != nil {
 		return fmt.Errorf("error running command %s", err.Error())
 	}
-	glog.Infof("Successfully sent mail: %s to %v", msg.MailSubject(), msg.MailTo())
+	glog.Infof("Successfully sent mail: %v to %v", msg.GetHeader("From"), msg.GetHeader("To"))
 	return nil
 }
 
@@ -124,32 +98,24 @@ func NewLocalMTASender(mtaPath string) *LocalMTASender {
 }
 
 type SMTPSender struct {
-	SmtpServer   string
-	SmtpUsername string
-	SmtpPassword string
+	Hostname string
+	Port     int
+	Username string
+	Password string
 }
 
-func (self *SMTPSender) SendMail(msg Message) error {
-	server_parts := strings.SplitN(self.SmtpServer, ":", 2)
-	a := smtp.PlainAuth("", self.SmtpUsername, self.SmtpPassword, server_parts[0])
-
-	msgBytes, err := msg.Bytes()
-	if err != nil {
-		return err
-	}
-	msgTo := make([]string, len(msg.MailTo()))
-	for i, to := range msg.MailTo() {
-		msgTo[i] = to.String()
-	}
-	err = smtp.SendMail(self.SmtpServer, a, msg.MailFrom().String(), msgTo, msgBytes)
-	if err != nil {
-		return fmt.Errorf("Error sending mail: %s\n", err.Error())
-	}
-	return nil
+func (s *SMTPSender) SendMail(msg *gomail.Message) error {
+	mailer := gomail.NewMailer(s.Hostname, s.Username, s.Password, s.Port)
+	return mailer.Send(msg)
 }
 
-func NewSMTPSender(server string, username string, password string) MailSender {
-	return &SMTPSender{}
+func NewSMTPSender(server string, port int, username string, password string) MailSender {
+	return &SMTPSender{
+		Hostname: server,
+		Port:     port,
+		Username: username,
+		Password: password,
+	}
 }
 
 // NullMailSender doesn't send mail.  It does record the number of times it has been called which is useful for testing.
@@ -157,9 +123,9 @@ type NullMailSender struct {
 	Count int
 }
 
-func (self *NullMailSender) SendMail(m Message) error {
+func (self *NullMailSender) SendMail(m *gomail.Message) error {
 	self.Count++
-	glog.Infof("NullMailer faked sending mail: %s to %v", m.MailSubject(), m.MailTo())
+	glog.Infof("NullMailer faked sending mail: %s to %v", m.GetHeader("From"), m.GetHeader("To"))
 	return nil
 }
 
@@ -191,9 +157,9 @@ func CreateAndStartMailer(config *config.Config) *MailDispatcher {
 	} else if config.Mail.MtaPath != "" {
 		glog.Infof("Using Local MTA: %s", config.Mail.MtaPath)
 		sender = NewLocalMTASender(config.Mail.MtaPath)
-	} else if config.Mail.SmtpServer != "" {
-		glog.Infof("Using SMTP Server: %s", config.Mail.SmtpServer)
-		sender = NewSMTPSender(config.Mail.SmtpServer, config.Mail.SmtpUsername, config.Mail.SmtpPassword)
+	} else if config.Mail.Hostname != "" {
+		glog.Infof("Using SMTP Server: %s:%d", config.Mail.Hostname, config.Mail.Port)
+		sender = NewSMTPSender(config.Mail.Hostname, config.Mail.Port, config.Mail.Username, config.Mail.Password)
 	} else {
 		panic(fmt.Sprint("No mail sending capability defined in config."))
 	}
@@ -242,31 +208,24 @@ func (self *MailDispatcher) handleMailRequest(m *MailRequest) error {
 	return nil
 }
 
-func CreateMailFromItem(from string, to mail.Address, item *feed.Story) *MailMessage {
+func CreateMailFromItem(from string, to mail.Address, item *feed.Story) *gomail.Message {
 	content := FormatMessageBody(item)
-	msg := MailMessage{
-		gophermail.Message{
-			From: mail.Address{
-				Address: from,
-			},
-			To:       []mail.Address{to},
-			Subject:  item.Title,
-			Body:     content, //TODO Convert to plain text
-			HTMLBody: content,
-			Headers:  mail.Header{},
-		},
-	}
+	gmsg := gomail.NewMessage()
+	gmsg.SetHeader("From", from)
+	gmsg.SetHeader("To", to.String())
+	gmsg.SetHeader("Subject", item.Title)
+	gmsg.SetBody("text/html", content)
 	if !item.Published.IsZero() {
-		msg.Headers["Date"] = []string{item.Published.UTC().Format(time.RFC822)}
+		gmsg.SetHeader("Date", item.Published.UTC().Format(time.RFC822))
 	}
-	return &msg
+	return gmsg
 }
 
 func FormatMessageBody(story *feed.Story) string {
-	orig_link := fmt.Sprintf(`
+	origLink := fmt.Sprintf(`
 <div class="original_link">
 <a href="%s">%s</a>
 </div><hr>`, story.Link, story.Title)
 
-	return fmt.Sprintf("%s%s", orig_link, story.Content)
+	return fmt.Sprintf("%s%s", origLink, story.Content)
 }

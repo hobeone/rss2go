@@ -10,11 +10,12 @@ import (
 	"github.com/hobeone/rss2go/feed"
 	"github.com/hobeone/rss2go/mail"
 	. "github.com/smartystreets/goconvey/convey"
+	"gopkg.in/gomail.v1"
 )
 
 type FailMailer struct{}
 
-func (m *FailMailer) SendMail(msg mail.Message) error {
+func (m *FailMailer) SendMail(msg *gomail.Message) error {
 	return fmt.Errorf("testing error")
 }
 
