@@ -3,12 +3,11 @@ rss2go
 
 [![wercker status](https://app.wercker.com/status/9e619f7630d2c3797ce94f75f654e334 "wercker status")](https://app.wercker.com/project/bykey/9e619f7630d2c3797ce94f75f654e334)
 
+Clone of rss2email in Go that I've used to learn Go.
 
-Clone of rss2email in Go.
+*Basic Architecture:
 
-*Basic Architecture:*
-
-Config is stored in toml format.  By default the config lives in ~/.rss2go/config.toml
+Config is stored in json format.  By default the config lives in ~/.config/rss2go/config.json
 
 List of Feeds and their state (what guids we've already seen) are kept in a
 SQLite database.
@@ -37,7 +36,7 @@ cp config_example.toml ~/.config/rss2go/config.toml
 Edit ~/.config/rss2go/config.toml to have the right addresses and paths in it.
 ```
 ./rss2go addfeed "FeedName" 'http://feed/url.atom'
-./rss2go adduser yourname your@email 'http://feed/url.atom'
+./rss2go adduser yourname your@email password 'http://feed/url.atom'
 ./rss2go runone --send_mail=false http://localhost/test.rss
 ```
 
