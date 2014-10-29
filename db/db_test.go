@@ -243,7 +243,7 @@ func TestGetStaleFeeds(t *testing.T) {
 			Convey("The feed should be returned by GetStaleFeeds", func() {
 				f, err := d.GetStaleFeeds()
 				So(err, ShouldBeNil)
-				So(&f[0], ShouldResemble, feeds[0])
+				So(f[0].Id, ShouldEqual, feeds[0].Id)
 			})
 		})
 
@@ -282,7 +282,7 @@ func TestAddUserValidation(t *testing.T) {
 }
 
 func TestAddRemoveUser(t *testing.T) {
-	d := NewMemoryDBHandle(true, true)
+	d := NewMemoryDBHandle(false, true)
 	feeds, _ := LoadFixtures(t, d, "http://localhost")
 
 	userName := "test user name"

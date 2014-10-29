@@ -16,6 +16,12 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+func init() {
+	gorm.NowFunc = func() time.Time {
+		return time.Now().UTC()
+	}
+}
+
 // FeedInfo represents a feed (atom, rss or rdf) that rss2go is polling.
 type FeedInfo struct {
 	Id            int64     `json:"id"`
@@ -26,6 +32,12 @@ type FeedInfo struct {
 	Users         []User    `gorm:"many2many:user_feeds;" json:"-"`
 }
 
+// SQLite driver sets everything to local timezone
+func (f *FeedInfo) AfterFind() error {
+	f.LastPollTime = f.LastPollTime.UTC()
+	return nil
+}
+
 // FeedItem represents an individual iteam from a feed.  It only captures the
 // Guid for that item and is mainly used to check if a particular item has been
 // seen before.
@@ -34,6 +46,12 @@ type FeedItem struct {
 	FeedInfoId int64     `sql:"not null"`
 	Guid       string    `sql:"not null"`
 	AddedOn    time.Time `sql:"not null"`
+}
+
+// SQLite driver sets everything to local timezone
+func (f *FeedItem) AfterFind() error {
+	f.AddedOn = f.AddedOn.UTC()
+	return nil
 }
 
 // User represents a user/email address that can subscribe to Feeds
