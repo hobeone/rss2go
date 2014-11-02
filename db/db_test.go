@@ -337,33 +337,58 @@ func TestAddRemoveFeedsFromUser(t *testing.T) {
 		Name: "new test feed",
 		Url:  "http://new/test.feed",
 	}
-	Convey("Subject: Feed add and removal from a user", t, func() {
-		Convey("When adding a feed", func() {
-			err := d.SaveFeed(newFeed)
-			So(err, ShouldBeNil)
-			feeds, err := d.GetUsersFeeds(users[0])
-			So(err, ShouldBeNil)
-			So(len(feeds), ShouldEqual, 3)
+	err := d.SaveFeed(newFeed)
+	if err != nil {
+		t.Fatalf("Error saving feed: %s", err)
+	}
+	feeds, err := d.GetUsersFeeds(users[0])
 
-			err = d.AddFeedsToUser(users[0], []*FeedInfo{newFeed})
-			Convey("A feed should be added to a user", func() {
-				So(err, ShouldBeNil)
-				feeds, err := d.GetUsersFeeds(users[0])
-				So(err, ShouldBeNil)
-				So(feeds, ShouldNotBeEmpty)
-				So(len(feeds), ShouldEqual, 4)
-			})
-		})
+	if err != nil {
+		t.Fatalf("error getting users feeds: %s", err)
+	}
 
-		Convey("When removing a feed", func() {
-			err := d.RemoveFeedsFromUser(users[0], []*FeedInfo{newFeed})
-			So(err, ShouldBeNil)
-			feeds, err := d.GetUsersFeeds(users[0])
-			So(err, ShouldBeNil)
-			So(feeds, ShouldNotContain, newFeed)
-		})
+	if len(feeds) != 3 {
+		t.Fatalf("Expected 3 feeds, got %d", len(feeds))
+	}
+	err = d.AddFeedsToUser(users[0], []*FeedInfo{newFeed})
+	if err != nil {
+		t.Fatalf("error adding feed to user: %s", err)
+	}
+	feeds, err = d.GetUsersFeeds(users[0])
+	if err != nil {
+		t.Fatalf("error getting users feeds: %s", err)
+	}
+	if len(feeds) == 0 {
+		t.Fatalf("Users feeds was unexpectedly empty.")
+	}
+	if len(feeds) != 4 {
+		t.Fatalf("Expected 4 feeds, got %d", len(feeds))
+	}
 
-	})
+	// Test that we don't add duplicates
+	err = d.AddFeedsToUser(users[0], []*FeedInfo{newFeed})
+	if err != nil {
+		t.Fatalf("error adding feed to user: %s", err)
+	}
+	feeds, err = d.GetUsersFeeds(users[0])
+	if err != nil {
+		t.Fatalf("error getting users feeds: %s", err)
+	}
+	if len(feeds) != 4 {
+		t.Fatalf("Expected 4 feeds, got %d", len(feeds))
+	}
+
+	err = d.RemoveFeedsFromUser(users[0], []*FeedInfo{newFeed})
+	if err != nil {
+		t.Fatalf("error removing users feed: %s", err)
+	}
+	feeds, err = d.GetUsersFeeds(users[0])
+	if err != nil {
+		t.Fatalf("error getting users feeds: %s", err)
+	}
+	if len(feeds) != 3 {
+		t.Fatalf("Expected 3 feeds, got %d", len(feeds))
+	}
 }
 
 func TestGetUsersFeeds(t *testing.T) {

@@ -110,6 +110,7 @@ func setupDB(db gorm.DB) error {
 			return err
 		}
 	}
+	tx.Exec("CREATE UNIQUE INDEX IF NOT EXISTS user_feed_idx ON user_feeds (user_id,feed_info_id);")
 	tx.Commit()
 	return nil
 }
