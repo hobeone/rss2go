@@ -9,7 +9,7 @@ import (
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed"
 	"github.com/hobeone/rss2go/mail"
-	. "github.com/smartystreets/goconvey/convey"
+	. "github.com/onsi/gomega"
 	"gopkg.in/gomail.v1"
 )
 
@@ -347,11 +347,8 @@ func TestWithDoublePollFeed(t *testing.T) {
 }
 
 func TestCrawlLock(t *testing.T) {
-	Convey("Subject FeedWatcher Crawl Lock:", t, func() {
-		n, _, _ := SetupTest(t, "../testdata/empty.rss")
-		Convey("Given already crawling", func() {
-			n.lockCrawl()
-			So(n.CrawlFeed().Error, ShouldEqual, ErrAlreadyCrawlingFeed)
-		})
-	})
+	RegisterTestingT(t)
+	n, _, _ := SetupTest(t, "../testdata/empty.rss")
+	n.lockCrawl()
+	Expect(n.CrawlFeed().Error).To(MatchError(ErrAlreadyCrawlingFeed))
 }

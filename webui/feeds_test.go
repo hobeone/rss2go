@@ -45,9 +45,8 @@ func TestGetAllFeeds(t *testing.T) {
 	RegisterTestingT(t)
 	response := httptest.NewRecorder()
 	req, err := http.NewRequest("GET", "/api/1/feeds", nil)
-	if err != nil {
-		t.Fatalf("Error creating request: %s", err)
-	}
+	err = fmt.Errorf("boo")
+	Expect(err).ToNot(HaveOccurred(), "Error creating request: %s", err)
 
 	m.ServeHTTP(response, req)
 
