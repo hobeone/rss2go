@@ -101,14 +101,11 @@ func openDB(dbType string, dbArgs string, verbose bool) gorm.DB {
 }
 
 func setupDB(db gorm.DB) error {
-	models := []interface{}{User{}, FeedInfo{}, FeedItem{}}
 	tx := db.Begin()
-	for _, m := range models {
-		err := tx.AutoMigrate(m).Error
-		if err != nil {
-			tx.Rollback()
-			return err
-		}
+	err := tx.AutoMigrate(&User{}, &FeedInfo{}, &FeedItem{}).Error
+	if err != nil {
+		tx.Rollback()
+		return err
 	}
 	tx.Exec("CREATE UNIQUE INDEX IF NOT EXISTS user_feed_idx ON user_feeds (user_id,feed_info_id);")
 	tx.Commit()
