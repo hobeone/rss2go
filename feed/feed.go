@@ -18,8 +18,8 @@ import (
 	_ "code.google.com/p/go-charset/data"
 	"code.google.com/p/go-html-transform/h5"
 	"code.google.com/p/go-html-transform/html/transform"
-	"code.google.com/p/go.net/html"
 	"github.com/microcosm-cc/bluemonday"
+	"golang.org/x/net/html"
 
 	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/atom"
