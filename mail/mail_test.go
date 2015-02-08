@@ -51,8 +51,8 @@ func TestSendToUsers(t *testing.T) {
 	mr := MailRequest{
 		Item: s,
 		Addresses: []mail.Address{
-			mail.Address{Address: users[0].Email},
-			mail.Address{Address: users[1].Email},
+			{Address: users[0].Email},
+			{Address: users[1].Email},
 		},
 	}
 	err := md.handleMailRequest(&mr)
