@@ -24,15 +24,21 @@ func init() {
 
 // FeedInfo represents a feed (atom, rss or rdf) that rss2go is polling.
 type FeedInfo struct {
-	Id            int64     `json:"id"`
+	ID            int64     `json:"id"`
 	Name          string    `sql:"not null;unique" json:"name" binding:"required"`
-	Url           string    `sql:"not null;unique" json:"url" binding:"required"`
+	URL           string    `sql:"not null;unique" json:"url" binding:"required"`
 	LastPollTime  time.Time `json:"lastPollTime"`
 	LastPollError string    `json:"lastPollError"`
 	Users         []User    `gorm:"many2many:user_feeds;" json:"-"`
 }
 
-// SQLite driver sets everything to local timezone
+//TableName sets the name of the sql table to use.
+func (f FeedInfo) TableName() string {
+	return "feed_info"
+}
+
+// AfterFind is run after a record is returned from the db, it fixes the fact
+// that SQLite driver sets everything to local timezone
 func (f *FeedInfo) AfterFind() error {
 	f.LastPollTime = f.LastPollTime.UTC()
 	return nil
@@ -42,13 +48,18 @@ func (f *FeedInfo) AfterFind() error {
 // Guid for that item and is mainly used to check if a particular item has been
 // seen before.
 type FeedItem struct {
-	Id         int64
-	FeedInfoId int64     `sql:"not null"`
+	ID         int64
+	FeedInfoID int64     `sql:"not null"`
 	Guid       string    `sql:"not null"`
 	AddedOn    time.Time `sql:"not null"`
 }
 
-// SQLite driver sets everything to local timezone
+//TableName sets the name of the sql table to use.
+func (f FeedItem) TableName() string {
+	return "feed_item"
+}
+
+// AfterFind fixes the fact that the SQLite driver sets everything to local timezone
 func (f *FeedItem) AfterFind() error {
 	f.AddedOn = f.AddedOn.UTC()
 	return nil
@@ -56,7 +67,7 @@ func (f *FeedItem) AfterFind() error {
 
 // User represents a user/email address that can subscribe to Feeds
 type User struct {
-	Id       int64      `json:"id"`
+	ID       int64      `json:"id"`
 	Name     string     `sql:"size:255;not null;unique" json:"name"`
 	Email    string     `sql:"size:255;not null;unique" json:"email"`
 	Enabled  bool       `json:"enabled"`
@@ -64,10 +75,15 @@ type User struct {
 	Feeds    []FeedInfo `gorm:"many2many:user_feeds;" json:"-"`
 }
 
+//TableName sets the name of the sql table to use.
+func (u User) TableName() string {
+	return "user"
+}
+
 // DBService defines the interface that the RSS2Go database provides.
 // Useful for mocking out the databse layer in tests.
 type DBService interface {
-	GetFeedByUrl(string) (*FeedInfo, error)
+	GetFeedByURL(string) (*FeedInfo, error)
 	GetFeedUsers(string) ([]User, error)
 	SaveFeed(*FeedInfo) error
 	GetMostRecentGuidsForFeed(int64, int) ([]string, error)
@@ -150,10 +166,10 @@ func NewMemoryDBHandle(verbose bool, writeUpdates bool) *DBHandle {
  */
 
 func validateFeed(f *FeedInfo) error {
-	if f.Name == "" || f.Url == "" {
+	if f.Name == "" || f.URL == "" {
 		return errors.New("name and url can't be empty")
 	}
-	u, err := url.Parse(f.Url)
+	u, err := url.Parse(f.URL)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %s", err)
 	} else if u.Scheme == "" {
@@ -162,7 +178,7 @@ func validateFeed(f *FeedInfo) error {
 		return errors.New("URL has no Host")
 	}
 
-	f.Url = u.String()
+	f.URL = u.String()
 	return nil
 }
 
@@ -170,7 +186,7 @@ func validateFeed(f *FeedInfo) error {
 func (d *DBHandle) AddFeed(name string, feedURL string) (*FeedInfo, error) {
 	f := &FeedInfo{
 		Name: name,
-		Url:  feedURL,
+		URL:  feedURL,
 	}
 	err := validateFeed(f)
 	if err != nil {
@@ -208,7 +224,7 @@ func (d *DBHandle) RemoveFeed(url string) error {
 	tx := d.db.Begin()
 	err = tx.Delete(f).Error
 	if err == nil {
-		err = tx.Where("feed_info_id = ?", f.Id).Delete(FeedItem{}).Error
+		err = tx.Where("feed_info_id = ?", f.ID).Delete(FeedItem{}).Error
 		if err != nil {
 			tx.Rollback()
 			return err
@@ -262,9 +278,9 @@ func (d *DBHandle) GetStaleFeeds() ([]FeedInfo, error) {
 	return res, err
 }
 
-// GetFeedById returns the FeedInfo for the given id.  It returns a
+// GetFeedByID returns the FeedInfo for the given id.  It returns a
 // gorm.RecordNotFound error if it doesn't exist.
-func (d *DBHandle) GetFeedById(id int64) (*FeedInfo, error) {
+func (d *DBHandle) GetFeedByID(id int64) (*FeedInfo, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	var f FeedInfo
@@ -272,9 +288,9 @@ func (d *DBHandle) GetFeedById(id int64) (*FeedInfo, error) {
 	return &f, err
 }
 
-// GetFeedByUrl returns the FeedInfo for the given URL.  It returns a
+// GetFeedByURL returns the FeedInfo for the given URL.  It returns a
 // gorm.RecordNotFound error if it doesn't exist.
-func (d *DBHandle) GetFeedByUrl(url string) (*FeedInfo, error) {
+func (d *DBHandle) GetFeedByURL(url string) (*FeedInfo, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	return d.unsafeGetFeedByURL(url)
@@ -308,7 +324,7 @@ func (d *DBHandle) RecordGuid(feedID int64, guid string) error {
 	if d.writeUpdates {
 		glog.Infof("Adding GUID '%s' for feed %d", guid, feedID)
 		f := FeedItem{
-			FeedInfoId: feedID,
+			FeedInfoID: feedID,
 			Guid:       guid,
 			AddedOn:    time.Now(),
 		}
@@ -415,8 +431,8 @@ func (d *DBHandle) GetUser(name string) (*User, error) {
 	return u, err
 }
 
-// GetUserById returns the user with the given id from the database.
-func (d *DBHandle) GetUserById(id int64) (*User, error) {
+// GetUserByID returns the user with the given id from the database.
+func (d *DBHandle) GetUserByID(id int64) (*User, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	u := &User{}
@@ -530,10 +546,10 @@ func (d *DBHandle) UpdateUsersFeeds(u *User, feedIDs []int64) error {
 	newFeedIDs := make(map[int64]*FeedInfo, len(feedIDs))
 
 	for i := range feeds {
-		existingFeedIDs[feeds[i].Id] = &feeds[i]
+		existingFeedIDs[feeds[i].ID] = &feeds[i]
 	}
 	for _, id := range feedIDs {
-		feed, err := d.GetFeedById(id)
+		feed, err := d.GetFeedByID(id)
 		if err != nil {
 			return fmt.Errorf("no feed with id %d found", id)
 		}
@@ -625,15 +641,15 @@ func LoadFixtures(t TestReporter, d *DBHandle, feedHost string) ([]*FeedInfo, []
 	feeds := []*FeedInfo{
 		{
 			Name: "testfeed1",
-			Url:  fmt.Sprintf("%s/feed1.atom", feedHost),
+			URL:  fmt.Sprintf("%s/feed1.atom", feedHost),
 		},
 		{
 			Name: "testfeed2",
-			Url:  fmt.Sprintf("%s/feed2.atom", feedHost),
+			URL:  fmt.Sprintf("%s/feed2.atom", feedHost),
 		},
 		{
 			Name: "testfeed3",
-			Url:  fmt.Sprintf("%s/feed3.atom", feedHost),
+			URL:  fmt.Sprintf("%s/feed3.atom", feedHost),
 		},
 	}
 	for _, f := range feeds {

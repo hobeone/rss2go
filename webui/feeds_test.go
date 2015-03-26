@@ -108,7 +108,7 @@ func TestAddFeed(t *testing.T) {
 	RegisterTestingT(t)
 	f := FeedJSON{
 		Feed: &db.FeedInfo{
-			Url:  "http://test/url/feed.atom",
+			URL:  "http://test/url/feed.atom",
 			Name: "test",
 		},
 	}
@@ -191,7 +191,7 @@ func TestGetFeed(t *testing.T) {
 	response := httptest.NewRecorder()
 	req, err := http.NewRequest(
 		"GET",
-		fmt.Sprintf("/api/1/feeds/%d", dbfeeds[0].Id),
+		fmt.Sprintf("/api/1/feeds/%d", dbfeeds[0].ID),
 		nil)
 	failOnError(t, err)
 
@@ -212,14 +212,14 @@ func TestDeleteFeed(t *testing.T) {
 	failOnError(t, err)
 
 	req, _ := http.NewRequest("DELETE",
-		fmt.Sprintf("/api/1/feeds/%d", feeds[0].Id), nil)
+		fmt.Sprintf("/api/1/feeds/%d", feeds[0].ID), nil)
 	response := httptest.NewRecorder()
 	m.ServeHTTP(response, req)
 	if response.Code != http.StatusNoContent {
 		fmt.Println(response.Body.String())
 		t.Fatalf("Expected 204 response code, got %d", response.Code)
 	}
-	_, err = dbh.GetFeedById(feeds[0].Id)
+	_, err = dbh.GetFeedByID(feeds[0].ID)
 	if err == nil {
 		t.Fatalf("Found feed when it should have been deleted")
 	}

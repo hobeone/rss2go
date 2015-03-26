@@ -58,7 +58,7 @@ func addFeed(cmd *flagutil.Command, args []string) {
 	fmt.Printf("Added feed %s at url %s\n", feed_name, feed_url)
 
 	if poll_feed {
-		feed, err := dbh.GetFeedByUrl(feed_url)
+		feed, err := dbh.GetFeedByURL(feed_url)
 		if err != nil {
 			PrintErrorAndExit(err.Error())
 		}

@@ -35,6 +35,6 @@ func listFeed(cmd *flagutil.Command, args []string) {
 
 	fmt.Printf("Found %d feeds in the database:\n", len(feeds))
 	for _, f := range feeds {
-		fmt.Printf("Name: %s, Url: %s\n", f.Name, f.Url)
+		fmt.Printf("Name: %s, Url: %s\n", f.Name, f.URL)
 	}
 }

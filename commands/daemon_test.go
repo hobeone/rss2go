@@ -18,7 +18,7 @@ func TestConfigUpdater(t *testing.T) {
 
 	var feed db.FeedInfo
 	feed.Name = "Test Feed"
-	feed.Url = "https://testfeed.com/test"
+	feed.URL = "https://testfeed.com/test"
 	feed.LastPollTime = time.Now()
 	err := d.Dbh.SaveFeed(&feed)
 	if err != nil {
@@ -35,7 +35,7 @@ func TestConfigUpdater(t *testing.T) {
 		t.Errorf("Expected no feed entries after updater runs.")
 	}
 
-	if _, ok := d.Feeds[feed.Url]; !ok {
-		t.Errorf("Expected %s in feed map.", feed.Url)
+	if _, ok := d.Feeds[feed.URL]; !ok {
+		t.Errorf("Expected %s in feed map.", feed.URL)
 	}
 }

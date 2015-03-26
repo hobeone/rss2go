@@ -40,7 +40,7 @@ func getFeeds(rend render.Render, r *http.Request, params martini.Params, dbh *d
 		}
 		feed_json = make([]FeedJSONItem, len(feedIDs))
 		for i, feed_id := range feedIDs {
-			feed, err := dbh.GetFeedById(feed_id)
+			feed, err := dbh.GetFeedByID(feed_id)
 			if err != nil {
 				rend.JSON(404, err.Error())
 				return
@@ -72,7 +72,7 @@ func getFeed(rend render.Render, dbh *db.DBHandle, params martini.Params) {
 		return
 	}
 
-	feed, err := dbh.GetFeedById(feed_id)
+	feed, err := dbh.GetFeedByID(feed_id)
 	if err != nil {
 		rend.JSON(404, err.Error())
 		return
@@ -88,22 +88,22 @@ func (f FeedJSON) Validate(errors *binding.Errors, req *http.Request) {
 }
 
 func addFeed(rend render.Render, req *http.Request, w http.ResponseWriter, dbh *db.DBHandle, f FeedJSON, ctx martini.Context) {
-	_, err := dbh.GetFeedByUrl(f.Feed.Url)
+	_, err := dbh.GetFeedByURL(f.Feed.URL)
 	if err == nil {
 		rend.JSON(
 			http.StatusConflict,
-			fmt.Sprintf("A feed already exists with url %s", f.Feed.Url),
+			fmt.Sprintf("A feed already exists with url %s", f.Feed.URL),
 		)
 		return
 	}
 
-	feed, err := dbh.AddFeed(f.Feed.Name, f.Feed.Url)
+	feed, err := dbh.AddFeed(f.Feed.Name, f.Feed.URL)
 	if err != nil {
 		rend.JSON(500, err.Error())
 		return
 	}
 
-	w.Header().Set("Location", fmt.Sprintf("/feeds/%d", feed.Id))
+	w.Header().Set("Location", fmt.Sprintf("/feeds/%d", feed.ID))
 	rend.JSON(http.StatusCreated, FeedJSON{Feed: feed})
 }
 
@@ -114,13 +114,13 @@ func deleteFeed(rend render.Render, params martini.Params, dbh *db.DBHandle) {
 		return
 	}
 
-	feed, err := dbh.GetFeedById(feed_id)
+	feed, err := dbh.GetFeedByID(feed_id)
 	if err != nil {
 		rend.JSON(500, err.Error())
 		return
 	}
 
-	err = dbh.RemoveFeed(feed.Url)
+	err = dbh.RemoveFeed(feed.URL)
 	if err != nil {
 		rend.JSON(500, err.Error())
 		return
@@ -136,14 +136,14 @@ func updateFeed(rend render.Render, req *http.Request, dbh *db.DBHandle, params 
 		return
 	}
 
-	dbfeed, err := dbh.GetFeedById(feed_id)
+	dbfeed, err := dbh.GetFeedByID(feed_id)
 	if err != nil {
 		rend.JSON(404, err.Error())
 		return
 	}
 
 	dbfeed.Name = f.Feed.Name
-	dbfeed.Url = f.Feed.Url
+	dbfeed.URL = f.Feed.URL
 	dbfeed.LastPollTime = f.Feed.LastPollTime
 
 	err = dbh.SaveFeed(dbfeed)

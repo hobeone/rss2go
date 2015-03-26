@@ -194,7 +194,7 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 
 	guidsToLoad := int(math.Ceil(float64(len(stories)) * 1.1))
 
-	glog.Infof("Got %d stories from feed %s.", len(stories), fw.FeedInfo.Url)
+	glog.Infof("Got %d stories from feed %s.", len(stories), fw.FeedInfo.URL)
 
 	if len(fw.KnownGuids) == 0 {
 		var err error
@@ -206,7 +206,7 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 			return resp.Error
 		}
 		glog.Infof("Loaded %d known guids for Feed %s.",
-			len(fw.KnownGuids), fw.FeedInfo.Url)
+			len(fw.KnownGuids), fw.FeedInfo.URL)
 	}
 
 	resp.Items = fw.filterNewItems(stories)
@@ -226,7 +226,7 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 				resp.Error = e
 				glog.Info(e)
 			} else {
-				glog.Infof("Added guid %s for feed %s", item.Id, fw.FeedInfo.Url)
+				glog.Infof("Added guid %s for feed %s", item.Id, fw.FeedInfo.URL)
 			}
 		}
 	}
@@ -249,7 +249,7 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 func (fw *FeedWatcher) PollFeed() bool {
 	if !fw.lockPoll() {
 		glog.Infof("Called PollLoop on %v when already polling. ignoring.\n",
-			fw.FeedInfo.Url)
+			fw.FeedInfo.URL)
 		return false
 	}
 	defer fw.unlockPoll()
@@ -259,14 +259,14 @@ func (fw *FeedWatcher) PollFeed() bool {
 	if timeSinceLastPoll < fw.minSleepTime {
 		toSleep = fw.minSleepTime - timeSinceLastPoll
 		glog.Infof("Last poll of %s was only %v ago, waiting at least %v.",
-			fw.FeedInfo.Url, timeSinceLastPoll, toSleep)
+			fw.FeedInfo.URL, timeSinceLastPoll, toSleep)
 	}
 	for {
 		// To have exit signals handled properly non of the other cases can block
 		//
 		select {
 		case <-fw.exitChan:
-			glog.Infof("Got exit signal, stopping poll of %v", fw.FeedInfo.Url)
+			glog.Infof("Got exit signal, stopping poll of %v", fw.FeedInfo.URL)
 			return true
 		case <-fw.afterWithJitter(toSleep):
 			// see if we can crawl
@@ -284,7 +284,7 @@ func (fw *FeedWatcher) PollFeed() bool {
 			if fw.LastCrawlResponse.Error != nil {
 				toSleep = fw.maxSleepTime
 				glog.Infof("Feed %s had error. Waiting maxium allowed time before next poll.",
-					fw.FeedInfo.Url)
+					fw.FeedInfo.URL)
 			}
 		}
 	}
@@ -293,14 +293,14 @@ func (fw *FeedWatcher) PollFeed() bool {
 // call time.After for the given amount of seconds plus a up to 60 extra seconds.
 func (fw *FeedWatcher) afterWithJitter(d time.Duration) <-chan time.Time {
 	s := d + time.Duration(rand.Int63n(60))*time.Second
-	glog.Infof("Waiting %v until next poll of %s", s, fw.FeedInfo.Url)
+	glog.Infof("Waiting %v until next poll of %s", s, fw.FeedInfo.URL)
 	return fw.After(s)
 }
 
 // LoadGuidsFromDb populates the internal cache of GUIDs by getting the most
 // recent GUIDs it knows about.  To retrieve all GUIDs set max to -1.
 func (fw *FeedWatcher) LoadGuidsFromDb(max int) (map[string]bool, error) {
-	guids, err := fw.dbh.GetMostRecentGuidsForFeed(fw.FeedInfo.Id, max)
+	guids, err := fw.dbh.GetMostRecentGuidsForFeed(fw.FeedInfo.ID, max)
 	if err != nil {
 		return nil, err
 	}
@@ -313,7 +313,7 @@ func (fw *FeedWatcher) LoadGuidsFromDb(max int) (map[string]bool, error) {
 
 func (fw *FeedWatcher) recordGuid(guid string) error {
 	fw.KnownGuids[guid] = true
-	return fw.dbh.RecordGuid(fw.FeedInfo.Id, guid)
+	return fw.dbh.RecordGuid(fw.FeedInfo.ID, guid)
 }
 
 func (fw *FeedWatcher) filterNewItems(stories []*feed.Story) []*feed.Story {
@@ -328,15 +328,15 @@ func (fw *FeedWatcher) filterNewItems(stories []*feed.Story) []*feed.Story {
 }
 
 func (fw *FeedWatcher) sendMail(item *feed.Story) error {
-	_, err := fw.dbh.GetFeedItemByGuid(fw.FeedInfo.Id, item.Id)
+	_, err := fw.dbh.GetFeedItemByGuid(fw.FeedInfo.ID, item.Id)
 	// Guid found, so sending would be a duplicate.
 	if err == nil {
 		glog.Warningf("Tried to send duplicate GUID: %s for feed %s",
-			item.Id, fw.FeedInfo.Url)
+			item.Id, fw.FeedInfo.URL)
 		return nil
 	}
 
-	users, err := fw.dbh.GetFeedUsers(fw.FeedInfo.Url)
+	users, err := fw.dbh.GetFeedUsers(fw.FeedInfo.URL)
 	if err != nil {
 		return err
 	}
@@ -359,7 +359,7 @@ func (fw *FeedWatcher) sendMail(item *feed.Story) error {
 func (fw *FeedWatcher) CrawlFeed() (r *FeedCrawlResponse) {
 	if fw.crawling {
 		return &FeedCrawlResponse{
-			URI:   fw.FeedInfo.Url,
+			URI:   fw.FeedInfo.URL,
 			Error: ErrAlreadyCrawlingFeed,
 		}
 	}
@@ -367,14 +367,14 @@ func (fw *FeedWatcher) CrawlFeed() (r *FeedCrawlResponse) {
 	defer fw.unlockCrawl()
 
 	req := &FeedCrawlRequest{
-		URI:          fw.FeedInfo.Url,
+		URI:          fw.FeedInfo.URL,
 		ResponseChan: make(chan *FeedCrawlResponse),
 	}
 	resp := &FeedCrawlResponse{}
 	for {
 		select {
 		case fw.crawlChan <- req:
-			glog.Infof("Requesting crawl of feed %v", fw.FeedInfo.Url)
+			glog.Infof("Requesting crawl of feed %v", fw.FeedInfo.URL)
 			resp = <-req.ResponseChan
 			glog.Infof("Got response to crawl of %v of length (%d)", resp.URI, len(resp.Body))
 			return resp

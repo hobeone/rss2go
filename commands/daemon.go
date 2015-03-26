@@ -83,7 +83,7 @@ func (d *Daemon) feedDbUpdate() {
 	}
 	all_feeds := make(map[string]db.FeedInfo)
 	for _, fi := range db_feeds {
-		all_feeds[fi.Url] = fi
+		all_feeds[fi.URL] = fi
 	}
 	for k, v := range d.Feeds {
 		if _, ok := all_feeds[k]; !ok {
@@ -108,12 +108,12 @@ func (d *Daemon) feedDbUpdate() {
 func (d *Daemon) startPollers(new_feeds []db.FeedInfo) {
 	// make feeds unique
 	for _, f := range new_feeds {
-		if _, ok := d.Feeds[f.Url]; ok {
-			glog.Infof("Found duplicate feed: %s", f.Url)
+		if _, ok := d.Feeds[f.URL]; ok {
+			glog.Infof("Found duplicate feed: %s", f.URL)
 			continue
 		}
 
-		d.Feeds[f.Url] = feedwatcher.NewFeedWatcher(
+		d.Feeds[f.URL] = feedwatcher.NewFeedWatcher(
 			f,
 			d.CrawlChan,
 			d.RespChan,
@@ -124,7 +124,7 @@ func (d *Daemon) startPollers(new_feeds []db.FeedInfo) {
 			d.Config.Crawl.MaxInterval,
 		)
 		if d.PollFeeds {
-			go d.Feeds[f.Url].PollFeed()
+			go d.Feeds[f.URL].PollFeed()
 		}
 	}
 }

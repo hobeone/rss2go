@@ -31,7 +31,7 @@ func getUser(rend render.Render, params martini.Params, dbh *db.DBHandle) {
 		return
 	}
 
-	u, err := dbh.GetUserById(userID)
+	u, err := dbh.GetUserByID(userID)
 	if err != nil {
 		rend.JSON(http.StatusNotFound, err.Error())
 		return
@@ -45,7 +45,7 @@ func getUser(rend render.Render, params martini.Params, dbh *db.DBHandle) {
 
 	feedIDs := make([]int64, len(feeds))
 	for i, f := range feeds {
-		feedIDs[i] = f.Id
+		feedIDs[i] = f.ID
 	}
 	rend.JSON(http.StatusOK, userJSON{
 		User: userWithFeeds{
@@ -73,7 +73,7 @@ func getUsers(rend render.Render, req *http.Request, dbh *db.DBHandle) {
 
 		users = make([]db.User, len(userIDs))
 		for i, uid := range userIDs {
-			u, err := dbh.GetUserById(uid)
+			u, err := dbh.GetUserByID(uid)
 			if err != nil {
 				rend.JSON(http.StatusNotFound, err.Error())
 				return
@@ -100,7 +100,7 @@ func getUsers(rend render.Render, req *http.Request, dbh *db.DBHandle) {
 
 		feedIDs := make([]int64, len(feeds))
 		for i, f := range feeds {
-			feedIDs[i] = f.Id
+			feedIDs[i] = f.ID
 		}
 
 		uJSON[i] = userWithFeeds{u, feedIDs}
@@ -143,7 +143,7 @@ func updateUser(rend render.Render, req *http.Request, dbh *db.DBHandle, params 
 		return
 	}
 
-	dbuser, err := dbh.GetUserById(userID)
+	dbuser, err := dbh.GetUserByID(userID)
 	if err != nil {
 		rend.JSON(http.StatusNotFound, err.Error())
 		return
@@ -192,7 +192,7 @@ func addUser(req *http.Request, w http.ResponseWriter, dbh *db.DBHandle, rend re
 		return
 	}
 
-	w.Header().Set("Location", fmt.Sprintf("/users/%d", dbUser.Id))
+	w.Header().Set("Location", fmt.Sprintf("/users/%d", dbUser.ID))
 	rend.JSON(http.StatusCreated, userJSON{
 		User: userWithFeeds{
 			*dbUser,
@@ -208,7 +208,7 @@ func deleteUser(rend render.Render, params martini.Params, dbh *db.DBHandle) {
 		return
 	}
 
-	user, err := dbh.GetUserById(userID)
+	user, err := dbh.GetUserByID(userID)
 	if err != nil {
 		if err != nil {
 			rend.JSON(http.StatusInternalServerError, err.Error())

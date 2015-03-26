@@ -43,7 +43,7 @@ func TestSendToUsers(t *testing.T) {
 	)
 
 	f := &feed.Feed{
-		Url: feeds[0].Url,
+		Url: feeds[0].URL,
 	}
 	s := &feed.Story{
 		Feed: f,

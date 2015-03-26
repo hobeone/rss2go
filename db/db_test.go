@@ -63,9 +63,9 @@ func TestGettingUsers(t *testing.T) {
 	Expect(err).ToNot(HaveOccurred(), "Error gettings users: %s", err)
 	Expect(dbusers).To(HaveLen(3))
 
-	u, err := d.GetUserById(1)
+	u, err := d.GetUserByID(1)
 	Expect(err).ToNot(HaveOccurred(), "Error gettings user by id: %s", err)
-	Expect(u.Id).To(BeEquivalentTo(1))
+	Expect(u.ID).To(BeEquivalentTo(1))
 
 	u, err = d.GetUserByEmail(users[0].Email)
 	Expect(err).ToNot(HaveOccurred(), "Error gettings user by email: %s", err)
@@ -77,17 +77,17 @@ func TestGetMostRecentGuidsForFeed(t *testing.T) {
 	d := NewMemoryDBHandle(false, true)
 	feeds, _ := LoadFixtures(t, d, "http://localhost")
 
-	Expect(d.RecordGuid(feeds[0].Id, "123")).NotTo(HaveOccurred())
-	Expect(d.RecordGuid(feeds[0].Id, "1234")).NotTo(HaveOccurred())
-	Expect(d.RecordGuid(feeds[0].Id, "12345")).NotTo(HaveOccurred())
+	Expect(d.RecordGuid(feeds[0].ID, "123")).NotTo(HaveOccurred())
+	Expect(d.RecordGuid(feeds[0].ID, "1234")).NotTo(HaveOccurred())
+	Expect(d.RecordGuid(feeds[0].ID, "12345")).NotTo(HaveOccurred())
 
 	maxGuidsToFetch := 2
-	guids, err := d.GetMostRecentGuidsForFeed(feeds[0].Id, maxGuidsToFetch)
+	guids, err := d.GetMostRecentGuidsForFeed(feeds[0].ID, maxGuidsToFetch)
 	Expect(err).ToNot(HaveOccurred())
 	Expect(guids).To(HaveLen(maxGuidsToFetch))
 	Expect(guids).To(ConsistOf("12345", "1234"))
 
-	guids, err = d.GetMostRecentGuidsForFeed(feeds[0].Id, -1)
+	guids, err = d.GetMostRecentGuidsForFeed(feeds[0].ID, -1)
 	Expect(err).ToNot(HaveOccurred())
 	Expect(guids).To(HaveLen(3))
 }
@@ -98,7 +98,7 @@ func TestGetMostRecentGuidsForFeedWithNoRecords(t *testing.T) {
 	d := NewMemoryDBHandle(false, true)
 	feeds, _ := LoadFixtures(t, d, "http://localhost")
 
-	guids, err := d.GetMostRecentGuidsForFeed(feeds[0].Id, -1)
+	guids, err := d.GetMostRecentGuidsForFeed(feeds[0].ID, -1)
 
 	Expect(err).ToNot(HaveOccurred())
 	Expect(guids).To(HaveLen(0))
@@ -124,16 +124,16 @@ func TestFeedValidation(t *testing.T) {
 	inputs := []FeedInfo{
 		{
 			Name: "",
-			Url:  "bad url",
+			URL:  "bad url",
 		},
 		{},
-		{Url: ":badurl"},
+		{URL: ":badurl"},
 	}
 
 	for _, f := range inputs {
 		err := d.SaveFeed(&f)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(f.Id).To(BeZero())
+		Expect(f.ID).To(BeZero())
 	}
 }
 
@@ -143,28 +143,28 @@ func TestAddAndDeleteFeed(t *testing.T) {
 	_, users := LoadFixtures(t, d, "http://localhost")
 	f, err := d.AddFeed("test feed", "http://valid/url.xml")
 	Expect(err).ToNot(HaveOccurred())
-	Expect(f.Id).ToNot(BeZero())
+	Expect(f.ID).ToNot(BeZero())
 
 	dupFeed, err := d.AddFeed("test feed", "http://valid/url.xml")
 	Expect(err).To(HaveOccurred())
-	Expect(dupFeed.Id).To(BeZero())
+	Expect(dupFeed.ID).To(BeZero())
 
-	err = d.RecordGuid(f.Id, "testGUID")
+	err = d.RecordGuid(f.ID, "testGUID")
 	Expect(err).ToNot(HaveOccurred())
 	err = d.AddFeedsToUser(users[0], []*FeedInfo{f})
 	Expect(err).ToNot(HaveOccurred())
 
-	err = d.RemoveFeed(f.Url)
+	err = d.RemoveFeed(f.URL)
 	Expect(err).ToNot(HaveOccurred())
 
-	_, err = d.GetFeedByUrl(f.Url)
+	_, err = d.GetFeedByURL(f.URL)
 	Expect(err).To(HaveOccurred())
 
-	guids, err := d.GetMostRecentGuidsForFeed(f.Id, -1)
+	guids, err := d.GetMostRecentGuidsForFeed(f.ID, -1)
 	Expect(err).ToNot(HaveOccurred())
 	Expect(guids).To(BeEmpty())
 
-	dbusers, err := d.GetFeedUsers(f.Url)
+	dbusers, err := d.GetFeedUsers(f.URL)
 	Expect(err).ToNot(HaveOccurred())
 	Expect(dbusers).To(BeEmpty())
 }
@@ -173,14 +173,14 @@ func TestGetFeedItemByGuid(t *testing.T) {
 	RegisterTestingT(t)
 	d := NewMemoryDBHandle(false, true)
 	feeds, _ := LoadFixtures(t, d, "http://localhost")
-	err := d.RecordGuid(feeds[0].Id, "feed0GUID")
+	err := d.RecordGuid(feeds[0].ID, "feed0GUID")
 	Expect(err).ToNot(HaveOccurred())
-	err = d.RecordGuid(feeds[1].Id, "feed1GUID")
+	err = d.RecordGuid(feeds[1].ID, "feed1GUID")
 	Expect(err).ToNot(HaveOccurred())
 
-	guid, err := d.GetFeedItemByGuid(feeds[0].Id, "feed0GUID")
+	guid, err := d.GetFeedItemByGuid(feeds[0].ID, "feed0GUID")
 	Expect(err).ToNot(HaveOccurred())
-	Expect(guid.FeedInfoId).To(BeEquivalentTo(1))
+	Expect(guid.FeedInfoID).To(BeEquivalentTo(1))
 
 	Expect(guid.Guid).To(Equal("feed0GUID"))
 }
@@ -195,19 +195,24 @@ func TestRemoveUserByEmail(t *testing.T) {
 
 func TestGetStaleFeeds(t *testing.T) {
 	RegisterTestingT(t)
-	d := NewMemoryDBHandle(false, true)
+	d := NewMemoryDBHandle(true, true)
 	feeds, _ := LoadFixtures(t, d, "http://localhost")
-	d.RecordGuid(feeds[0].Id, "foobar")
-	d.RecordGuid(feeds[1].Id, "foobaz")
-	d.RecordGuid(feeds[2].Id, "foobaz")
-	guid, err := d.GetFeedItemByGuid(feeds[0].Id, "foobar")
-	Expect(err).ToNot(HaveOccurred())
+	d.RecordGuid(feeds[0].ID, "foobar")
+	d.RecordGuid(feeds[1].ID, "foobaz")
+	d.RecordGuid(feeds[2].ID, "foobaz")
+	guid, err := d.GetFeedItemByGuid(feeds[0].ID, "foobar")
+	if err != nil {
+		t.Fatalf("Got unexpected error from db: %s", err)
+	}
 	guid.AddedOn = *new(time.Time)
 	err = d.db.Save(guid).Error
 	Expect(err).ToNot(HaveOccurred())
 	f, err := d.GetStaleFeeds()
-	Expect(err).ToNot(HaveOccurred())
-	Expect(f[0].Id).To(BeEquivalentTo(feeds[0].Id))
+	if err != nil {
+		t.Fatalf("Got unexpected error from db: %s", err)
+	}
+
+	Expect(f[0].ID).To(BeEquivalentTo(feeds[0].ID))
 }
 
 func TestAddUserValidation(t *testing.T) {
@@ -228,7 +233,7 @@ func TestAddUserValidation(t *testing.T) {
 
 	u, err := d.AddUser("new user", "newuser@example.com", "pass")
 	Expect(err).ToNot(HaveOccurred())
-	Expect(u.Id).ToNot(BeZero())
+	Expect(u.ID).ToNot(BeZero())
 }
 
 func TestAddRemoveUser(t *testing.T) {
@@ -240,15 +245,15 @@ func TestAddRemoveUser(t *testing.T) {
 	userEmail := "testuser_name@example.com"
 	u, err := d.AddUser(userName, userEmail, "pass")
 	Expect(err).ToNot(HaveOccurred())
-	Expect(u.Id).ToNot(BeZero())
+	Expect(u.ID).ToNot(BeZero())
 
 	dupUser, err := d.AddUser(userName, "extra"+userEmail, "pass")
 	Expect(err).To(HaveOccurred())
-	Expect(dupUser.Id).To(BeZero())
+	Expect(dupUser.ID).To(BeZero())
 
 	dupUser, err = d.AddUser("extra"+userName, userEmail, "pass")
 	Expect(err).To(HaveOccurred())
-	Expect(dupUser.Id).To(BeZero())
+	Expect(dupUser.ID).To(BeZero())
 
 	dbUser, err := d.GetUser(u.Name)
 	Expect(err).ToNot(HaveOccurred())
@@ -271,7 +276,7 @@ func TestAddRemoveFeedsFromUser(t *testing.T) {
 	_, users := LoadFixtures(t, d, "http://localhost")
 	newFeed := &FeedInfo{
 		Name: "new test feed",
-		Url:  "http://new/test.feed",
+		URL:  "http://new/test.feed",
 	}
 	err := d.SaveFeed(newFeed)
 	Expect(err).ToNot(HaveOccurred(), "Error saving feed: %s", err)
@@ -313,7 +318,7 @@ func TestGetFeedUsers(t *testing.T) {
 	RegisterTestingT(t)
 	d := NewMemoryDBHandle(false, true)
 	feeds, users := LoadFixtures(t, d, "http://localhost")
-	feedUsers, err := d.GetFeedUsers(feeds[0].Url)
+	feedUsers, err := d.GetFeedUsers(feeds[0].URL)
 	Expect(err).ToNot(HaveOccurred())
 	Expect(feedUsers).To(HaveLen(len(users)))
 }
@@ -334,7 +339,7 @@ func TestUpdateUsersFeeds(t *testing.T) {
 	Expect(newFeeds).To(BeEmpty())
 	feedIDs := make([]int64, len(feeds))
 	for i := range feeds {
-		feedIDs[i] = feeds[i].Id
+		feedIDs[i] = feeds[i].ID
 	}
 	d.UpdateUsersFeeds(users[0], feedIDs)
 

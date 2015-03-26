@@ -32,7 +32,7 @@ func TestGetUser(t *testing.T) {
 	}
 
 	req, err := http.NewRequest("GET",
-		fmt.Sprintf("/api/1/users/%d", user.Id), nil)
+		fmt.Sprintf("/api/1/users/%d", user.ID), nil)
 	if err != nil {
 		t.Fatalf("Error creating request: %s", err)
 	}
@@ -245,14 +245,14 @@ func TestDeleteUser(t *testing.T) {
 	failOnError(t, err)
 
 	req, _ := http.NewRequest("DELETE",
-		fmt.Sprintf("/api/1/users/%d", users[0].Id), nil)
+		fmt.Sprintf("/api/1/users/%d", users[0].ID), nil)
 	response := httptest.NewRecorder()
 	m.ServeHTTP(response, req)
 	if response.Code != 204 {
 		fmt.Println(response.Body.String())
 		t.Fatalf("Expected 204 response code, got %d", response.Code)
 	}
-	_, err = dbh.GetUserById(users[0].Id)
+	_, err = dbh.GetUserByID(users[0].ID)
 	if err == nil {
 		t.Fatalf("Found user when it should have been deleted")
 	}

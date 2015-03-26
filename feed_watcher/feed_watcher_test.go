@@ -23,7 +23,7 @@ func (m *FailMailer) SendMail(msg *gomail.Message) error {
 // TODO: rework so failures can be set per test
 type MockDBFailer struct{}
 
-func (d *MockDBFailer) GetFeedByUrl(string) (*db.FeedInfo, error)             { return nil, nil }
+func (d *MockDBFailer) GetFeedByURL(string) (*db.FeedInfo, error)             { return nil, nil }
 func (d *MockDBFailer) GetFeedUsers(string) ([]db.User, error)                { return nil, nil }
 func (d *MockDBFailer) SaveFeed(*db.FeedInfo) error                           { return nil }
 func (d *MockDBFailer) RecordGuid(int64, string) error                        { return nil }
@@ -79,7 +79,7 @@ func TestPollFeedWithDBErrors(t *testing.T) {
 	go n.PollFeed()
 	req := <-n.crawlChan
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.Url,
+		URI:   n.FeedInfo.URL,
 		Body:  feedResp,
 		Error: nil,
 	}
@@ -96,12 +96,12 @@ func TestFeedWatcherPolling(t *testing.T) {
 
 	go n.PollFeed()
 	req := <-n.crawlChan
-	if req.URI != n.FeedInfo.Url {
-		t.Fatalf("URI not set on request properly.  Expected: %s Got: %s", n.FeedInfo.Url, req.URI)
+	if req.URI != n.FeedInfo.URL {
+		t.Fatalf("URI not set on request properly.  Expected: %s Got: %s", n.FeedInfo.URL, req.URI)
 	}
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.Url,
+		URI:   n.FeedInfo.URL,
 		Body:  feedResp,
 		Error: nil,
 	}
@@ -115,7 +115,7 @@ func TestFeedWatcherPolling(t *testing.T) {
 	// Second Poll, should not have new items
 	req = <-n.crawlChan
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.Url,
+		URI:   n.FeedInfo.URL,
 		Body:  feedResp,
 		Error: nil,
 	}
@@ -150,7 +150,7 @@ func TestFeedWatcherWithEmailErrors(t *testing.T) {
 	req := <-n.crawlChan
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.Url,
+		URI:   n.FeedInfo.URL,
 		Body:  feedResp,
 		Error: nil,
 	}
@@ -177,7 +177,7 @@ func TestFeedWatcherPollingRssWithNoItemDates(t *testing.T) {
 	req := <-n.crawlChan
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.Url,
+		URI:   n.FeedInfo.URL,
 		Body:  feedResp,
 		Error: nil,
 	}
@@ -188,7 +188,7 @@ func TestFeedWatcherPollingRssWithNoItemDates(t *testing.T) {
 	// Second Poll, should not have new items
 	req = <-n.crawlChan
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.Url,
+		URI:   n.FeedInfo.URL,
 		Body:  feedResp,
 		Error: nil,
 	}
@@ -210,7 +210,7 @@ func TestFeedWatcherWithMalformedFeed(t *testing.T) {
 
 	req := <-n.crawlChan
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.Url,
+		URI:   n.FeedInfo.URL,
 		Body:  []byte("Testing"),
 		Error: nil,
 	}
@@ -220,7 +220,7 @@ func TestFeedWatcherWithMalformedFeed(t *testing.T) {
 		t.Error("Expected error parsing invalid feed.")
 	}
 
-	dbFeed, err := n.dbh.GetFeedByUrl(n.FeedInfo.Url)
+	dbFeed, err := n.dbh.GetFeedByURL(n.FeedInfo.URL)
 	if err != nil {
 		t.Error(err.Error())
 	}
@@ -233,7 +233,7 @@ func TestFeedWatcherWithGuidsSet(t *testing.T) {
 	n, feedResp, _ := SetupTest(t, "../testdata/ars.rss")
 	OverrideAfter(n)
 
-	_, stories, _ := feed.ParseFeed(n.FeedInfo.Url, feedResp)
+	_, stories, _ := feed.ParseFeed(n.FeedInfo.URL, feedResp)
 	guids := make(map[string]bool, 25)
 	for _, i := range stories {
 		guids[i.Id] = true
@@ -243,7 +243,7 @@ func TestFeedWatcherWithGuidsSet(t *testing.T) {
 	req := <-n.crawlChan
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.Url,
+		URI:   n.FeedInfo.URL,
 		Body:  feedResp,
 		Error: nil,
 	}
@@ -256,7 +256,7 @@ func TestFeedWatcherWithGuidsSet(t *testing.T) {
 	req = <-n.crawlChan
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.Url,
+		URI:   n.FeedInfo.URL,
 		Body:  feedResp,
 		Error: nil,
 	}
@@ -280,7 +280,7 @@ func TestFeedWatcherWithTooRecentLastPoll(t *testing.T) {
 	req := <-n.crawlChan
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.Url,
+		URI:   n.FeedInfo.URL,
 		Body:  feedResp,
 		Error: nil,
 	}
@@ -298,7 +298,7 @@ func TestWithEmptyFeed(t *testing.T) {
 	req := <-n.crawlChan
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.Url,
+		URI:   n.FeedInfo.URL,
 		Body:  feedResp,
 		Error: nil,
 	}
@@ -315,7 +315,7 @@ func TestWithErrorOnCrawl(t *testing.T) {
 	req := <-n.crawlChan
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.Url,
+		URI:   n.FeedInfo.URL,
 		Body:  feedResp,
 		Error: fmt.Errorf("error crawling feed"),
 	}
@@ -332,7 +332,7 @@ func TestWithDoublePollFeed(t *testing.T) {
 	req := <-n.crawlChan
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.Url,
+		URI:   n.FeedInfo.URL,
 		Body:  feedResp,
 		Error: nil,
 	}

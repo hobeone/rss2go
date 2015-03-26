@@ -36,7 +36,7 @@ func badFeeds(cmd *flagutil.Command, args []string) {
 	fmt.Println("Feeds With Errors:")
 	for _, f := range feeds {
 		fmt.Printf("  Name: %s\n", f.Name)
-		fmt.Printf("  Url: %s\n", f.Url)
+		fmt.Printf("  Url: %s\n", f.URL)
 		fmt.Printf("  Error: %s\n", f.LastPollError)
 	}
 
@@ -49,7 +49,7 @@ func badFeeds(cmd *flagutil.Command, args []string) {
 	fmt.Println("Feeds With No Updates for 2 Weeks:")
 	for _, f := range feeds {
 		fmt.Printf("  Name: %s\n", f.Name)
-		fmt.Printf("  Url: %s\n", f.Url)
+		fmt.Printf("  Url: %s\n", f.URL)
 		fmt.Printf("  Last Update: %s\n", f.LastPollTime)
 		fmt.Println()
 	}

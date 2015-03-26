@@ -21,7 +21,7 @@ func TestSubscribeUser(t *testing.T) {
 
 	overrideExit()
 	defer assertNoPanic(t, "SubscribeUser shouldn't have exited.")
-	su.SubscribeUser(user.Email, []string{feed.Url})
+	su.SubscribeUser(user.Email, []string{feed.URL})
 }
 
 func TestSubscribeUserToUnknownFeed(t *testing.T) {

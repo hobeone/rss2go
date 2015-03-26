@@ -66,7 +66,7 @@ func (self *UnsubscribeUserCommand) UnsubscribeUser(user_email string, feed_urls
 
 	feeds := []*db.FeedInfo{}
 	for _, feedURL := range feed_urls {
-		f, err := self.Dbh.GetFeedByUrl(feedURL)
+		f, err := self.Dbh.GetFeedByURL(feedURL)
 		if err != nil {
 			fmt.Printf("Feed %s doesn't exist in db, skipping.\n", feedURL)
 			continue

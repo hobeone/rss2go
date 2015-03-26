@@ -65,7 +65,7 @@ func (self *SubscribeUserCommand) SubscribeUser(user_email string, feed_urls []s
 	}
 	feeds := make([]*db.FeedInfo, len(feed_urls))
 	for i, feed_url := range feed_urls {
-		f, err := self.Dbh.GetFeedByUrl(feed_url)
+		f, err := self.Dbh.GetFeedByURL(feed_url)
 		if err != nil {
 			PrintErrorAndExit(fmt.Sprintf("Feed %s doesn't exist in db, add it first.", feed_url))
 		}

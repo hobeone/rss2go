@@ -52,7 +52,7 @@ func runOne(cmd *flagutil.Command, args []string) {
 
 	mailer := mail.CreateAndStartMailer(cfg)
 
-	feed, err := dbh.GetFeedByUrl(feedURL)
+	feed, err := dbh.GetFeedByURL(feedURL)
 	if err != nil {
 		PrintErrorAndExit(err.Error())
 	}
@@ -74,7 +74,7 @@ func runOne(cmd *flagutil.Command, args []string) {
 		100,
 	)
 	feeds := make(map[string]*feedwatcher.FeedWatcher)
-	feeds[fw.FeedInfo.Url] = fw
+	feeds[fw.FeedInfo.URL] = fw
 	if loops == -1 {
 		for {
 			resp := fw.CrawlFeed()

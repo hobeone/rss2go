@@ -57,7 +57,7 @@ func TestFeedWithBadEntity(t *testing.T) {
 	if err != nil {
 		t.Fatal("Error reading test feed.")
 	}
-	_, _, err = ParseFeed(u.Url, feedResp)
+	_, _, err = ParseFeed(u.URL, feedResp)
 
 	if err != nil {
 		t.Fatal("Feed should be able to parse feeds with unescaped entities")
