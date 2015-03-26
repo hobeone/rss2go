@@ -220,13 +220,13 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 			glog.Infof("Error sending mail: %s", err.Error())
 			resp.Error = err
 		} else {
-			err := fw.recordGuid(item.Id)
+			err := fw.recordGuid(item.ID)
 			if err != nil {
 				e := fmt.Errorf("error writing guid to db: %s", err)
 				resp.Error = e
 				glog.Info(e)
 			} else {
-				glog.Infof("Added guid %s for feed %s", item.Id, fw.FeedInfo.URL)
+				glog.Infof("Added guid %s for feed %s", item.ID, fw.FeedInfo.URL)
 			}
 		}
 	}
@@ -320,7 +320,7 @@ func (fw *FeedWatcher) filterNewItems(stories []*feed.Story) []*feed.Story {
 	glog.Infof("Filtering stories we already know about.")
 	newStories := []*feed.Story{}
 	for _, story := range stories {
-		if _, found := fw.KnownGuids[story.Id]; !found {
+		if _, found := fw.KnownGuids[story.ID]; !found {
 			newStories = append(newStories, story)
 		}
 	}
@@ -328,11 +328,11 @@ func (fw *FeedWatcher) filterNewItems(stories []*feed.Story) []*feed.Story {
 }
 
 func (fw *FeedWatcher) sendMail(item *feed.Story) error {
-	_, err := fw.dbh.GetFeedItemByGuid(fw.FeedInfo.ID, item.Id)
+	_, err := fw.dbh.GetFeedItemByGuid(fw.FeedInfo.ID, item.ID)
 	// Guid found, so sending would be a duplicate.
 	if err == nil {
 		glog.Warningf("Tried to send duplicate GUID: %s for feed %s",
-			item.Id, fw.FeedInfo.URL)
+			item.ID, fw.FeedInfo.URL)
 		return nil
 	}
 

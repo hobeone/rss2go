@@ -236,7 +236,7 @@ func TestFeedWatcherWithGuidsSet(t *testing.T) {
 	_, stories, _ := feed.ParseFeed(n.FeedInfo.URL, feedResp)
 	guids := make(map[string]bool, 25)
 	for _, i := range stories {
-		guids[i.Id] = true
+		guids[i.ID] = true
 	}
 	n.KnownGuids = guids
 	go n.PollFeed()

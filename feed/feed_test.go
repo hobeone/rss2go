@@ -6,9 +6,6 @@ import (
 	"testing"
 
 	"github.com/hobeone/rss2go/db"
-
-	"code.google.com/p/go-charset/charset"
-	_ "code.google.com/p/go-charset/data"
 )
 
 func TestParseFeed(t *testing.T) {
@@ -29,15 +26,7 @@ func TestParseFeedInvalidUTF(t *testing.T) {
 		t.Fatal("Error reading test feed.")
 	}
 
-	tr, err := charset.TranslatorTo("utf-8")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, b, err := tr.Translate(feedResp, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, s, err := ParseFeed("http://localhost/feed.rss", b)
+	_, s, err := ParseFeed("http://localhost/feed.rss", feedResp)
 
 	if err != nil {
 		t.Fatal(err)
@@ -45,6 +34,14 @@ func TestParseFeedInvalidUTF(t *testing.T) {
 
 	if len(s) != 2017 {
 		t.Fatalf("Expected 2017 items in the feed, got %d", len(s))
+	}
+}
+
+func TestInvalidCharacter(t *testing.T) {
+	s := "Do so at your own peril. And that&#8217;s it"
+	cleaned := removeInvalidCharacters(s)
+	if cleaned != "Do so at your own peril.  And that&#8217;s it" {
+		t.Fatalf("Didn't remove invalid characters: %q", cleaned)
 	}
 }
 

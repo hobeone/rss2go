@@ -3,6 +3,7 @@ package commands
 import (
 	"flag"
 	"fmt"
+
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/flagutil"
 )
@@ -37,6 +38,7 @@ func badFeeds(cmd *flagutil.Command, args []string) {
 	for _, f := range feeds {
 		fmt.Printf("  Name: %s\n", f.Name)
 		fmt.Printf("  Url: %s\n", f.URL)
+		fmt.Printf("  Last Update: %s\n", f.LastPollTime)
 		fmt.Printf("  Error: %s\n", f.LastPollError)
 	}
 

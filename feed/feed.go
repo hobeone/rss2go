@@ -10,16 +10,19 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
-	"code.google.com/p/go-charset/charset"
-	_ "code.google.com/p/go-charset/data"
-	"code.google.com/p/go-html-transform/h5"
-	"code.google.com/p/go-html-transform/html/transform"
+	"bitbucket.org/zaphar/go-html-transform/h5"
+	htmltransform "bitbucket.org/zaphar/go-html-transform/html/transform"
+
 	"github.com/microcosm-cc/bluemonday"
 	"golang.org/x/net/html"
+	"golang.org/x/net/html/charset"
+	"golang.org/x/text/transform"
 
 	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/atom"
@@ -29,7 +32,7 @@ import (
 
 // Feed represents the basic information for a RSS, Atom or RDF feed.
 type Feed struct {
-	Url        string
+	URL        string
 	Title      string
 	Updated    time.Time
 	NextUpdate time.Time
@@ -41,7 +44,7 @@ type Feed struct {
 
 // Story represents in individual item from a feed.
 type Story struct {
-	Id           string
+	ID           string
 	Title        string
 	Link         string
 	Created      time.Time
@@ -61,7 +64,7 @@ func parseAtom(u string, b []byte) (*Feed, []*Story, error) {
 
 	xmlDecoder := xml.NewDecoder(bytes.NewReader(b))
 	xmlDecoder.Strict = false
-	xmlDecoder.CharsetReader = charset.NewReader
+	xmlDecoder.CharsetReader = charset.NewReaderByName
 	xmlDecoder.Entity = xml.HTMLEntity
 	err := xmlDecoder.Decode(&a)
 	if err != nil {
@@ -69,7 +72,7 @@ func parseAtom(u string, b []byte) (*Feed, []*Story, error) {
 	}
 
 	f := Feed{
-		Url: u,
+		URL: u,
 	}
 	s := []*Story{}
 
@@ -99,7 +102,7 @@ func parseAtom(u string, b []byte) (*Feed, []*Story, error) {
 			eb = fb
 		}
 		st := Story{
-			Id:    i.ID,
+			ID:    i.ID,
 			Title: i.Title.ToString(),
 			Feed:  &f,
 		}
@@ -133,12 +136,23 @@ func parseAtom(u string, b []byte) (*Feed, []*Story, error) {
 	return parseFix(&f, s)
 }
 
+func defaultCharsetReader(cs string, input io.Reader) (io.Reader, error) {
+	e, _ := charset.Lookup(cs)
+	if e == nil {
+		return nil, fmt.Errorf("cannot decode charset %v", cs)
+	}
+	return transform.NewReader(input, e.NewDecoder()), nil
+}
+func nilCharsetReader(cs string, input io.Reader) (io.Reader, error) {
+	return input, nil
+}
+
 func parseRss(u string, b []byte) (*Feed, []*Story, error) {
 	r := rss.Rss{}
 
 	d := xml.NewDecoder(bytes.NewReader(b))
 	d.Strict = false
-	d.CharsetReader = charset.NewReader
+	d.CharsetReader = charset.NewReaderByName
 	d.DefaultSpace = "DefaultSpace"
 	d.Entity = xml.HTMLEntity
 
@@ -148,7 +162,7 @@ func parseRss(u string, b []byte) (*Feed, []*Story, error) {
 	}
 
 	f := Feed{
-		Url: u,
+		URL: u,
 	}
 	s := []*Story{}
 
@@ -177,7 +191,7 @@ func parseRss(u string, b []byte) (*Feed, []*Story, error) {
 			st.Content = i.Description
 		}
 		if i.Guid != nil {
-			st.Id = i.Guid.Guid
+			st.ID = i.Guid.Guid
 		}
 		if i.Media != nil {
 			st.MediaContent = i.Media.URL
@@ -197,7 +211,7 @@ func parseRdf(u string, b []byte) (*Feed, []*Story, error) {
 	rd := rdf.RDF{}
 
 	d := xml.NewDecoder(bytes.NewReader(b))
-	d.CharsetReader = charset.NewReader
+	d.CharsetReader = charset.NewReaderByName
 	d.Strict = false
 	d.Entity = xml.HTMLEntity
 	err := d.Decode(&rd)
@@ -206,7 +220,7 @@ func parseRdf(u string, b []byte) (*Feed, []*Story, error) {
 	}
 
 	f := Feed{
-		Url: u,
+		URL: u,
 	}
 	s := []*Story{}
 
@@ -220,7 +234,7 @@ func parseRdf(u string, b []byte) (*Feed, []*Story, error) {
 
 	for _, i := range rd.Item {
 		st := Story{
-			Id:     i.About,
+			ID:     i.About,
 			Title:  i.Title,
 			Link:   i.Link,
 			Author: i.Creator,
@@ -237,16 +251,37 @@ func parseRdf(u string, b []byte) (*Feed, []*Story, error) {
 	return parseFix(&f, s)
 }
 
+// Copied from xml decoder
+func isInCharacterRange(r rune) (inrange bool) {
+	return r == 0x09 ||
+		r == 0x0A ||
+		r == 0x0D ||
+		r >= 0x20 && r <= 0xDF77 ||
+		r >= 0xE000 && r <= 0xFFFD ||
+		r >= 0x10000 && r <= 0x10FFFF
+}
+
+func removeInvalidCharacters(s string) string {
+	v := make([]rune, 0, len(s))
+	for i, r := range s {
+		if r == utf8.RuneError {
+			_, size := utf8.DecodeRuneInString(s[i:])
+			if size == 1 {
+				continue
+			}
+		}
+		if !isInCharacterRange(r) {
+			r = ' '
+		}
+		v = append(v, r)
+	}
+	return string(v)
+}
+
 // ParseFeed will try to find an Atom, RSS or RDF feed in the given byte array (in that order).
 func ParseFeed(url string, b []byte) (*Feed, []*Story, error) {
-	tr, err := charset.TranslatorTo("utf-8")
-	if err != nil {
-		return nil, nil, err
-	}
-	_, b, err = tr.Translate(b, true)
-	if err != nil {
-		return nil, nil, err
-	}
+	// super lame
+	b = []byte(removeInvalidCharacters(string(b)))
 
 	feed, stories, atomerr := parseAtom(url, b)
 	if atomerr == nil {
@@ -266,7 +301,7 @@ func ParseFeed(url string, b []byte) (*Feed, []*Story, error) {
 		return feed, stories, nil
 	}
 
-	err = fmt.Errorf("couldn't find ATOM, RSS or RDF feed for %s. ATOM Error: %s, RSS Error: %s, RDF Error: %s\n", url, atomerr, rsserr, rdferr)
+	err := fmt.Errorf("couldn't find ATOM, RSS or RDF feed for %s. ATOM Error: %s, RSS Error: %s, RDF Error: %s\n", url, atomerr, rsserr, rdferr)
 
 	glog.Info(err.Error())
 	return nil, nil, err
@@ -309,7 +344,7 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 	f.Link = strings.TrimSpace(f.Link)
 	f.Title = html.UnescapeString(strings.TrimSpace(f.Title))
 
-	if u, err := url.Parse(f.Url); err == nil {
+	if u, err := url.Parse(f.URL); err == nil {
 		if ul, err := u.Parse(f.Link); err == nil {
 			f.Link = ul.String()
 		}
@@ -333,11 +368,11 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 		} else {
 			s.Date = s.Published.Unix()
 		}
-		if s.Id == "" {
+		if s.ID == "" {
 			if s.Link != "" {
-				s.Id = s.Link
+				s.ID = s.Link
 			} else if s.Title != "" {
-				s.Id = s.Title
+				s.ID = s.Title
 			} else {
 				glog.Infof("story has no id: %v", s)
 				return nil, nil, fmt.Errorf("story has no id: %v", s)
@@ -346,7 +381,7 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 		s.Title = fullyHTMLUnescape(s.Title)
 		// if a story doesn't have a link, see if its id is a URL
 		if s.Link == "" {
-			if u, err := url.Parse(s.Id); err == nil {
+			if u, err := url.Parse(s.ID); err == nil {
 				s.Link = u.String()
 			}
 		}
@@ -434,13 +469,13 @@ func removeFeedPortalJunk(n *html.Node) {
 }
 
 func cleanFeedContent(htmlFrag string) (string, error) {
-	doc, err := transform.NewFromReader(strings.NewReader(htmlFrag))
+	doc, err := htmltransform.NewFromReader(strings.NewReader(htmlFrag))
 	if err != nil {
 		return htmlFrag, err
 	}
 	doc.ApplyAll(
-		transform.MustTrans(convertIframeToAnchor, "iframe"),
-		transform.MustTrans(removeFeedPortalJunk, "a"),
+		htmltransform.MustTrans(convertIframeToAnchor, "iframe"),
+		htmltransform.MustTrans(removeFeedPortalJunk, "a"),
 	)
 	return doc.String(), nil
 }

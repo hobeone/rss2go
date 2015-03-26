@@ -52,7 +52,7 @@ func testFeed(cmd *flagutil.Command, args []string) {
 	}
 
 	fmt.Printf("Found %d items in feed:\n", len(stories))
-	fmt.Printf("  Url: %s\n", feed.Url)
+	fmt.Printf("  Url: %s\n", feed.URL)
 	fmt.Printf("  Title: %s\n", feed.Title)
 	fmt.Printf("  Updated: %s\n", feed.Updated)
 	fmt.Printf("  NextUpdate: %s\n", feed.NextUpdate)
