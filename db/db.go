@@ -125,6 +125,19 @@ func setupDB(db gorm.DB) error {
 	}
 	tx.Exec("CREATE UNIQUE INDEX IF NOT EXISTS user_feed_idx ON user_feeds (user_id,feed_info_id);")
 	tx.Commit()
+	err = db.Exec("PRAGMA journal_mode=WAL;").Error
+	if err != nil {
+		return err
+	}
+	err = db.Exec("PRAGMA synchronous = NORMAL;").Error
+	if err != nil {
+		return err
+	}
+	err = db.Exec("PRAGMA encoding = \"UTF-8\";").Error
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -133,7 +146,7 @@ func createAndOpenDb(dbPath string, verbose bool, memory bool) *DBHandle {
 	if memory {
 		mode = "memory"
 	}
-	constructedPath := fmt.Sprintf("file:%s?mode=%s", dbPath, mode)
+	constructedPath := fmt.Sprintf("file:%s?cache=shared&mode=%s", dbPath, mode)
 	db := openDB("sqlite3", constructedPath, verbose)
 	err := setupDB(db)
 	if err != nil {
@@ -205,6 +218,9 @@ func (d *DBHandle) SaveFeed(f *FeedInfo) error {
 	if err != nil {
 		return err
 	}
+	d.syncMutex.Lock()
+	defer d.syncMutex.Unlock()
+
 	if d.writeUpdates {
 		return d.db.Save(f).Error
 	}
@@ -310,8 +326,6 @@ func (d *DBHandle) unsafeGetFeedByURL(url string) (*FeedInfo, error) {
 
 // GetFeedItemByGuid returns a FeedItem for the given FeedInfo.Id and guid.
 func (d *DBHandle) GetFeedItemByGuid(feedID int64, guid string) (*FeedItem, error) {
-	//TODO: see if beedb will handle this correctly and protect against injection
-	//attacks.
 	fi := FeedItem{}
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
@@ -417,6 +431,9 @@ func (d *DBHandle) SaveUser(u *User) error {
 // GetAllUsers returns all Users from the database.
 func (d *DBHandle) GetAllUsers() ([]User, error) {
 	var all []User
+	d.syncMutex.Lock()
+	defer d.syncMutex.Unlock()
+
 	err := d.db.Find(&all).Error
 	return all, err
 }

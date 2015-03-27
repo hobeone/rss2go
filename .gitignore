@@ -29,5 +29,8 @@ _testmain.go
 # compiled binary
 rss2go
 
+#db
+rss2go.db*
+
 # config
 config.json

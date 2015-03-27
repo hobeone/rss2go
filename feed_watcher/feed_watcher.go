@@ -278,7 +278,10 @@ func (fw *FeedWatcher) PollFeed() bool {
 				break
 			}
 			fw.LastCrawlResponse = resp
-			fw.UpdateFeed(resp)
+			err := fw.UpdateFeed(resp)
+			if err != nil {
+				glog.Errorf("Error updating feed information: %s", err)
+			}
 			fw.responseChan <- fw.LastCrawlResponse
 			toSleep = fw.minSleepTime
 			if fw.LastCrawlResponse.Error != nil {
