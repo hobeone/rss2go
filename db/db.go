@@ -1,12 +1,15 @@
 package db
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/mail"
 	"net/url"
 	"sync"
 	"time"
+
+	"crypto/rand"
 
 	"code.google.com/p/go.crypto/bcrypt"
 	"github.com/golang/glog"
@@ -165,11 +168,22 @@ func NewDBHandle(dbPath string, verbose bool, writeUpdates bool) *DBHandle {
 	return d
 }
 
-// NewMemoryDBHandle creates a new in memory database.  Useful for testing.
+// NewMemoryDBHandle creates a new in memory database.  Only used for testing.
+// The name of the database is a random string so multiple tests can run in
+// parallel with their own database.
 func NewMemoryDBHandle(verbose bool, writeUpdates bool) *DBHandle {
-	d := createAndOpenDb("in_memory_test", verbose, true)
+	d := createAndOpenDb(randString(), verbose, true)
 	d.writeUpdates = writeUpdates
 	return d
+}
+
+func randString() string {
+	rb := make([]byte, 32)
+	_, err := rand.Read(rb)
+	if err != nil {
+		fmt.Println(err)
+	}
+	return base64.URLEncoding.EncodeToString(rb)
 }
 
 /*
