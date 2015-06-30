@@ -16,8 +16,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"bitbucket.org/zaphar/go-html-transform/h5"
-	htmltransform "bitbucket.org/zaphar/go-html-transform/html/transform"
+	"github.com/hobeone/go-html-transform/h5"
+	htmltransform "github.com/hobeone/go-html-transform/html/transform"
 
 	"github.com/microcosm-cc/bluemonday"
 	"golang.org/x/net/html"
@@ -64,7 +64,7 @@ func parseAtom(u string, b []byte) (*Feed, []*Story, error) {
 
 	xmlDecoder := xml.NewDecoder(bytes.NewReader(b))
 	xmlDecoder.Strict = false
-	xmlDecoder.CharsetReader = charset.NewReaderByName
+	xmlDecoder.CharsetReader = charset.NewReaderLabel
 	xmlDecoder.Entity = xml.HTMLEntity
 	err := xmlDecoder.Decode(&a)
 	if err != nil {
@@ -152,7 +152,7 @@ func parseRss(u string, b []byte) (*Feed, []*Story, error) {
 
 	d := xml.NewDecoder(bytes.NewReader(b))
 	d.Strict = false
-	d.CharsetReader = charset.NewReaderByName
+	d.CharsetReader = charset.NewReaderLabel
 	d.DefaultSpace = "DefaultSpace"
 	d.Entity = xml.HTMLEntity
 
@@ -211,7 +211,7 @@ func parseRdf(u string, b []byte) (*Feed, []*Story, error) {
 	rd := rdf.RDF{}
 
 	d := xml.NewDecoder(bytes.NewReader(b))
-	d.CharsetReader = charset.NewReaderByName
+	d.CharsetReader = charset.NewReaderLabel
 	d.Strict = false
 	d.Entity = xml.HTMLEntity
 	err := d.Decode(&rd)
