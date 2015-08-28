@@ -8,8 +8,6 @@ import (
 	"io/ioutil"
 	"sync"
 
-	"code.google.com/p/go-charset/charset"
-	_ "code.google.com/p/go-charset/data"
 	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/db"
@@ -18,6 +16,7 @@ import (
 	"github.com/hobeone/rss2go/mail"
 	"github.com/hobeone/rss2go/opml"
 	"github.com/mattn/go-sqlite3"
+	"golang.org/x/net/html/charset"
 )
 
 func MakeCmdImportOpml() *flagutil.Command {
@@ -62,7 +61,8 @@ func importOPML(cmd *flagutil.Command, args []string) {
 	}
 	o := opml.Opml{}
 	d := xml.NewDecoder(bytes.NewReader(fr))
-	d.CharsetReader = charset.NewReader
+	d.CharsetReader = charset.NewReaderLabel
+	d.Entity = xml.HTMLEntity
 	d.Strict = false
 
 	if err := d.Decode(&o); err != nil {

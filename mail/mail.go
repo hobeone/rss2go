@@ -69,8 +69,8 @@ type LocalMTASender struct {
 }
 
 // SendMail sends mail using a local binary
-func (self *LocalMTASender) SendMail(msg *gomail.Message) error {
-	mailer := gomail.NewMailer("host", "user", "pwd", 465, gomail.SetSendMail(self.Runner.Run))
+func (sender *LocalMTASender) SendMail(msg *gomail.Message) error {
+	mailer := gomail.NewMailer("host", "user", "pwd", 465, gomail.SetSendMail(sender.Runner.Run))
 	err := mailer.Send(msg)
 	if err != nil {
 		return fmt.Errorf("error running command %s", err.Error())
@@ -79,6 +79,8 @@ func (self *LocalMTASender) SendMail(msg *gomail.Message) error {
 	return nil
 }
 
+// NewLocalMTASender returns a pointer to a new LocalMTASender instance with
+// defaults set.
 func NewLocalMTASender(mtaPath string) *LocalMTASender {
 	if mtaPath == "" {
 		mtaPath = MTA_BINARY
@@ -97,6 +99,7 @@ func NewLocalMTASender(mtaPath string) *LocalMTASender {
 	}
 }
 
+// SMTPSender encapsualtes functionality to send mail to a SMTP server
 type SMTPSender struct {
 	Hostname string
 	Port     int
@@ -104,11 +107,16 @@ type SMTPSender struct {
 	Password string
 }
 
+// SendMail sends the given message to the configured server.
+//
+// It does no batching or delay and just sends immediately.
 func (s *SMTPSender) SendMail(msg *gomail.Message) error {
 	mailer := gomail.NewMailer(s.Hostname, s.Username, s.Password, s.Port)
 	return mailer.Send(msg)
 }
 
+// NewSMTPSender returns a pointer to a new SMTPSender instance with
+// defaults set.
 func NewSMTPSender(server string, port int, username string, password string) MailSender {
 	return &SMTPSender{
 		Hostname: server,
@@ -123,8 +131,9 @@ type NullMailSender struct {
 	Count int
 }
 
-func (self *NullMailSender) SendMail(m *gomail.Message) error {
-	self.Count++
+// SendMail increments a counter for checking in tests.
+func (sender *NullMailSender) SendMail(m *gomail.Message) error {
+	sender.Count++
 	glog.Infof("NullMailer faked sending mail: %s to %v", m.GetHeader("From"), m.GetHeader("To"))
 	return nil
 }

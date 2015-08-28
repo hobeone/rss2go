@@ -3,6 +3,7 @@ package commands
 import (
 	"flag"
 	"fmt"
+
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/flagutil"
@@ -27,8 +28,7 @@ func MakeCmdSubscribeUser() *flagutil.Command {
 }
 
 type SubscribeUserCommand struct {
-	Config *config.Config
-	Dbh    *db.DBHandle
+	Dbh *db.DBHandle
 }
 
 func runSubscribeUser(cmd *flagutil.Command, args []string) {
@@ -53,21 +53,20 @@ func NewSubscribeUserCommand(cfg *config.Config) *SubscribeUserCommand {
 	}
 
 	return &SubscribeUserCommand{
-		Config: cfg,
-		Dbh:    dbh,
+		Dbh: dbh,
 	}
 }
 
-func (self *SubscribeUserCommand) SubscribeUser(user_email string, feed_urls []string) {
-	u, err := self.Dbh.GetUserByEmail(user_email)
+func (self *SubscribeUserCommand) SubscribeUser(userEmail string, feedURLs []string) {
+	u, err := self.Dbh.GetUserByEmail(userEmail)
 	if err != nil {
-		PrintErrorAndExit(fmt.Sprintf("Error getting user: %s", err))
+		PrintErrorAndExit(fmt.Sprintf("Error getting user '%s': %s", userEmail, err))
 	}
-	feeds := make([]*db.FeedInfo, len(feed_urls))
-	for i, feed_url := range feed_urls {
-		f, err := self.Dbh.GetFeedByURL(feed_url)
+	feeds := make([]*db.FeedInfo, len(feedURLs))
+	for i, feedURL := range feedURLs {
+		f, err := self.Dbh.GetFeedByURL(feedURL)
 		if err != nil {
-			PrintErrorAndExit(fmt.Sprintf("Feed %s doesn't exist in db, add it first.", feed_url))
+			PrintErrorAndExit(fmt.Sprintf("Feed %s doesn't exist in db, add it first.", feedURL))
 		}
 		feeds[i] = f
 	}
@@ -76,5 +75,5 @@ func (self *SubscribeUserCommand) SubscribeUser(user_email string, feed_urls []s
 		PrintErrorAndExit(fmt.Sprintf("Error adding feeds to user: %s", err))
 	}
 
-	fmt.Printf("Subscribed user %s to %d feed.\n", user_email, len(feed_urls))
+	fmt.Printf("Subscribed user %s to %d feed.\n", userEmail, len(feedURLs))
 }

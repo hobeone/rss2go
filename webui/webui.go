@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"code.google.com/p/go.crypto/bcrypt"
 	"github.com/go-martini/martini"
 	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/config"
@@ -16,6 +15,7 @@ import (
 	"github.com/hobeone/rss2go/feed_watcher"
 	"github.com/martini-contrib/binding"
 	"github.com/martini-contrib/render"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func failAuth(w http.ResponseWriter) {

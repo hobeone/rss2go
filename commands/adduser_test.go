@@ -1,8 +1,9 @@
 package commands
 
 import (
-	"github.com/hobeone/rss2go/config"
 	"testing"
+
+	"github.com/hobeone/rss2go/config"
 )
 
 func TestAddUser(t *testing.T) {
@@ -49,12 +50,12 @@ func TestAddUserWithFeeds(t *testing.T) {
 	}
 
 	au.AddUser("test", "test@example.com", "pass", []string{"http://test"})
-	db_user, err := au.Dbh.GetUser("test")
+	dbUser, err := au.Dbh.GetUser("test")
 	if err != nil {
 		t.Errorf("Couldn't find user 'test', AddUser didn't add it.")
 	}
 
-	fi, err := au.Dbh.GetUsersFeeds(db_user)
+	fi, err := au.Dbh.GetUsersFeeds(dbUser)
 	if err != nil {
 		t.Fatalf("Error getting feeds for user: %s", err)
 	}

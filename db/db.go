@@ -11,9 +11,9 @@ import (
 
 	"crypto/rand"
 
-	"code.google.com/p/go.crypto/bcrypt"
 	"github.com/golang/glog"
 	"github.com/jinzhu/gorm"
+	"golang.org/x/crypto/bcrypt"
 
 	// Import sqlite3 driver
 	_ "github.com/mattn/go-sqlite3"
@@ -222,8 +222,11 @@ func (d *DBHandle) AddFeed(name string, feedURL string) (*FeedInfo, error) {
 
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
-	err = d.db.Save(f).Error
-	return f, err
+
+	if d.writeUpdates {
+		return f, d.db.Save(f).Error
+	}
+	return f, nil
 }
 
 //SaveFeed creates or updates the given FeedInfo in the database.
