@@ -18,6 +18,7 @@ func main() {
 		commands.MakeCmdRemoveFeed(),
 		commands.MakeCmdListFeeds(),
 		commands.MakeCmdImportOpml(),
+		commands.MakeCmdExportOPML(),
 		commands.MakeCmdBadFeeds(),
 		commands.MakeCmdListUsers(),
 		commands.MakeCmdAddUser(),

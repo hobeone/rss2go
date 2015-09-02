@@ -8,12 +8,13 @@ import (
 	"time"
 )
 
+// Config encapsulates the basic settings for the HTTPClient
 type Config struct {
 	ConnectTimeout   time.Duration
 	ReadWriteTimeout time.Duration
 }
 
-func TimeoutDialer(config *Config) func(net, addr string) (c net.Conn, err error) {
+func timeoutDialer(config *Config) func(net, addr string) (c net.Conn, err error) {
 	return func(netw, addr string) (net.Conn, error) {
 		conn, err := net.DialTimeout(netw, addr, config.ConnectTimeout)
 		if err != nil {
@@ -24,6 +25,8 @@ func TimeoutDialer(config *Config) func(net, addr string) (c net.Conn, err error
 	}
 }
 
+// NewTimeoutClient returns a new *http.Client with timeout set on connection
+// read and write operations.
 func NewTimeoutClient(args ...interface{}) *http.Client {
 	// Default configuration
 	config := &Config{
@@ -45,7 +48,7 @@ func NewTimeoutClient(args ...interface{}) *http.Client {
 
 	return &http.Client{
 		Transport: &http.Transport{
-			Dial: TimeoutDialer(config),
+			Dial: timeoutDialer(config),
 		},
 	}
 }
