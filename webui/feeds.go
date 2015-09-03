@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/martini-contrib/binding"
 
 	"github.com/go-martini/martini"
-	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/db"
 	"github.com/martini-contrib/render"
 )
@@ -48,7 +48,7 @@ func getFeeds(rend render.Render, r *http.Request, params martini.Params, dbh *d
 
 			feed_json[i] = FeedJSONItem{*feed}
 		}
-		glog.Infof("Got %d feeds", len(feed_json))
+		logrus.Infof("Got %d feeds", len(feed_json))
 	} else {
 		feeds, err := dbh.GetAllFeeds()
 		if err != nil {
@@ -60,7 +60,7 @@ func getFeeds(rend render.Render, r *http.Request, params martini.Params, dbh *d
 		for i, feed := range feeds {
 			feed_json[i] = FeedJSONItem{feed}
 		}
-		glog.Infof("Got %d feeds", len(feed_json))
+		logrus.Infof("Got %d feeds", len(feed_json))
 	}
 	rend.JSON(http.StatusOK, FeedsJSON{feed_json})
 }

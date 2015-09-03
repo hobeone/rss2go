@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/go-martini/martini"
-	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
@@ -36,13 +36,13 @@ var authenticateUser = func(res http.ResponseWriter, req *http.Request, dbh *db.
 	if len(authHeader) > 1 {
 		decString, err := base64.StdEncoding.DecodeString(authHeader[1])
 		if err != nil {
-			glog.Errorf("Error decoding string: %s", err)
+			logrus.Errorf("Error decoding string: %s", err)
 			failAuth(res)
 			return
 		}
 		authParts := strings.SplitN(string(decString[:]), ":", 2)
 		if len(authParts) < 2 {
-			glog.Errorf("auth string had no ':' in it, failing")
+			logrus.Errorf("auth string had no ':' in it, failing")
 			failAuth(res)
 			return
 		}
@@ -50,7 +50,7 @@ var authenticateUser = func(res http.ResponseWriter, req *http.Request, dbh *db.
 		pass := authParts[1]
 		dbuser, err := dbh.GetUserByEmail(userEmail)
 		if err != nil {
-			glog.Infof("Unknown user authentication: %s", userEmail)
+			logrus.Infof("Unknown user authentication: %s", userEmail)
 			failAuth(res)
 			return
 		}
@@ -148,6 +148,6 @@ func send200() int {
 func RunWebUi(config *config.Config, dbh *db.Handle, feeds map[string]*feedwatcher.FeedWatcher) {
 	if config.WebServer.EnableAPI {
 		m := createMartini(dbh, feeds)
-		glog.Fatal(http.ListenAndServe(config.WebServer.ListenAddress, m))
+		logrus.Fatal(http.ListenAndServe(config.WebServer.ListenAddress, m))
 	}
 }

@@ -16,6 +16,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/go-html-transform/h5"
 	htmltransform "github.com/hobeone/go-html-transform/html/transform"
 
@@ -24,7 +25,6 @@ import (
 	"golang.org/x/net/html/charset"
 	"golang.org/x/text/transform"
 
-	"github.com/golang/glog"
 	"github.com/hobeone/rss2go/atom"
 	"github.com/hobeone/rss2go/rdf"
 	"github.com/hobeone/rss2go/rss"
@@ -171,7 +171,7 @@ func parseRss(u string, b []byte) (*Feed, []*Story, error) {
 	if t, err := parseDate(r.LastBuildDate, r.PubDate); err == nil {
 		f.Updated = t
 	} else {
-		glog.Infof("no rss feed date: %v", f.Link)
+		logrus.Infof("no rss feed date: %v", f.Link)
 	}
 
 	for _, i := range r.Items {
@@ -285,25 +285,25 @@ func ParseFeed(url string, b []byte) (*Feed, []*Story, error) {
 
 	feed, stories, atomerr := parseAtom(url, b)
 	if atomerr == nil {
-		glog.Infof("Parsed %s as Atom", url)
+		logrus.Infof("Parsed %s as Atom", url)
 		return feed, stories, nil
 	}
 
 	feed, stories, rsserr := parseRss(url, b)
 	if rsserr == nil {
-		glog.Infof("Parsed %s as RSS", url)
+		logrus.Infof("Parsed %s as RSS", url)
 		return feed, stories, nil
 	}
 
 	feed, stories, rdferr := parseRdf(url, b)
 	if rdferr == nil {
-		glog.Infof("Parsed %s as RDF", url)
+		logrus.Infof("Parsed %s as RDF", url)
 		return feed, stories, nil
 	}
 
 	err := fmt.Errorf("couldn't find ATOM, RSS or RDF feed for %s. ATOM Error: %s, RSS Error: %s, RDF Error: %s\n", url, atomerr, rsserr, rdferr)
 
-	glog.Info(err.Error())
+	logrus.Info(err.Error())
 	return nil, nil, err
 }
 
@@ -351,7 +351,7 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 	}
 	base, err := url.Parse(f.Link)
 	if err != nil {
-		glog.Infof("unable to parse link: %v", f.Link)
+		logrus.Infof("unable to parse link: %v", f.Link)
 	}
 
 	for _, s := range ss {
@@ -374,7 +374,7 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 			} else if s.Title != "" {
 				s.ID = s.Title
 			} else {
-				glog.Infof("story has no id: %v", s)
+				logrus.Infof("story has no id: %v", s)
 				return nil, nil, fmt.Errorf("story has no id: %v", s)
 			}
 		}
@@ -390,7 +390,7 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 			if err == nil {
 				s.Link = link.String()
 			} else {
-				glog.Infof("unable to resolve link: %s: %v", err, s.Link)
+				logrus.Infof("unable to resolve link: %s: %v", err, s.Link)
 			}
 		}
 		_, serr := url.Parse(s.Link)
@@ -404,7 +404,7 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 		// mail.
 		s.Content, err = cleanFeedContent(s.Content)
 		if err != nil {
-			glog.Errorf("Error cleaning up content: %s", err)
+			logrus.Errorf("Error cleaning up content: %s", err)
 		}
 		p := bluemonday.UGCPolicy()
 		s.Content = fullyHTMLUnescape(p.Sanitize(s.Content))
@@ -444,7 +444,7 @@ func convertIframeToAnchor(n *html.Node) {
 		if err == nil {
 			linkSrc = escLinkSrc
 		} else {
-			glog.Info("Error unescaping url. Error: %s, Url: %#v", err, linkSrc)
+			logrus.Info("Error unescaping url. Error: %s, Url: %#v", err, linkSrc)
 		}
 		p.InsertBefore(h5.Anchor(linkSrc, linkSrc), n)
 		p.RemoveChild(n)

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/rss2go/commands"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
@@ -21,7 +21,7 @@ var fakeServerHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Req
 	case strings.HasSuffix(r.URL.Path, "feed1.atom"):
 		feedResp, err := ioutil.ReadFile("testdata/ars.rss")
 		if err != nil {
-			glog.Fatalf("Error reading test feed: %s", err.Error())
+			logrus.Fatalf("Error reading test feed: %s", err.Error())
 		}
 		content = feedResp
 	case true:
@@ -37,7 +37,7 @@ func TestEndToEndIntegration(t *testing.T) {
 
 	// Override the sleep function
 	feedwatcher.After = func(d time.Duration) <-chan time.Time {
-		glog.Infof("Call to mock After, waiting for just 1 second.")
+		logrus.Infof("Call to mock After, waiting for just 1 second.")
 		return time.After(time.Second * time.Duration(1))
 	}
 
@@ -51,7 +51,7 @@ func TestEndToEndIntegration(t *testing.T) {
 	allFeeds, err := d.Dbh.GetAllFeeds()
 
 	if err != nil {
-		glog.Fatalf("Error reading feeds: %s", err.Error())
+		logrus.Fatalf("Error reading feeds: %s", err.Error())
 	}
 
 	d.CreateAndStartFeedWatchers(allFeeds[0:1])

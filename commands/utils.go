@@ -2,10 +2,11 @@ package commands
 
 import (
 	"fmt"
-	"github.com/golang/glog"
-	"github.com/hobeone/rss2go/config"
 	"os"
 	"testing"
+
+	"github.com/Sirupsen/logrus"
+	"github.com/hobeone/rss2go/config"
 )
 
 const default_config = "~/.config/rss2go/config.json"
@@ -18,16 +19,16 @@ var PrintErrorAndExit = func(err_string string) {
 
 func loadConfig(configFile string) *config.Config {
 	if len(configFile) == 0 {
-		glog.Infof("No --config_file given.  Using default: %s\n",
+		logrus.Infof("No --config_file given.  Using default: %s\n",
 			default_config)
 		configFile = default_config
 	}
 
-	glog.Infof("Got config file: %s\n", configFile)
+	logrus.Infof("Got config file: %s\n", configFile)
 	config := config.NewConfig()
 	err := config.ReadConfig(configFile)
 	if err != nil {
-		glog.Fatal(err)
+		logrus.Fatal(err)
 	}
 	return config
 }

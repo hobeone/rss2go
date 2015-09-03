@@ -4,7 +4,7 @@ import (
 	"flag"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/db"
@@ -68,7 +68,7 @@ func NewDaemon(cfg *config.Config) *Daemon {
 // Watch the db config and update feeds based on removal or addition of feeds
 func (d *Daemon) feedDbUpdateLoop() {
 	ival := time.Duration(d.Config.Db.WatchInterval) * time.Second
-	glog.Errorf("Watching the db for changed feeds every %v\n", ival)
+	logrus.Errorf("Watching the db for changed feeds every %v\n", ival)
 	for {
 		time.Sleep(ival)
 		d.feedDbUpdate()
@@ -78,7 +78,7 @@ func (d *Daemon) feedDbUpdateLoop() {
 func (d *Daemon) feedDbUpdate() {
 	db_feeds, err := d.Dbh.GetAllFeeds()
 	if err != nil {
-		glog.Errorf("Error getting feeds from db: %s\n", err.Error())
+		logrus.Errorf("Error getting feeds from db: %s\n", err.Error())
 		return
 	}
 	all_feeds := make(map[string]db.FeedInfo)
@@ -87,7 +87,7 @@ func (d *Daemon) feedDbUpdate() {
 	}
 	for k, v := range d.Feeds {
 		if _, ok := all_feeds[k]; !ok {
-			glog.Infof("Feed %s removed from db. Stopping poll.\n", k)
+			logrus.Infof("Feed %s removed from db. Stopping poll.\n", k)
 			v.StopPoll()
 			delete(d.Feeds, k)
 		}
@@ -96,11 +96,11 @@ func (d *Daemon) feedDbUpdate() {
 	for k, v := range all_feeds {
 		if _, ok := d.Feeds[k]; !ok {
 			feeds_to_start = append(feeds_to_start, v)
-			glog.Infof("Feed %s added to db. Adding to queue to start.\n", k)
+			logrus.Infof("Feed %s added to db. Adding to queue to start.\n", k)
 		}
 	}
 	if len(feeds_to_start) > 0 {
-		glog.Infof("Adding %d feeds to watch.\n", len(feeds_to_start))
+		logrus.Infof("Adding %d feeds to watch.\n", len(feeds_to_start))
 		d.startPollers(feeds_to_start)
 	}
 }
@@ -109,7 +109,7 @@ func (d *Daemon) startPollers(new_feeds []db.FeedInfo) {
 	// make feeds unique
 	for _, f := range new_feeds {
 		if _, ok := d.Feeds[f.URL]; ok {
-			glog.Infof("Found duplicate feed: %s", f.URL)
+			logrus.Infof("Found duplicate feed: %s", f.URL)
 			continue
 		}
 
@@ -155,11 +155,11 @@ func runDaemon(cmd *flagutil.Command, args []string) {
 	all_feeds, err := d.Dbh.GetAllFeeds()
 
 	if err != nil {
-		glog.Fatal(err.Error())
+		logrus.Fatal(err.Error())
 	}
 	d.CreateAndStartFeedWatchers(all_feeds)
 
-	glog.Infof("Got %d feeds to watch.\n", len(all_feeds))
+	logrus.Infof("Got %d feeds to watch.\n", len(all_feeds))
 
 	go d.feedDbUpdateLoop()
 

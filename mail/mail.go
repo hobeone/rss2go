@@ -17,7 +17,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/feed"
 	"gopkg.in/gomail.v1"
@@ -50,10 +50,10 @@ func (r SendmailRunner) Run(addr string, a smtp.Auth, from string, to []string, 
 	//func (r SendmailRunner) Run(input []byte) ([]byte, error) {
 	cmd := exec.Command(r.SendmailPath, "-t", "-i")
 	cmd.Stdin = bytes.NewReader(msg)
-	glog.Infof("Running command %#v", cmd.Args)
+	logrus.Infof("Running command %#v", cmd.Args)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		glog.Info("Error running command %#v, output %s", cmd.Args, output)
+		logrus.Info("Error running command %#v, output %s", cmd.Args, output)
 	}
 	return err
 }
@@ -75,7 +75,7 @@ func (sender *LocalMTASender) SendMail(msg *gomail.Message) error {
 	if err != nil {
 		return fmt.Errorf("error running command %s", err.Error())
 	}
-	glog.Infof("Successfully sent mail: %v to %v", msg.GetHeader("From"), msg.GetHeader("To"))
+	logrus.Infof("Successfully sent mail: %v to %v", msg.GetHeader("From"), msg.GetHeader("To"))
 	return nil
 }
 
@@ -90,7 +90,7 @@ func NewLocalMTASender(mtaPath string) *LocalMTASender {
 	if err != nil {
 		panic(fmt.Sprintf("Couldn't find specified MTA: %s", err.Error()))
 	} else {
-		glog.Infof("Found %s at %s.", mtaPath, c)
+		logrus.Infof("Found %s at %s.", mtaPath, c)
 	}
 	mtaPath = c
 
@@ -134,7 +134,7 @@ type NullMailSender struct {
 // SendMail increments a counter for checking in tests.
 func (sender *NullMailSender) SendMail(m *gomail.Message) error {
 	sender.Count++
-	glog.Infof("NullMailer faked sending mail: %s to %v", m.GetHeader("From"), m.GetHeader("To"))
+	logrus.Infof("NullMailer faked sending mail: %s to %v", m.GetHeader("From"), m.GetHeader("To"))
 	return nil
 }
 
@@ -161,13 +161,13 @@ func CreateAndStartMailer(config *config.Config) *MailDispatcher {
 	var sender MailSender
 
 	if !config.Mail.SendMail {
-		glog.Info("Using null mail sender as configured.")
+		logrus.Info("Using null mail sender as configured.")
 		sender = &NullMailSender{}
 	} else if config.Mail.MtaPath != "" {
-		glog.Infof("Using Local MTA: %s", config.Mail.MtaPath)
+		logrus.Infof("Using Local MTA: %s", config.Mail.MtaPath)
 		sender = NewLocalMTASender(config.Mail.MtaPath)
 	} else if config.Mail.Hostname != "" {
-		glog.Infof("Using SMTP Server: %s:%d", config.Mail.Hostname, config.Mail.Port)
+		logrus.Infof("Using SMTP Server: %s:%d", config.Mail.Hostname, config.Mail.Port)
 		sender = NewSMTPSender(config.Mail.Hostname, config.Mail.Port, config.Mail.Username, config.Mail.Password)
 	} else {
 		panic(fmt.Sprint("No mail sending capability defined in config."))
@@ -178,7 +178,7 @@ func CreateAndStartMailer(config *config.Config) *MailDispatcher {
 		config.Mail.FromAddress,
 		sender,
 	)
-	glog.Infof("Created new mailer: %#v", mailer)
+	logrus.Infof("Created new mailer: %#v", mailer)
 	go mailer.DispatchLoop()
 	return mailer
 }

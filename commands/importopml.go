@@ -8,7 +8,7 @@ import (
 	"io/ioutil"
 	"sync"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
@@ -57,7 +57,7 @@ func importOPML(cmd *flagutil.Command, args []string) {
 
 	fr, err := ioutil.ReadFile(opml_file)
 	if err != nil {
-		glog.Fatalf("Error reading OPML file: %s", err.Error())
+		logrus.Fatalf("Error reading OPML file: %s", err.Error())
 	}
 	o := opml.Opml{}
 	d := xml.NewDecoder(bytes.NewReader(fr))
@@ -66,7 +66,7 @@ func importOPML(cmd *flagutil.Command, args []string) {
 	d.Strict = false
 
 	if err := d.Decode(&o); err != nil {
-		glog.Fatalf("opml error: %v", err.Error())
+		logrus.Fatalf("opml error: %v", err.Error())
 	}
 	feeds := make(map[string]string)
 	var proc func(outlines []*opml.OpmlOutline)

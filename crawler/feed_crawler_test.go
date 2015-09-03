@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/rss2go/feed_watcher"
 )
 
@@ -116,13 +116,13 @@ var fakeServerHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Req
 	case strings.HasSuffix(r.URL.Path, "ars.rss"):
 		feedResp, err := ioutil.ReadFile("../testdata/ars.rss")
 		if err != nil {
-			glog.Fatalf("Error reading test feed: %s", err.Error())
+			logrus.Fatalf("Error reading test feed: %s", err.Error())
 		}
 		content = feedResp
 	case strings.HasSuffix(r.URL.Path, "ars_with_content_length.rss"):
 		feedResp, err := ioutil.ReadFile("../testdata/ars.rss")
 		if err != nil {
-			glog.Fatalf("Error reading test feed: %s", err.Error())
+			logrus.Fatalf("Error reading test feed: %s", err.Error())
 		}
 		content = feedResp
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(content)))

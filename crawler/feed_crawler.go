@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/httpclient"
 )
@@ -16,7 +16,7 @@ import (
 // Sets a reasonable timeout on the connection and read from the server.
 // Users will need to Close() the resposne.Body or risk leaking connections.
 func GetFeed(url string, client *http.Client) (*http.Response, error) {
-	glog.Infof("Crawling %v", url)
+	logrus.Infof("Crawling %v", url)
 
 	// Defaults to 1 second for connect and read
 	connectTimeout := (5 * time.Second)
@@ -29,12 +29,12 @@ func GetFeed(url string, client *http.Client) (*http.Response, error) {
 	r, err := client.Get(url)
 
 	if err != nil {
-		glog.Infof("Error getting %s: %s", url, err)
+		logrus.Infof("Error getting %s: %s", url, err)
 		return r, err
 	}
 	if r.StatusCode != http.StatusOK {
 		err = fmt.Errorf("feed %s returned a non 200 status code: %s", url, r.Status)
-		glog.Info(err)
+		logrus.Info(err)
 		return r, err
 	}
 	return r, nil
@@ -77,7 +77,7 @@ func GetFeedAndMakeResponse(url string, client *http.Client) *feedwatcher.FeedCr
 // gets the given URL and returns a response
 func FeedCrawler(crawlRequests chan *feedwatcher.FeedCrawlRequest) {
 	for {
-		glog.Info("Waiting on request")
+		logrus.Info("Waiting on request")
 		select {
 		case req := <-crawlRequests:
 			req.ResponseChan <- GetFeedAndMakeResponse(req.URI, nil)
@@ -88,7 +88,7 @@ func FeedCrawler(crawlRequests chan *feedwatcher.FeedCrawlRequest) {
 // StartCrawlerPool creates a pool of num http crawlers listening to the crawl_channel.
 func StartCrawlerPool(num int, crawlChannel chan *feedwatcher.FeedCrawlRequest) {
 	for i := 0; i < num; i++ {
-		glog.Infof("Starting Crawler %d", i)
+		logrus.Infof("Starting Crawler %d", i)
 		go FeedCrawler(crawlChannel)
 	}
 }
