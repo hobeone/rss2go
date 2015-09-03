@@ -10,10 +10,13 @@ import (
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/flagutil"
+	//set log defaults
+	_ "github.com/hobeone/rss2go/log"
 	"github.com/hobeone/rss2go/mail"
 	"github.com/hobeone/rss2go/webui"
 )
 
+// MakeCmdDaemon returns a command struct ready to be called.
 func MakeCmdDaemon() *flagutil.Command {
 	cmd := &flagutil.Command{
 		Run:       runDaemon,
@@ -28,11 +31,13 @@ func MakeCmdDaemon() *flagutil.Command {
 	cmd.Flag.Bool("send_mail", true, "Actually send mail or not.")
 	cmd.Flag.Bool("db_updates", true, "Don't actually update feed info in the db.")
 	cmd.Flag.Bool("poll_feeds", true, "Poll the feeds (Disable for testing).")
+	cmd.Flag.Bool("verbose", false, "Log debug information.")
 
 	cmd.Flag.String("config_file", default_config, "Config file to use.")
 	return cmd
 }
 
+// Daemon encapsulates all the information about a Daemon instance.
 type Daemon struct {
 	Config    *config.Config
 	CrawlChan chan *feedwatcher.FeedCrawlRequest
@@ -43,6 +48,7 @@ type Daemon struct {
 	PollFeeds bool
 }
 
+// NewDaemon returns a pointer to a new Daemon struct with defaults set.
 func NewDaemon(cfg *config.Config) *Daemon {
 	var dbh *db.Handle
 	if cfg.Db.Type == "memory" {
@@ -76,38 +82,38 @@ func (d *Daemon) feedDbUpdateLoop() {
 }
 
 func (d *Daemon) feedDbUpdate() {
-	db_feeds, err := d.Dbh.GetAllFeeds()
+	dbFeeds, err := d.Dbh.GetAllFeeds()
 	if err != nil {
 		logrus.Errorf("Error getting feeds from db: %s\n", err.Error())
 		return
 	}
-	all_feeds := make(map[string]db.FeedInfo)
-	for _, fi := range db_feeds {
-		all_feeds[fi.URL] = fi
+	allFeeds := make(map[string]db.FeedInfo)
+	for _, fi := range dbFeeds {
+		allFeeds[fi.URL] = fi
 	}
 	for k, v := range d.Feeds {
-		if _, ok := all_feeds[k]; !ok {
+		if _, ok := allFeeds[k]; !ok {
 			logrus.Infof("Feed %s removed from db. Stopping poll.\n", k)
 			v.StopPoll()
 			delete(d.Feeds, k)
 		}
 	}
-	feeds_to_start := make([]db.FeedInfo, 0)
-	for k, v := range all_feeds {
+	var feedsToStart []db.FeedInfo
+	for k, v := range allFeeds {
 		if _, ok := d.Feeds[k]; !ok {
-			feeds_to_start = append(feeds_to_start, v)
+			feedsToStart = append(feedsToStart, v)
 			logrus.Infof("Feed %s added to db. Adding to queue to start.\n", k)
 		}
 	}
-	if len(feeds_to_start) > 0 {
-		logrus.Infof("Adding %d feeds to watch.\n", len(feeds_to_start))
-		d.startPollers(feeds_to_start)
+	if len(feedsToStart) > 0 {
+		logrus.Infof("Adding %d feeds to watch.\n", len(feedsToStart))
+		d.startPollers(feedsToStart)
 	}
 }
 
-func (d *Daemon) startPollers(new_feeds []db.FeedInfo) {
+func (d *Daemon) startPollers(newFeeds []db.FeedInfo) {
 	// make feeds unique
-	for _, f := range new_feeds {
+	for _, f := range newFeeds {
 		if _, ok := d.Feeds[f.URL]; ok {
 			logrus.Infof("Found duplicate feed: %s", f.URL)
 			continue
@@ -129,6 +135,7 @@ func (d *Daemon) startPollers(new_feeds []db.FeedInfo) {
 	}
 }
 
+// CreateAndStartFeedWatchers does exactly what it says
 func (d *Daemon) CreateAndStartFeedWatchers(feeds []db.FeedInfo) {
 	// start crawler pool
 	crawler.StartCrawlerPool(d.Config.Crawl.MaxCrawlers, d.CrawlChan)
@@ -138,28 +145,35 @@ func (d *Daemon) CreateAndStartFeedWatchers(feeds []db.FeedInfo) {
 }
 
 func runDaemon(cmd *flagutil.Command, args []string) {
-	send_mail := cmd.Flag.Lookup("send_mail").Value.(flag.Getter).Get().(bool)
-	update_db := cmd.Flag.Lookup("db_updates").Value.(flag.Getter).Get().(bool)
-	poll_feeds := cmd.Flag.Lookup("poll_feeds").Value.(flag.Getter).Get().(bool)
+	sendMail := cmd.Flag.Lookup("send_mail").Value.(flag.Getter).Get().(bool)
+	updateDB := cmd.Flag.Lookup("db_updates").Value.(flag.Getter).Get().(bool)
+	pollFeeds := cmd.Flag.Lookup("poll_feeds").Value.(flag.Getter).Get().(bool)
+	logVerbose := cmd.Flag.Lookup("verbose").Value.(flag.Getter).Get().(bool)
+
+	if logVerbose {
+		logrus.SetLevel(logrus.DebugLevel)
+	} else {
+		logrus.SetLevel(logrus.WarnLevel)
+	}
 
 	cfg := loadConfig(
 		cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
 
 	// Override config settings from flags:
-	cfg.Mail.SendMail = send_mail
-	cfg.Db.UpdateDb = update_db
+	cfg.Mail.SendMail = sendMail
+	cfg.Db.UpdateDb = updateDB
 
 	d := NewDaemon(cfg)
-	d.PollFeeds = poll_feeds
+	d.PollFeeds = pollFeeds
 
-	all_feeds, err := d.Dbh.GetAllFeeds()
+	allFeeds, err := d.Dbh.GetAllFeeds()
 
 	if err != nil {
 		logrus.Fatal(err.Error())
 	}
-	d.CreateAndStartFeedWatchers(all_feeds)
+	d.CreateAndStartFeedWatchers(allFeeds)
 
-	logrus.Infof("Got %d feeds to watch.\n", len(all_feeds))
+	logrus.Infof("Got %d feeds to watch.\n", len(allFeeds))
 
 	go d.feedDbUpdateLoop()
 

@@ -12,8 +12,6 @@ import (
 	"crypto/rand"
 
 	"github.com/Sirupsen/logrus"
-	// Setup log defaults
-	_ "github.com/hobeone/rss2go/log"
 	"github.com/jinzhu/gorm"
 	"golang.org/x/crypto/bcrypt"
 
@@ -25,6 +23,14 @@ func init() {
 	gorm.NowFunc = func() time.Time {
 		return time.Now().UTC()
 	}
+}
+
+// debugLogger satisfies Gorm's logger interface
+// so that we can log SQL queries at Logrus' debug level
+type debugLogger struct{}
+
+func (*debugLogger) Print(msg ...interface{}) {
+	logrus.Debug(msg)
 }
 
 // FeedInfo represents a feed (atom, rss or rdf) that rss2go is polling.
@@ -112,7 +118,7 @@ func openDB(dbType string, dbArgs string, verbose bool) gorm.DB {
 		panic(err.Error())
 	}
 	d.SingularTable(true)
-	d.SetLogger(logrus.New())
+	d.SetLogger(&debugLogger{})
 	d.LogMode(verbose)
 	// Actually test that we have a working connection
 	err = d.DB().Ping()
