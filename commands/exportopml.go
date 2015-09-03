@@ -16,13 +16,13 @@ import (
 // into an OPML doc.
 type exportOPMLCommand struct {
 	Config *config.Config
-	DBH    *db.DBHandle
+	DBH    *db.Handle
 }
 
 // newExportOPMLCommand returns a pointer to a newly created exportOPMLCommand
 // struct with defaults set.
 func newExportOPMLCommand(cfg *config.Config) *exportOPMLCommand {
-	var dbh *db.DBHandle
+	var dbh *db.Handle
 	if cfg.Db.Type == "memory" {
 		dbh = db.NewMemoryDBHandle(cfg.Db.Verbose, cfg.Db.UpdateDb)
 	} else {

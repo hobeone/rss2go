@@ -11,10 +11,10 @@ import (
 	"github.com/hobeone/rss2go/feed_watcher"
 )
 
-func setupTest(t *testing.T) (*db.DBHandle, *martini.Martini) {
+func setupTest(t *testing.T) (*db.Handle, *martini.Martini) {
 	feeds := make(map[string]*feedwatcher.FeedWatcher)
 	dbh := db.NewMemoryDBHandle(false, true)
-	authenticateUser = func(res http.ResponseWriter, req *http.Request, dbh *db.DBHandle) {
+	authenticateUser = func(res http.ResponseWriter, req *http.Request, dbh *db.Handle) {
 	}
 	m := createMartini(dbh, feeds)
 	return dbh, m

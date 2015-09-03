@@ -8,6 +8,7 @@ import (
 
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed"
+	"github.com/hobeone/rss2go/log"
 	"github.com/hobeone/rss2go/mail"
 	. "github.com/onsi/gomega"
 	"gopkg.in/gomail.v1"
@@ -26,9 +27,9 @@ type MockDBFailer struct{}
 func (d *MockDBFailer) GetFeedByURL(string) (*db.FeedInfo, error)             { return nil, nil }
 func (d *MockDBFailer) GetFeedUsers(string) ([]db.User, error)                { return nil, nil }
 func (d *MockDBFailer) SaveFeed(*db.FeedInfo) error                           { return nil }
-func (d *MockDBFailer) RecordGuid(int64, string) error                        { return nil }
-func (d *MockDBFailer) GetFeedItemByGuid(int64, string) (*db.FeedItem, error) { return nil, nil }
-func (d *MockDBFailer) GetMostRecentGuidsForFeed(i int64, m int) ([]string, error) {
+func (d *MockDBFailer) RecordGUID(int64, string) error                        { return nil }
+func (d *MockDBFailer) GetFeedItemByGUID(int64, string) (*db.FeedItem, error) { return nil, nil }
+func (d *MockDBFailer) GetMostRecentGUIDsForFeed(i int64, m int) ([]string, error) {
 	return []string{}, fmt.Errorf("test error")
 }
 
@@ -39,6 +40,7 @@ func OverrideAfter(fw *FeedWatcher) {
 }
 
 func SetupTest(t *testing.T, feedPath string) (*FeedWatcher, []byte, *mail.MailDispatcher) {
+	log.SetNullOutput()
 	crawlChan := make(chan *FeedCrawlRequest)
 	responseChan := make(chan *FeedCrawlResponse)
 	mailDispatcher := mail.CreateAndStartStubMailer()

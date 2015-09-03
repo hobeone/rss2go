@@ -25,7 +25,7 @@ func failAuth(w http.ResponseWriter) {
 	fmt.Fprintln(w, "Not Authorized")
 }
 
-var authenticateUser = func(res http.ResponseWriter, req *http.Request, dbh *db.DBHandle) {
+var authenticateUser = func(res http.ResponseWriter, req *http.Request, dbh *db.Handle) {
 	authHeader := strings.SplitAfterN(
 		strings.TrimSpace(
 			req.Header.Get("Authorization"),
@@ -83,7 +83,7 @@ func parseParamIds(strIds []string) ([]int64, error) {
 	return intIds, nil
 }
 
-func createMartini(dbh *db.DBHandle, feeds map[string]*feedwatcher.FeedWatcher) *martini.Martini {
+func createMartini(dbh *db.Handle, feeds map[string]*feedwatcher.FeedWatcher) *martini.Martini {
 	m := martini.New()
 	m.Use(martini.Logger())
 	m.Use(
@@ -145,7 +145,7 @@ func send200() int {
 	return http.StatusOK
 }
 
-func RunWebUi(config *config.Config, dbh *db.DBHandle, feeds map[string]*feedwatcher.FeedWatcher) {
+func RunWebUi(config *config.Config, dbh *db.Handle, feeds map[string]*feedwatcher.FeedWatcher) {
 	if config.WebServer.EnableAPI {
 		m := createMartini(dbh, feeds)
 		glog.Fatal(http.ListenAndServe(config.WebServer.ListenAddress, m))

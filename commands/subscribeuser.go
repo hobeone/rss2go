@@ -28,7 +28,7 @@ func MakeCmdSubscribeUser() *flagutil.Command {
 }
 
 type SubscribeUserCommand struct {
-	Dbh *db.DBHandle
+	Dbh *db.Handle
 }
 
 func runSubscribeUser(cmd *flagutil.Command, args []string) {
@@ -45,7 +45,7 @@ func runSubscribeUser(cmd *flagutil.Command, args []string) {
 }
 
 func NewSubscribeUserCommand(cfg *config.Config) *SubscribeUserCommand {
-	var dbh *db.DBHandle
+	var dbh *db.Handle
 	if cfg.Db.Type == "memory" {
 		dbh = db.NewMemoryDBHandle(cfg.Db.Verbose, cfg.Db.UpdateDb)
 	} else {

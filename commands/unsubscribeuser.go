@@ -28,7 +28,7 @@ func MakeCmdUnsubscribeUser() *flagutil.Command {
 
 type UnsubscribeUserCommand struct {
 	Config *config.Config
-	Dbh    *db.DBHandle
+	Dbh    *db.Handle
 }
 
 func runUnsubscribeUser(cmd *flagutil.Command, args []string) {
@@ -45,7 +45,7 @@ func runUnsubscribeUser(cmd *flagutil.Command, args []string) {
 }
 
 func NewUnsubscribeUserCommand(cfg *config.Config) *UnsubscribeUserCommand {
-	var dbh *db.DBHandle
+	var dbh *db.Handle
 	if cfg.Db.Type == "memory" {
 		dbh = db.NewMemoryDBHandle(cfg.Db.Verbose, cfg.Db.UpdateDb)
 	} else {

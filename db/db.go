@@ -11,7 +11,9 @@ import (
 
 	"crypto/rand"
 
-	"github.com/golang/glog"
+	"github.com/Sirupsen/logrus"
+	// Setup log defaults
+	_ "github.com/hobeone/rss2go/log"
 	"github.com/jinzhu/gorm"
 	"golang.org/x/crypto/bcrypt"
 
@@ -53,7 +55,7 @@ func (f *FeedInfo) AfterFind() error {
 type FeedItem struct {
 	ID         int64
 	FeedInfoID int64     `sql:"not null"`
-	Guid       string    `sql:"not null"`
+	GUID       string    `sql:"not null"`
 	AddedOn    time.Time `sql:"not null"`
 }
 
@@ -83,33 +85,34 @@ func (u User) TableName() string {
 	return "user"
 }
 
-// DBService defines the interface that the RSS2Go database provides.
+// Service defines the interface that the RSS2Go database provides.
 // Useful for mocking out the databse layer in tests.
-type DBService interface {
+type Service interface {
 	GetFeedByURL(string) (*FeedInfo, error)
 	GetFeedUsers(string) ([]User, error)
 	SaveFeed(*FeedInfo) error
-	GetMostRecentGuidsForFeed(int64, int) ([]string, error)
-	RecordGuid(int64, string) error
-	GetFeedItemByGuid(int64, string) (*FeedItem, error)
+	GetMostRecentGUIDsForFeed(int64, int) ([]string, error)
+	RecordGUID(int64, string) error
+	GetFeedItemByGUID(int64, string) (*FeedItem, error)
 }
 
-// DBHandle controls access to the database and makes sure only one
+// Handle controls access to the database and makes sure only one
 // operation is in process at a time.
-type DBHandle struct {
+type Handle struct {
 	db           gorm.DB
 	writeUpdates bool
 	syncMutex    sync.Mutex
 }
 
 func openDB(dbType string, dbArgs string, verbose bool) gorm.DB {
-	glog.Infof("Opening database %s:%s", dbType, dbArgs)
+	logrus.Infof("Opening database %s:%s", dbType, dbArgs)
 	// Error only returns from this if it is an unknown driver.
 	d, err := gorm.Open(dbType, dbArgs)
 	if err != nil {
 		panic(err.Error())
 	}
 	d.SingularTable(true)
+	d.SetLogger(logrus.New())
 	d.LogMode(verbose)
 	// Actually test that we have a working connection
 	err = d.DB().Ping()
@@ -144,7 +147,7 @@ func setupDB(db gorm.DB) error {
 	return nil
 }
 
-func createAndOpenDb(dbPath string, verbose bool, memory bool) *DBHandle {
+func createAndOpenDb(dbPath string, verbose bool, memory bool) *Handle {
 	mode := "rwc"
 	if memory {
 		mode = "memory"
@@ -155,14 +158,14 @@ func createAndOpenDb(dbPath string, verbose bool, memory bool) *DBHandle {
 	if err != nil {
 		panic(err.Error())
 	}
-	return &DBHandle{db: db}
+	return &Handle{db: db}
 }
 
 // NewDBHandle creates a new DBHandle
 //	dbPath: the path to the database to use.
 //	verbose: when true database accesses are logged to stdout
 //	writeUpdates: when true actually write to the databse (useful for testing)
-func NewDBHandle(dbPath string, verbose bool, writeUpdates bool) *DBHandle {
+func NewDBHandle(dbPath string, verbose bool, writeUpdates bool) *Handle {
 	d := createAndOpenDb(dbPath, verbose, false)
 	d.writeUpdates = writeUpdates
 	return d
@@ -171,7 +174,7 @@ func NewDBHandle(dbPath string, verbose bool, writeUpdates bool) *DBHandle {
 // NewMemoryDBHandle creates a new in memory database.  Only used for testing.
 // The name of the database is a random string so multiple tests can run in
 // parallel with their own database.
-func NewMemoryDBHandle(verbose bool, writeUpdates bool) *DBHandle {
+func NewMemoryDBHandle(verbose bool, writeUpdates bool) *Handle {
 	d := createAndOpenDb(randString(), verbose, true)
 	d.writeUpdates = writeUpdates
 	return d
@@ -210,7 +213,7 @@ func validateFeed(f *FeedInfo) error {
 }
 
 // AddFeed creates a new FeedInfo entry in the database and returns it.
-func (d *DBHandle) AddFeed(name string, feedURL string) (*FeedInfo, error) {
+func (d *Handle) AddFeed(name string, feedURL string) (*FeedInfo, error) {
 	f := &FeedInfo{
 		Name: name,
 		URL:  feedURL,
@@ -230,7 +233,7 @@ func (d *DBHandle) AddFeed(name string, feedURL string) (*FeedInfo, error) {
 }
 
 //SaveFeed creates or updates the given FeedInfo in the database.
-func (d *DBHandle) SaveFeed(f *FeedInfo) error {
+func (d *Handle) SaveFeed(f *FeedInfo) error {
 	err := validateFeed(f)
 	if err != nil {
 		return err
@@ -246,7 +249,7 @@ func (d *DBHandle) SaveFeed(f *FeedInfo) error {
 
 // RemoveFeed removes a FeedInfo from the database given it's URL.  Optioanlly
 // it will also remove all of the GUIDs for that FeedInfo.
-func (d *DBHandle) RemoveFeed(url string) error {
+func (d *Handle) RemoveFeed(url string) error {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	f, err := d.unsafeGetFeedByURL(url)
@@ -275,7 +278,7 @@ func (d *DBHandle) RemoveFeed(url string) error {
 }
 
 // GetAllFeeds returns all feeds from the database.
-func (d *DBHandle) GetAllFeeds() (feeds []FeedInfo, err error) {
+func (d *Handle) GetAllFeeds() (feeds []FeedInfo, err error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	err = d.db.Find(&feeds).Error
@@ -284,7 +287,7 @@ func (d *DBHandle) GetAllFeeds() (feeds []FeedInfo, err error) {
 
 // GetFeedsWithErrors returns all feeds that had an error on their last
 // check.
-func (d *DBHandle) GetFeedsWithErrors() ([]FeedInfo, error) {
+func (d *Handle) GetFeedsWithErrors() ([]FeedInfo, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 
@@ -300,7 +303,7 @@ func (d *DBHandle) GetFeedsWithErrors() ([]FeedInfo, error) {
 
 // GetStaleFeeds returns all feeds that haven't gotten new content in more
 // than 14 days.
-func (d *DBHandle) GetStaleFeeds() ([]FeedInfo, error) {
+func (d *Handle) GetStaleFeeds() ([]FeedInfo, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 
@@ -313,7 +316,7 @@ func (d *DBHandle) GetStaleFeeds() ([]FeedInfo, error) {
 
 // GetFeedByID returns the FeedInfo for the given id.  It returns a
 // gorm.RecordNotFound error if it doesn't exist.
-func (d *DBHandle) GetFeedByID(id int64) (*FeedInfo, error) {
+func (d *Handle) GetFeedByID(id int64) (*FeedInfo, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	var f FeedInfo
@@ -323,13 +326,13 @@ func (d *DBHandle) GetFeedByID(id int64) (*FeedInfo, error) {
 
 // GetFeedByURL returns the FeedInfo for the given URL.  It returns a
 // gorm.RecordNotFound error if it doesn't exist.
-func (d *DBHandle) GetFeedByURL(url string) (*FeedInfo, error) {
+func (d *Handle) GetFeedByURL(url string) (*FeedInfo, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	return d.unsafeGetFeedByURL(url)
 }
 
-func (d *DBHandle) unsafeGetFeedByURL(url string) (*FeedInfo, error) {
+func (d *Handle) unsafeGetFeedByURL(url string) (*FeedInfo, error) {
 	feed := FeedInfo{}
 	err := d.db.Where("url = ?", url).First(&feed).Error
 	return &feed, err
@@ -341,8 +344,8 @@ func (d *DBHandle) unsafeGetFeedByURL(url string) (*FeedInfo, error) {
 *
  */
 
-// GetFeedItemByGuid returns a FeedItem for the given FeedInfo.Id and guid.
-func (d *DBHandle) GetFeedItemByGuid(feedID int64, guid string) (*FeedItem, error) {
+// GetFeedItemByGUID returns a FeedItem for the given FeedInfo.Id and guid.
+func (d *Handle) GetFeedItemByGUID(feedID int64, guid string) (*FeedItem, error) {
 	fi := FeedItem{}
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
@@ -350,13 +353,13 @@ func (d *DBHandle) GetFeedItemByGuid(feedID int64, guid string) (*FeedItem, erro
 	return &fi, err
 }
 
-// RecordGuid adds a FeedItem record for the given feedID and guid.
-func (d *DBHandle) RecordGuid(feedID int64, guid string) error {
+// RecordGUID adds a FeedItem record for the given feedID and guid.
+func (d *Handle) RecordGUID(feedID int64, guid string) error {
 	if d.writeUpdates {
-		glog.Infof("Adding GUID '%s' for feed %d", guid, feedID)
+		logrus.Infof("Adding GUID '%s' for feed %d", guid, feedID)
 		f := FeedItem{
 			FeedInfoID: feedID,
-			Guid:       guid,
+			GUID:       guid,
 			AddedOn:    time.Now(),
 		}
 		d.syncMutex.Lock()
@@ -367,9 +370,9 @@ func (d *DBHandle) RecordGuid(feedID int64, guid string) error {
 	return nil
 }
 
-// GetMostRecentGuidsForFeed retrieves the most recent GUIDs for a given feed
+// GetMostRecentGUIDsForFeed retrieves the most recent GUIDs for a given feed
 // up to max.  GUIDs are returned ordered with the most recent first.
-func (d *DBHandle) GetMostRecentGuidsForFeed(feedID int64, max int) ([]string, error) {
+func (d *Handle) GetMostRecentGUIDsForFeed(feedID int64, max int) ([]string, error) {
 	var items []FeedItem
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
@@ -383,10 +386,10 @@ func (d *DBHandle) GetMostRecentGuidsForFeed(feedID int64, max int) ([]string, e
 	if err == gorm.RecordNotFound {
 		err = nil
 	}
-	glog.Infof("Got last %d guids for feed_id: %d.", len(items), feedID)
+	logrus.Infof("Got last %d guids for feed_id: %d.", len(items), feedID)
 	knownGuids := make([]string, len(items))
 	for i, v := range items {
-		knownGuids[i] = v.Guid
+		knownGuids[i] = v.GUID
 	}
 	return knownGuids, err
 }
@@ -410,7 +413,7 @@ func validateUser(u *User) error {
 }
 
 // AddUser creates a User record in the database.
-func (d *DBHandle) AddUser(name string, email string, pass string) (*User, error) {
+func (d *Handle) AddUser(name string, email string, pass string) (*User, error) {
 	u := &User{
 		Name:     name,
 		Email:    email,
@@ -435,7 +438,7 @@ func (d *DBHandle) AddUser(name string, email string, pass string) (*User, error
 }
 
 //SaveUser creates or updates the given User in the database.
-func (d *DBHandle) SaveUser(u *User) error {
+func (d *Handle) SaveUser(u *User) error {
 	err := validateUser(u)
 	if err != nil {
 		return err
@@ -446,7 +449,7 @@ func (d *DBHandle) SaveUser(u *User) error {
 }
 
 // GetAllUsers returns all Users from the database.
-func (d *DBHandle) GetAllUsers() ([]User, error) {
+func (d *Handle) GetAllUsers() ([]User, error) {
 	var all []User
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
@@ -456,7 +459,7 @@ func (d *DBHandle) GetAllUsers() ([]User, error) {
 }
 
 // GetUser returns the user with the given name from the database.
-func (d *DBHandle) GetUser(name string) (*User, error) {
+func (d *Handle) GetUser(name string) (*User, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	u := &User{}
@@ -466,7 +469,7 @@ func (d *DBHandle) GetUser(name string) (*User, error) {
 }
 
 // GetUserByID returns the user with the given id from the database.
-func (d *DBHandle) GetUserByID(id int64) (*User, error) {
+func (d *Handle) GetUserByID(id int64) (*User, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	u := &User{}
@@ -476,26 +479,26 @@ func (d *DBHandle) GetUserByID(id int64) (*User, error) {
 }
 
 // GetUserByEmail returns the user with the given email from the database.
-func (d *DBHandle) GetUserByEmail(email string) (*User, error) {
+func (d *Handle) GetUserByEmail(email string) (*User, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	return d.unsafeGetUserByEmail(email)
 }
 
-func (d *DBHandle) unsafeGetUserByEmail(email string) (*User, error) {
+func (d *Handle) unsafeGetUserByEmail(email string) (*User, error) {
 	u := &User{}
 	err := d.db.Where("email = ?", email).Find(u).Error
 	return u, err
 }
 
 // RemoveUser removes the given user from the database.
-func (d *DBHandle) RemoveUser(user *User) error {
+func (d *Handle) RemoveUser(user *User) error {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	return d.unsafeRemoveUser(user)
 }
 
-func (d *DBHandle) unsafeRemoveUser(user *User) error {
+func (d *Handle) unsafeRemoveUser(user *User) error {
 
 	tx := d.db.Begin()
 	err := tx.Model(user).Association("Feeds").Clear().Error
@@ -513,7 +516,7 @@ func (d *DBHandle) unsafeRemoveUser(user *User) error {
 }
 
 // RemoveUserByEmail removes the user with the given email from the database.
-func (d *DBHandle) RemoveUserByEmail(email string) error {
+func (d *Handle) RemoveUserByEmail(email string) error {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 
@@ -528,7 +531,7 @@ func (d *DBHandle) RemoveUserByEmail(email string) error {
 // AddFeedsToUser creates a UserFeed entry between the given user and feeds.
 // This 'subscribes' the user to those feeds to they will get email updates
 // for that feed.
-func (d *DBHandle) AddFeedsToUser(u *User, feeds []*FeedInfo) error {
+func (d *Handle) AddFeedsToUser(u *User, feeds []*FeedInfo) error {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	for _, f := range feeds {
@@ -541,7 +544,7 @@ func (d *DBHandle) AddFeedsToUser(u *User, feeds []*FeedInfo) error {
 }
 
 // RemoveFeedsFromUser does the opposite of AddFeedsToUser
-func (d *DBHandle) RemoveFeedsFromUser(u *User, feeds []*FeedInfo) error {
+func (d *Handle) RemoveFeedsFromUser(u *User, feeds []*FeedInfo) error {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 
@@ -555,7 +558,7 @@ func (d *DBHandle) RemoveFeedsFromUser(u *User, feeds []*FeedInfo) error {
 }
 
 // GetUsersFeeds returns all the FeedInfos that a user is subscribed to.
-func (d *DBHandle) GetUsersFeeds(u *User) ([]FeedInfo, error) {
+func (d *Handle) GetUsersFeeds(u *User) ([]FeedInfo, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 
@@ -570,7 +573,7 @@ func (d *DBHandle) GetUsersFeeds(u *User) ([]FeedInfo, error) {
 
 // UpdateUsersFeeds replaces a users subscribed feeds with the given
 // list of feedIDs
-func (d *DBHandle) UpdateUsersFeeds(u *User, feedIDs []int64) error {
+func (d *Handle) UpdateUsersFeeds(u *User, feedIDs []int64) error {
 	feeds, err := d.GetUsersFeeds(u)
 	if err != nil {
 		return err
@@ -617,7 +620,7 @@ func (d *DBHandle) UpdateUsersFeeds(u *User, feedIDs []int64) error {
 }
 
 // GetFeedUsers returns all the users subscribed to a given feedURL
-func (d *DBHandle) GetFeedUsers(feedURL string) ([]User, error) {
+func (d *Handle) GetFeedUsers(feedURL string) ([]User, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	var all []User
@@ -648,7 +651,7 @@ type TestReporter interface {
 }
 
 // LoadFixtures adds a base set of Fixtures to the given database.
-func LoadFixtures(t TestReporter, d *DBHandle, feedHost string) ([]*FeedInfo, []*User) {
+func LoadFixtures(t TestReporter, d *Handle, feedHost string) ([]*FeedInfo, []*User) {
 	if feedHost == "" {
 		feedHost = "http://localhost"
 	}

@@ -32,13 +32,13 @@ func MakeCmdAddFeed() *flagutil.Command {
 // command line.
 type AddFeedCommand struct {
 	Config *config.Config
-	DBH    *db.DBHandle
+	DBH    *db.Handle
 }
 
 //NewAddFeedCommand returns a pointer to a newly created AddFeedCommand struct
 //with defaults set.
 func NewAddFeedCommand(cfg *config.Config) *AddFeedCommand {
-	var dbh *db.DBHandle
+	var dbh *db.Handle
 	if cfg.Db.Type == "memory" {
 		dbh = db.NewMemoryDBHandle(cfg.Db.Verbose, cfg.Db.UpdateDb)
 	} else {

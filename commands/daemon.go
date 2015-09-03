@@ -39,12 +39,12 @@ type Daemon struct {
 	RespChan  chan *feedwatcher.FeedCrawlResponse
 	MailChan  chan *mail.MailRequest
 	Feeds     map[string]*feedwatcher.FeedWatcher
-	Dbh       *db.DBHandle
+	Dbh       *db.Handle
 	PollFeeds bool
 }
 
 func NewDaemon(cfg *config.Config) *Daemon {
-	var dbh *db.DBHandle
+	var dbh *db.Handle
 	if cfg.Db.Type == "memory" {
 		dbh = db.NewMemoryDBHandle(cfg.Db.Verbose, cfg.Db.UpdateDb)
 	} else {

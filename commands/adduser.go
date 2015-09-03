@@ -32,7 +32,7 @@ func MakeCmdAddUser() *flagutil.Command {
 
 type AddUserCommand struct {
 	Config *config.Config
-	Dbh    *db.DBHandle
+	Dbh    *db.Handle
 }
 
 func runAddUser(cmd *flagutil.Command, args []string) {
@@ -56,7 +56,7 @@ func runAddUser(cmd *flagutil.Command, args []string) {
 }
 
 func NewAddUserCommand(cfg *config.Config) *AddUserCommand {
-	var dbh *db.DBHandle
+	var dbh *db.Handle
 	if cfg.Db.Type == "memory" {
 		dbh = db.NewMemoryDBHandle(cfg.Db.Verbose, cfg.Db.UpdateDb)
 	} else {
