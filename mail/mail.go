@@ -12,23 +12,24 @@ package mail
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net/mail"
-	"net/smtp"
 	"os/exec"
 	"time"
+
+	"gopkg.in/gomail.v2"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/feed"
-	"gopkg.in/gomail.v1"
 )
 
 // Default MTA binary to exec when sending mail locally.
 // sendmail is supported by sendmail and postfix
-const MTA_BINARY = "sendmail"
+const MTABINARY = "sendmail"
 
-// MailRequest defines a request for a Feed Story to be mailed to a list of email addresses
-type MailRequest struct {
+// Request defines a request for a Feed Story to be mailed to a list of email addresses
+type Request struct {
 	Item       *feed.Story
 	Addresses  []mail.Address
 	ResultChan chan error
@@ -37,7 +38,7 @@ type MailRequest struct {
 // CommandRunner is the interface for running an external command (to send mail).
 type CommandRunner interface {
 	//	Run([]byte) ([]byte, error)
-	Run(addr string, a smtp.Auth, from string, to []string, msg []byte) error
+	Run(from string, to []string, msg []byte) error
 }
 
 // SendmailRunner sends email through the sendmail binary
@@ -46,7 +47,7 @@ type SendmailRunner struct {
 }
 
 // Run sends the given byte array to sendmail over the command line.
-func (r SendmailRunner) Run(addr string, a smtp.Auth, from string, to []string, msg []byte) error {
+func (r SendmailRunner) Run(from string, to []string, msg []byte) error {
 	//func (r SendmailRunner) Run(input []byte) ([]byte, error) {
 	cmd := exec.Command(r.SendmailPath, "-t", "-i")
 	cmd.Stdin = bytes.NewReader(msg)
@@ -58,8 +59,8 @@ func (r SendmailRunner) Run(addr string, a smtp.Auth, from string, to []string, 
 	return err
 }
 
-// MailSender is the interface for something that can send mail.
-type MailSender interface {
+// Sender is the interface for something that can send mail.
+type Sender interface {
 	SendMail(*gomail.Message) error
 }
 
@@ -70,8 +71,13 @@ type LocalMTASender struct {
 
 // SendMail sends mail using a local binary
 func (sender *LocalMTASender) SendMail(msg *gomail.Message) error {
-	mailer := gomail.NewMailer("host", "user", "pwd", 465, gomail.SetSendMail(sender.Runner.Run))
-	err := mailer.Send(msg)
+	s := gomail.SendFunc(func(from string, to []string, msg io.WriterTo) error {
+		b := bytes.NewBuffer([]byte{})
+		msg.WriteTo(b)
+		return sender.Runner.Run(from, to, b.Bytes())
+	})
+
+	err := gomail.Send(s, msg)
 	if err != nil {
 		return fmt.Errorf("error running command %s", err.Error())
 	}
@@ -83,7 +89,7 @@ func (sender *LocalMTASender) SendMail(msg *gomail.Message) error {
 // defaults set.
 func NewLocalMTASender(mtaPath string) *LocalMTASender {
 	if mtaPath == "" {
-		mtaPath = MTA_BINARY
+		mtaPath = MTABINARY
 	}
 
 	c, err := exec.LookPath(mtaPath)
@@ -111,13 +117,13 @@ type SMTPSender struct {
 //
 // It does no batching or delay and just sends immediately.
 func (s *SMTPSender) SendMail(msg *gomail.Message) error {
-	mailer := gomail.NewMailer(s.Hostname, s.Username, s.Password, s.Port)
-	return mailer.Send(msg)
+	d := gomail.NewPlainDialer(s.Hostname, s.Port, s.Username, s.Password)
+	return d.DialAndSend(msg)
 }
 
 // NewSMTPSender returns a pointer to a new SMTPSender instance with
 // defaults set.
-func NewSMTPSender(server string, port int, username string, password string) MailSender {
+func NewSMTPSender(server string, port int, username string, password string) Sender {
 	return &SMTPSender{
 		Hostname: server,
 		Port:     port,
@@ -138,27 +144,27 @@ func (sender *NullMailSender) SendMail(m *gomail.Message) error {
 	return nil
 }
 
-//
-// Mail Dispatcher
-//
-
-type MailDispatcher struct {
-	OutgoingMail chan *MailRequest
+// Dispatcher listens for mail Requests and sends them to the configured Sender
+type Dispatcher struct {
+	OutgoingMail chan *Request
 	FromAddress  string
-	MailSender   MailSender
+	MailSender   Sender
 }
 
-func NewMailDispatcher(from_address string, sender MailSender) *MailDispatcher {
-	return &MailDispatcher{
-		OutgoingMail: make(chan *MailRequest),
-		FromAddress:  from_address,
+// NewDispatcher returns a newly created Dispatcher with defaults set.
+func NewDispatcher(fromAddress string, sender Sender) *Dispatcher {
+	return &Dispatcher{
+		OutgoingMail: make(chan *Request),
+		FromAddress:  fromAddress,
 		MailSender:   sender,
 	}
 }
 
-func CreateAndStartMailer(config *config.Config) *MailDispatcher {
+// CreateAndStartMailer returns a New Dispatcher with a sender cofigured from
+// the config file.
+func CreateAndStartMailer(config *config.Config) *Dispatcher {
 	// Create mail sender
-	var sender MailSender
+	var sender Sender
 
 	if !config.Mail.SendMail {
 		logrus.Info("Using null mail sender as configured.")
@@ -174,7 +180,7 @@ func CreateAndStartMailer(config *config.Config) *MailDispatcher {
 	}
 
 	// Start Mailer
-	mailer := NewMailDispatcher(
+	mailer := NewDispatcher(
 		config.Mail.FromAddress,
 		sender,
 	)
@@ -183,9 +189,11 @@ func CreateAndStartMailer(config *config.Config) *MailDispatcher {
 	return mailer
 }
 
-func CreateAndStartStubMailer() *MailDispatcher {
+// CreateAndStartStubMailer returns a Dispatcher that will send all mail to
+// null.  For testing.
+func CreateAndStartStubMailer() *Dispatcher {
 	// Start Mailer
-	mailer := NewMailDispatcher(
+	mailer := NewDispatcher(
 		"from@example.com",
 		&NullMailSender{},
 	)
@@ -193,23 +201,25 @@ func CreateAndStartStubMailer() *MailDispatcher {
 	return mailer
 }
 
-func (self *MailDispatcher) DispatchLoop() {
+// DispatchLoop start an infinite loop listening for MailRequests and handling
+// them.
+func (d *Dispatcher) DispatchLoop() {
 	for {
-		request := <-self.OutgoingMail
-		request.ResultChan <- self.handleMailRequest(request)
+		request := <-d.OutgoingMail
+		request.ResultChan <- d.handleMailRequest(request)
 	}
 }
 
-func (self *MailDispatcher) handleMailRequest(m *MailRequest) error {
-	if self.MailSender == nil {
+func (d *Dispatcher) handleMailRequest(m *Request) error {
+	if d.MailSender == nil {
 		return fmt.Errorf("no MailSender set, can not send mail")
 	}
 	if len(m.Addresses) == 0 {
 		return fmt.Errorf("no recipients for mail given")
 	}
 	for _, addr := range m.Addresses {
-		msg := CreateMailFromItem(self.FromAddress, addr, m.Item)
-		err := self.MailSender.SendMail(msg)
+		msg := CreateMailFromItem(d.FromAddress, addr, m.Item)
+		err := d.MailSender.SendMail(msg)
 		if err != nil {
 			return err
 		}
@@ -217,6 +227,7 @@ func (self *MailDispatcher) handleMailRequest(m *MailRequest) error {
 	return nil
 }
 
+// CreateMailFromItem returns a Message containing the given story.
 func CreateMailFromItem(from string, to mail.Address, item *feed.Story) *gomail.Message {
 	content := FormatMessageBody(item)
 	gmsg := gomail.NewMessage()
@@ -230,6 +241,7 @@ func CreateMailFromItem(from string, to mail.Address, item *feed.Story) *gomail.
 	return gmsg
 }
 
+// FormatMessageBody formats the Story for better reading in a mail client.
 func FormatMessageBody(story *feed.Story) string {
 	origLink := fmt.Sprintf(`
 <div class="original_link">

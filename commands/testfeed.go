@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -69,7 +70,9 @@ func testFeed(cmd *flagutil.Command, args []string) {
 		fmt.Println()
 		m := mail.CreateMailFromItem("From@Address", netmail.Address{Address: "To@Address"}, s)
 		fmt.Println("****** Mail Message *******")
-		spew.Dump(m.Export())
+		b := bytes.NewBuffer([]byte{})
+		m.WriteTo(b)
+		spew.Dump(b)
 		fmt.Println("****** ++++++++++++ *******")
 	}
 }

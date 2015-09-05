@@ -6,12 +6,13 @@ import (
 	"testing"
 	"time"
 
+	"gopkg.in/gomail.v2"
+
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed"
 	"github.com/hobeone/rss2go/log"
 	"github.com/hobeone/rss2go/mail"
 	. "github.com/onsi/gomega"
-	"gopkg.in/gomail.v1"
 )
 
 type FailMailer struct{}
@@ -39,7 +40,7 @@ func OverrideAfter(fw *FeedWatcher) {
 	}
 }
 
-func SetupTest(t *testing.T, feedPath string) (*FeedWatcher, []byte, *mail.MailDispatcher) {
+func SetupTest(t *testing.T, feedPath string) (*FeedWatcher, []byte, *mail.Dispatcher) {
 	log.SetNullOutput()
 	crawlChan := make(chan *FeedCrawlRequest)
 	responseChan := make(chan *FeedCrawlResponse)
@@ -141,7 +142,7 @@ func TestFeedWatcherWithEmailErrors(t *testing.T) {
 	n, feedResp, _ := SetupTest(t, "../testdata/bicycling_rss.xml")
 	OverrideAfter(n)
 
-	mailer := mail.NewMailDispatcher(
+	mailer := mail.NewDispatcher(
 		"from@example.com",
 		&FailMailer{},
 	)

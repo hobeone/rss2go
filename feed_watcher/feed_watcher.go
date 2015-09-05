@@ -65,7 +65,7 @@ type FeedWatcher struct {
 	exitChan          chan int
 	crawlChan         chan *FeedCrawlRequest
 	responseChan      chan *FeedCrawlResponse
-	mailerChan        chan *mail.MailRequest
+	mailerChan        chan *mail.Request
 	polling           bool // make sure only one PollFeed at a time
 	crawling          bool // make sure only one crawl outstanding at a time
 	minSleepTime      time.Duration
@@ -81,7 +81,7 @@ func NewFeedWatcher(
 	feedInfo db.FeedInfo,
 	crawlChan chan *FeedCrawlRequest,
 	responseChan chan *FeedCrawlResponse,
-	mailChan chan *mail.MailRequest,
+	mailChan chan *mail.Request,
 	dbh db.Service,
 	knownGUIDs []string,
 	minSleep int64,
@@ -348,7 +348,7 @@ func (fw *FeedWatcher) sendMail(item *feed.Story) error {
 	for i, u := range users {
 		sendTo[i] = netmail.Address{Address: u.Email}
 	}
-	req := &mail.MailRequest{
+	req := &mail.Request{
 		Item:       item,
 		Addresses:  sendTo,
 		ResultChan: make(chan error),

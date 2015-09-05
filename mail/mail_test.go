@@ -3,14 +3,14 @@ package mail
 import (
 	"fmt"
 	"net/mail"
-	"net/smtp"
 	"os"
 	"os/exec"
 	"testing"
 
+	"gopkg.in/gomail.v2"
+
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed"
-	"gopkg.in/gomail.v1"
 )
 
 type MockedMailer struct {
@@ -23,8 +23,8 @@ func (m *MockedMailer) SendMail(msg *gomail.Message) error {
 }
 
 func TestSendToUsersWithNoMailSender(t *testing.T) {
-	mr := &MailRequest{}
-	md := &MailDispatcher{}
+	mr := &Request{}
+	md := &Dispatcher{}
 	err := md.handleMailRequest(mr)
 
 	if err == nil {
@@ -37,7 +37,7 @@ func TestSendToUsers(t *testing.T) {
 	feeds, users := db.LoadFixtures(t, dbh, "http://localhost")
 
 	mm := &MockedMailer{}
-	md := NewMailDispatcher(
+	md := NewDispatcher(
 		"recipient@test.com",
 		mm,
 	)
@@ -48,7 +48,7 @@ func TestSendToUsers(t *testing.T) {
 	s := &feed.Story{
 		Feed: f,
 	}
-	mr := MailRequest{
+	mr := Request{
 		Item: s,
 		Addresses: []mail.Address{
 			{Address: users[0].Email},
@@ -68,7 +68,7 @@ type TestCommandRunner struct {
 	TestToRun string
 }
 
-func (r TestCommandRunner) Run(addr string, a smtp.Auth, from string, to []string, msg []byte) error {
+func (r TestCommandRunner) Run(from string, to []string, msg []byte) error {
 	cs := []string{fmt.Sprintf("-test.run=%s", r.TestToRun), "--"}
 	cs = append(cs)
 	cmd := exec.Command(os.Args[0], cs...)

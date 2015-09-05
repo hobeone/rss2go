@@ -42,7 +42,7 @@ type Daemon struct {
 	Config    *config.Config
 	CrawlChan chan *feedwatcher.FeedCrawlRequest
 	RespChan  chan *feedwatcher.FeedCrawlResponse
-	MailChan  chan *mail.MailRequest
+	MailChan  chan *mail.Request
 	Feeds     map[string]*feedwatcher.FeedWatcher
 	Dbh       *db.Handle
 	PollFeeds bool
