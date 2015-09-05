@@ -33,7 +33,7 @@ func MakeCmdDaemon() *flagutil.Command {
 	cmd.Flag.Bool("poll_feeds", true, "Poll the feeds (Disable for testing).")
 	cmd.Flag.Bool("verbose", false, "Log debug information.")
 
-	cmd.Flag.String("config_file", default_config, "Config file to use.")
+	cmd.Flag.String("config_file", defaultConfig, "Config file to use.")
 	return cmd
 }
 

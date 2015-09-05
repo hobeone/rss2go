@@ -27,7 +27,7 @@ func MakeCmdRemoveUser() *flagutil.Command {
 		`,
 		Flag: *flag.NewFlagSet("removeuser", flag.ExitOnError),
 	}
-	cmd.Flag.String("config_file", default_config, "Config file to use.")
+	cmd.Flag.String("config_file", defaultConfig, "Config file to use.")
 
 	return cmd
 }

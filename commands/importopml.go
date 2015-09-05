@@ -35,7 +35,7 @@ func MakeCmdImportOpml() *flagutil.Command {
 	}
 	cmd.Flag.Bool("update_feeds", false,
 		"Get the current feed contents and add them to the database.")
-	cmd.Flag.String("config_file", default_config, "Config file to use.")
+	cmd.Flag.String("config_file", defaultConfig, "Config file to use.")
 	return cmd
 }
 

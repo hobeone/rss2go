@@ -22,7 +22,7 @@ removefeed --purge_feed=false http://test/feed.rss http://test/other.rss
 		`,
 		Flag: *flag.NewFlagSet("removefeed", flag.ExitOnError),
 	}
-	cmd.Flag.String("config_file", default_config, "Config file to use.")
+	cmd.Flag.String("config_file", defaultConfig, "Config file to use.")
 
 	return cmd
 }

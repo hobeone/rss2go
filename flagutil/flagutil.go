@@ -157,9 +157,6 @@ Available commands are:
 {{range .Commands}}{{if .Runnable}}
     {{.Name | printf "%-11s"}} {{.Short}}{{end}}{{end}}
 
-Global Flags:
-{{printGlobalFlags}}
-
 Use "{{program}} help [command]" for more information about a command.
 {{if hasExtraTopic .Commands}}
 Additional help topics:
@@ -176,9 +173,6 @@ var helpTemplate = `{{if .Runnable}}Usage: {{program}} {{.UsageLine}}
 {{if hasFlags .Flag}}
 The flags are:
 {{printDefaults .Flag}}{{end}}
-
-Global Flags:
-{{printGlobalFlags}}
 
 `
 

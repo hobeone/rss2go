@@ -9,7 +9,7 @@ import (
 	"github.com/hobeone/rss2go/config"
 )
 
-const default_config = "~/.config/rss2go/config.json"
+const defaultConfig = "~/.config/rss2go/config.json"
 
 // PrintErrorAndEdit prints out the given string to SRDERR and exits
 var PrintErrorAndExit = func(err_string string) {
@@ -20,8 +20,8 @@ var PrintErrorAndExit = func(err_string string) {
 func loadConfig(configFile string) *config.Config {
 	if len(configFile) == 0 {
 		logrus.Infof("No --config_file given.  Using default: %s\n",
-			default_config)
-		configFile = default_config
+			defaultConfig)
+		configFile = defaultConfig
 	}
 
 	logrus.Infof("Got config file: %s\n", configFile)
