@@ -1,28 +1,25 @@
 package commands
 
 import (
-	"flag"
 	"fmt"
 
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
-	"github.com/hobeone/rss2go/flagutil"
+	"github.com/spf13/cobra"
 )
 
-func MakeCmdSubscribeUser() *flagutil.Command {
-	cmd := &flagutil.Command{
-		Run:       runSubscribeUser,
-		UsageLine: "subscribe email@address http://feed_url",
-		Short:     "Subscribe a User to Feed(s)",
+func MakeCmdSubscribeUser() *cobra.Command {
+	cmd := &cobra.Command{
+		Run:   runSubscribeUser,
+		Use:   "subscribe email@address http://feed_url",
+		Short: "Subscribe a User to Feed(s)",
 		Long: `
 		Subscribes a user to feeds.  The feed must already exist in the database
 
 		Example:
 		subscribeuser email@address http://feed/url.rss ....
 		`,
-		Flag: *flag.NewFlagSet("subscribeuser", flag.ExitOnError),
 	}
-	cmd.Flag.String("config_file", defaultConfig, "Config file to use.")
 
 	return cmd
 }
@@ -31,14 +28,14 @@ type SubscribeUserCommand struct {
 	Dbh *db.Handle
 }
 
-func runSubscribeUser(cmd *flagutil.Command, args []string) {
+func runSubscribeUser(cmd *cobra.Command, args []string) {
 	if len(args) < 2 {
 		PrintErrorAndExit("Must give an email address and a feed url")
 	}
 	user_email := args[0]
 	feed_urls := args[1:]
 
-	cfg := loadConfig(cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
+	cfg := loadConfig(ConfigFile)
 
 	su := NewSubscribeUserCommand(cfg)
 	su.SubscribeUser(user_email, feed_urls)

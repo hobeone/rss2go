@@ -1,11 +1,11 @@
 package commands
 
 import (
-	"flag"
 	"fmt"
+
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
-	"github.com/hobeone/rss2go/flagutil"
+	"github.com/spf13/cobra"
 )
 
 type ListUsersCommand struct {
@@ -13,23 +13,20 @@ type ListUsersCommand struct {
 	Dbh    *db.Handle
 }
 
-func MakeCmdListUsers() *flagutil.Command {
-	cmd := &flagutil.Command{
-		Run:       runListUsers,
-		UsageLine: "listusers",
-		Short:     "List all users in rss2go",
+func MakeCmdListUsers() *cobra.Command {
+	cmd := &cobra.Command{
+		Run:   runListUsers,
+		Use:   "listusers",
+		Short: "List all users in rss2go",
 		Long: `
 		Lists all the users in the database.
 		`,
-		Flag: *flag.NewFlagSet("listusers", flag.ExitOnError),
 	}
-	cmd.Flag.String("config_file", defaultConfig, "Config file to use.")
-
 	return cmd
 }
 
-func runListUsers(cmd *flagutil.Command, args []string) {
-	cfg := loadConfig(cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
+func runListUsers(cmd *cobra.Command, args []string) {
+	cfg := loadConfig(ConfigFile)
 	lu := NewListUsersCommand(cfg)
 	lu.ListUsers()
 }

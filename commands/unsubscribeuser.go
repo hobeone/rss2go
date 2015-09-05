@@ -1,28 +1,25 @@
 package commands
 
 import (
-	"flag"
 	"fmt"
+
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
-	"github.com/hobeone/rss2go/flagutil"
+	"github.com/spf13/cobra"
 )
 
-func MakeCmdUnsubscribeUser() *flagutil.Command {
-	cmd := &flagutil.Command{
-		Run:       runUnsubscribeUser,
-		UsageLine: "unsubscribe email@address http://feed_url",
-		Short:     "unsubscribe a User to Feed(s)",
+func MakeCmdUnsubscribeUser() *cobra.Command {
+	cmd := &cobra.Command{
+		Run:   runUnsubscribeUser,
+		Use:   "unsubscribe email@address http://feed_url",
+		Short: "unsubscribe a User to Feed(s)",
 		Long: `
 		Unsubscribes a user to feeds.  The feed must already exist in the database
 
 		Example:
 		unsubscribeuser email@address http://feed/url.rss ....
 		`,
-		Flag: *flag.NewFlagSet("unsubscribeuser", flag.ExitOnError),
 	}
-	cmd.Flag.String("config_file", defaultConfig, "Config file to use.")
-
 	return cmd
 }
 
@@ -31,14 +28,14 @@ type UnsubscribeUserCommand struct {
 	Dbh    *db.Handle
 }
 
-func runUnsubscribeUser(cmd *flagutil.Command, args []string) {
+func runUnsubscribeUser(cmd *cobra.Command, args []string) {
 	if len(args) < 2 {
 		PrintErrorAndExit("Must give an email address and a feed url")
 	}
 	userEmail := args[0]
 	feedURLs := args[1:]
 
-	cfg := loadConfig(cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
+	cfg := loadConfig(ConfigFile)
 
 	su := NewUnsubscribeUserCommand(cfg)
 	su.UnsubscribeUser(userEmail, feedURLs)

@@ -2,14 +2,13 @@ package commands
 
 import (
 	"encoding/xml"
-	"flag"
 	"fmt"
 	"io/ioutil"
 
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
-	"github.com/hobeone/rss2go/flagutil"
 	"github.com/hobeone/rss2go/opml"
+	"github.com/spf13/cobra"
 )
 
 // ExportOPMLCommand encapsulates the functionality for exporting a users feeds
@@ -78,31 +77,29 @@ func (exporter *exportOPMLCommand) ExportOPML(userName, fileName string) {
 
 // MakeCmdExportOPML returns a Command that will export a users feeds to an
 // OPML file.
-func MakeCmdExportOPML() *flagutil.Command {
-	cmd := &flagutil.Command{
-		Run:       runExportOPML,
-		UsageLine: "exportopml user@email opmlfile",
-		Short:     "Export all feeds from an opml file.",
+func MakeCmdExportOPML() *cobra.Command {
+	cmd := &cobra.Command{
+		Run:   runExportOPML,
+		Use:   "exportopml user@email opmlfile",
+		Short: "Export all feeds from an opml file.",
 		Long: `
 		Export all a users feeds from a given OPML file.
 
 		Example:
 		exportopml user@email feeds.opml
 		`,
-		Flag: *flag.NewFlagSet("exportopml", flag.ExitOnError),
 	}
-	cmd.Flag.String("config_file", defaultConfig, "Config file to use.")
 	return cmd
 }
 
-func runExportOPML(cmd *flagutil.Command, args []string) {
+func runExportOPML(cmd *cobra.Command, args []string) {
 	if len(args) < 2 {
 		PrintErrorAndExit("Must give username and filename")
 	}
 	userName := args[0]
 	fileName := args[1]
 
-	cfg := loadConfig(cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
+	cfg := loadConfig(ConfigFile)
 	expCommand := newExportOPMLCommand(cfg)
 	expCommand.ExportOPML(userName, fileName)
 }

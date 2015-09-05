@@ -3,7 +3,6 @@ package commands
 import (
 	"bytes"
 	"encoding/xml"
-	"flag"
 	"fmt"
 	"io/ioutil"
 	"sync"
@@ -12,18 +11,22 @@ import (
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
-	"github.com/hobeone/rss2go/flagutil"
 	"github.com/hobeone/rss2go/mail"
 	"github.com/hobeone/rss2go/opml"
 	"github.com/mattn/go-sqlite3"
+	"github.com/spf13/cobra"
 	"golang.org/x/net/html/charset"
 )
 
-func MakeCmdImportOpml() *flagutil.Command {
-	cmd := &flagutil.Command{
-		Run:       importOPML,
-		UsageLine: "importopml opmlfile",
-		Short:     "Import all feeds from an opml file.",
+// Flag that controlls if the feeds from the OPML file are polled and updated
+// when added.
+var UpdateFeeds bool
+
+func MakeCmdImportOpml() *cobra.Command {
+	cmd := &cobra.Command{
+		Run:   importOPML,
+		Use:   "importopml opmlfile",
+		Short: "Import all feeds from an opml file.",
 		Long: `
 		Import all feeds from a given OPML file and optionally poll them to add existing
 		items to the list of known items.
@@ -31,22 +34,17 @@ func MakeCmdImportOpml() *flagutil.Command {
 		Example:
 		importopml --update_feeds feeds.opml
 		`,
-		Flag: *flag.NewFlagSet("importopml", flag.ExitOnError),
 	}
-	cmd.Flag.Bool("update_feeds", false,
-		"Get the current feed contents and add them to the database.")
-	cmd.Flag.String("config_file", defaultConfig, "Config file to use.")
+	cmd.Flags().BoolVarP(&UpdateFeeds, "update_feeds", "u", false, "poll and update feeds when adding them")
 	return cmd
 }
 
-func importOPML(cmd *flagutil.Command, args []string) {
+func importOPML(cmd *cobra.Command, args []string) {
 	if len(args) < 1 {
 		PrintErrorAndExit("Must supply filename to import.")
 	}
-	opml_file := args[0]
-
-	update_feeds := cmd.Flag.Lookup("update_feeds").Value.(flag.Getter).Get().(bool)
-	cfg := loadConfig(cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
+	opmlFile := args[0]
+	cfg := loadConfig(ConfigFile)
 
 	// Override config settings
 	cfg.Mail.SendMail = false
@@ -55,7 +53,7 @@ func importOPML(cmd *flagutil.Command, args []string) {
 	mailer := mail.CreateAndStartStubMailer()
 	dbh := db.NewDBHandle(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 
-	fr, err := ioutil.ReadFile(opml_file)
+	fr, err := ioutil.ReadFile(opmlFile)
 	if err != nil {
 		logrus.Fatalf("Error reading OPML file: %s", err.Error())
 	}
@@ -80,7 +78,7 @@ func importOPML(cmd *flagutil.Command, args []string) {
 	}
 	proc(o.Outline)
 
-	new_feeds := []*db.FeedInfo{}
+	newFeeds := []*db.FeedInfo{}
 	for k, v := range feeds {
 		feed, err := dbh.AddFeed(v, k)
 		if err != nil {
@@ -92,16 +90,16 @@ func importOPML(cmd *flagutil.Command, args []string) {
 				PrintErrorAndExit(err.Error())
 			}
 		}
-		new_feeds = append(new_feeds, feed)
+		newFeeds = append(newFeeds, feed)
 		fmt.Printf("Added feed \"%s\" at url \"%s\"\n", v, k)
 	}
-	if len(new_feeds) > 0 && update_feeds {
+	if len(newFeeds) > 0 && UpdateFeeds {
 		httpCrawlChannel := make(chan *feedwatcher.FeedCrawlRequest, 1)
 		responseChannel := make(chan *feedwatcher.FeedCrawlResponse)
 		crawler.StartCrawlerPool(cfg.Crawl.MaxCrawlers, httpCrawlChannel)
 
 		wg := sync.WaitGroup{}
-		for _, feed := range new_feeds {
+		for _, feed := range newFeeds {
 			guids, err := dbh.GetMostRecentGUIDsForFeed(feed.ID, -1)
 			if err != nil {
 				PrintErrorAndExit(err.Error())

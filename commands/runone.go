@@ -1,21 +1,23 @@
 package commands
 
 import (
-	"flag"
 	"time"
 
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
-	"github.com/hobeone/rss2go/flagutil"
 	"github.com/hobeone/rss2go/mail"
+	"github.com/spf13/cobra"
 )
 
-func MakeCmdRunOne() *flagutil.Command {
-	cmd := &flagutil.Command{
-		Run:       runOne,
-		UsageLine: "runone",
-		Short:     "Crawl a feed and mail new items.",
+// Controlls how many times to poll a feed.
+var LoopsToRun int
+
+func MakeCmdRunOne() *cobra.Command {
+	cmd := &cobra.Command{
+		Run:   runOne,
+		Use:   "runone",
+		Short: "Crawl a feed and mail new items.",
 		Long: `
 		Crawls a known feed from the database, finds new items, mails them and then
 		exits.
@@ -23,31 +25,23 @@ func MakeCmdRunOne() *flagutil.Command {
 		Example:
 		runone --db_updates=false http://test/feed.rss
 		`,
-		Flag: *flag.NewFlagSet("runone", flag.ExitOnError),
 	}
-	cmd.Flag.Bool("send_mail", true, "Actually send mail or not.")
-	cmd.Flag.Bool("db_updates", true, "Don't actually update feed info in the db.")
-	cmd.Flag.String("config_file", "", "Config file to use.")
-	cmd.Flag.Int("loops", 1, "Number of times to pool this feed. -1 == forever.")
+	cmd.Flags().IntVarP(&LoopsToRun, "loops", "l", 1, "Number of times to pool this feed. -1 == forever.")
 
 	return cmd
 }
 
-func runOne(cmd *flagutil.Command, args []string) {
+func runOne(cmd *cobra.Command, args []string) {
 	if len(args) < 1 {
 		PrintErrorAndExit("No url given to crawl")
 	}
 	feedURL := args[0]
 
-	sendMail := cmd.Flag.Lookup("send_mail").Value.(flag.Getter).Get().(bool)
-	updateDb := cmd.Flag.Lookup("db_updates").Value.(flag.Getter).Get().(bool)
-	loops := cmd.Flag.Lookup("loops").Value.(flag.Getter).Get().(int)
-
-	cfg := loadConfig(cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
+	cfg := loadConfig(ConfigFile)
 
 	// Override config settings from flags:
-	cfg.Mail.SendMail = sendMail
-	cfg.Db.UpdateDb = updateDb
+	cfg.Mail.SendMail = SendMail
+	cfg.Db.UpdateDb = DBUpdates
 	dbh := db.NewDBHandle(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 
 	mailer := mail.CreateAndStartMailer(cfg)
@@ -75,17 +69,17 @@ func runOne(cmd *flagutil.Command, args []string) {
 	)
 	feeds := make(map[string]*feedwatcher.FeedWatcher)
 	feeds[fw.FeedInfo.URL] = fw
-	if loops == -1 {
+	if LoopsToRun == -1 {
 		for {
 			resp := fw.CrawlFeed()
 			fw.UpdateFeed(resp)
 			time.Sleep(time.Second * time.Duration(cfg.Crawl.MinInterval))
 		}
-	} else if loops == 1 {
+	} else if LoopsToRun == 1 {
 		resp := fw.CrawlFeed()
 		fw.UpdateFeed(resp)
 	} else {
-		for i := 0; i < loops; i++ {
+		for i := 0; i < LoopsToRun; i++ {
 			resp := fw.CrawlFeed()
 			fw.UpdateFeed(resp)
 			time.Sleep(time.Second * time.Duration(cfg.Crawl.MinInterval))

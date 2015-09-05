@@ -1,19 +1,18 @@
 package commands
 
 import (
-	"flag"
 	"fmt"
 
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
-	"github.com/hobeone/rss2go/flagutil"
+	"github.com/spf13/cobra"
 )
 
-func MakeCmdAddUser() *flagutil.Command {
-	cmd := &flagutil.Command{
-		Run:       runAddUser,
-		UsageLine: "adduser username email@address",
-		Short:     "Add a user to rss2go",
+func MakeCmdAddUser() *cobra.Command {
+	cmd := &cobra.Command{
+		Run:   runAddUser,
+		Use:   "adduser username email@address",
+		Short: "Add a user to rss2go",
 		Long: `
 		Adds a new user to the database and optionally subscribes them to the
 		given	feeds.
@@ -23,10 +22,7 @@ func MakeCmdAddUser() *flagutil.Command {
 		-or-
 		adduser username email@address password http://feed/url ....
 		`,
-		Flag: *flag.NewFlagSet("adduser", flag.ExitOnError),
 	}
-	cmd.Flag.String("config_file", defaultConfig, "Config file to use.")
-
 	return cmd
 }
 
@@ -35,24 +31,24 @@ type AddUserCommand struct {
 	Dbh    *db.Handle
 }
 
-func runAddUser(cmd *flagutil.Command, args []string) {
+func runAddUser(cmd *cobra.Command, args []string) {
 	if len(args) < 3 {
 		PrintErrorAndExit("Must give: username email@address and_a_password")
 	}
-	user_name := args[0]
-	user_email := args[1]
+	userName := args[0]
+	userEmail := args[1]
 	pass := args[1]
 	var feeds []string
 	if len(args) > 3 {
 		feeds = args[3:]
 	}
 
-	cfg := loadConfig(cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
+	cfg := loadConfig(ConfigFile)
 	cfg.Mail.SendMail = false
 	cfg.Db.UpdateDb = true
 
 	a := NewAddUserCommand(cfg)
-	a.AddUser(user_name, user_email, pass, feeds)
+	a.AddUser(userName, userEmail, pass, feeds)
 }
 
 func NewAddUserCommand(cfg *config.Config) *AddUserCommand {
@@ -69,24 +65,24 @@ func NewAddUserCommand(cfg *config.Config) *AddUserCommand {
 	}
 }
 
-func (self *AddUserCommand) AddUser(name string, email string, pass string, feed_urls []string) {
-	user, err := self.Dbh.AddUser(name, email, pass)
+func (cmd *AddUserCommand) AddUser(name string, email string, pass string, feedURLs []string) {
+	user, err := cmd.Dbh.AddUser(name, email, pass)
 	if err != nil {
 		PrintErrorAndExit(err.Error())
 	}
 	fmt.Printf("Added user %s <%s>.\n", name, email)
 
 	// Add given feeds to user
-	if len(feed_urls) > 0 {
-		feeds := make([]*db.FeedInfo, len(feed_urls))
-		for i, feed_url := range feed_urls {
-			f, err := self.Dbh.GetFeedByURL(feed_url)
+	if len(feedURLs) > 0 {
+		feeds := make([]*db.FeedInfo, len(feedURLs))
+		for i, feedURL := range feedURLs {
+			f, err := cmd.Dbh.GetFeedByURL(feedURL)
 			if err != nil {
-				PrintErrorAndExit(fmt.Sprintf("Feed %s doesn't exist in db, add it first.", feed_url))
+				PrintErrorAndExit(fmt.Sprintf("Feed %s doesn't exist in db, add it first.", feedURL))
 			}
 			feeds[i] = f
 		}
-		err = self.Dbh.AddFeedsToUser(user, feeds)
+		err = cmd.Dbh.AddFeedsToUser(user, feeds)
 		if err != nil {
 			PrintErrorAndExit(fmt.Sprintf("Error adding feeds to user: %s", err))
 		}

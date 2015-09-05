@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"flag"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -9,7 +8,7 @@ import (
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
-	"github.com/hobeone/rss2go/flagutil"
+	"github.com/spf13/cobra"
 	//set log defaults
 	_ "github.com/hobeone/rss2go/log"
 	"github.com/hobeone/rss2go/mail"
@@ -17,23 +16,19 @@ import (
 )
 
 // MakeCmdDaemon returns a command struct ready to be called.
-func MakeCmdDaemon() *flagutil.Command {
-	cmd := &flagutil.Command{
-		Run:       runDaemon,
-		UsageLine: "daemon",
-		Short:     "Start a daemon to collect feeds and mail items.",
+func MakeCmdDaemon() *cobra.Command {
+	cmd := &cobra.Command{
+		Run:   runDaemon,
+		Use:   "daemon",
+		Short: "Start a daemon to collect feeds and mail items.",
 		Long: `
 		Starts up as a daemon and will watch feeds and send new items to the configured
 		mail address.
 		`,
-		Flag: *flag.NewFlagSet("daemon", flag.ExitOnError),
 	}
-	cmd.Flag.Bool("send_mail", true, "Actually send mail or not.")
-	cmd.Flag.Bool("db_updates", true, "Don't actually update feed info in the db.")
-	cmd.Flag.Bool("poll_feeds", true, "Poll the feeds (Disable for testing).")
-	cmd.Flag.Bool("verbose", false, "Log debug information.")
-
-	cmd.Flag.String("config_file", defaultConfig, "Config file to use.")
+	cmd.Flags().BoolVar(&SendMail, "send_mail", true, "Actually send mail or not.")
+	cmd.Flags().BoolVar(&DBUpdates, "db_updates", true, "Don't actually update feed info in the db.")
+	cmd.Flags().BoolVar(&PollFeeds, "poll_feeds", true, "Poll the feeds (Disable for testing).")
 	return cmd
 }
 
@@ -144,27 +139,21 @@ func (d *Daemon) CreateAndStartFeedWatchers(feeds []db.FeedInfo) {
 	d.startPollers(feeds)
 }
 
-func runDaemon(cmd *flagutil.Command, args []string) {
-	sendMail := cmd.Flag.Lookup("send_mail").Value.(flag.Getter).Get().(bool)
-	updateDB := cmd.Flag.Lookup("db_updates").Value.(flag.Getter).Get().(bool)
-	pollFeeds := cmd.Flag.Lookup("poll_feeds").Value.(flag.Getter).Get().(bool)
-	logVerbose := cmd.Flag.Lookup("verbose").Value.(flag.Getter).Get().(bool)
-
-	if logVerbose {
+func runDaemon(cmd *cobra.Command, args []string) {
+	if Verbose {
 		logrus.SetLevel(logrus.DebugLevel)
 	} else {
 		logrus.SetLevel(logrus.WarnLevel)
 	}
 
-	cfg := loadConfig(
-		cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
+	cfg := loadConfig(ConfigFile)
 
 	// Override config settings from flags:
-	cfg.Mail.SendMail = sendMail
-	cfg.Db.UpdateDb = updateDB
+	cfg.Mail.SendMail = SendMail
+	cfg.Db.UpdateDb = DBUpdates
 
 	d := NewDaemon(cfg)
-	d.PollFeeds = pollFeeds
+	d.PollFeeds = PollFeeds
 
 	allFeeds, err := d.Dbh.GetAllFeeds()
 

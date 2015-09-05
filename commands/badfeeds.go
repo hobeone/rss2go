@@ -1,33 +1,29 @@
 package commands
 
 import (
-	"flag"
 	"fmt"
 
 	"github.com/hobeone/rss2go/db"
-	"github.com/hobeone/rss2go/flagutil"
+	"github.com/spf13/cobra"
 )
 
-func MakeCmdBadFeeds() *flagutil.Command {
-	cmd := &flagutil.Command{
-		Run:       badFeeds,
-		UsageLine: "badfeeds",
-		Short:     "List all feeds with problems in the database.",
+func MakeCmdBadFeeds() *cobra.Command {
+	cmd := &cobra.Command{
+		Run:   badFeeds,
+		Use:   "badfeeds",
+		Short: "List all feeds with problems in the database.",
 		Long: `
 		List all the feeds in the database that have problems.
 
 		* Feeds that got an error on their last poll.
 		* Feed who haven't had new content in more than 30 days.
 		`,
-		Flag: *flag.NewFlagSet("badfeeds", flag.ExitOnError),
 	}
-	cmd.Flag.String("config_file", defaultConfig, "Config file to use.")
 	return cmd
 }
 
-func badFeeds(cmd *flagutil.Command, args []string) {
-	cfg := loadConfig(
-		cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
+func badFeeds(cmd *cobra.Command, args []string) {
+	cfg := loadConfig(ConfigFile)
 	db := db.NewDBHandle(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
 
 	feeds, err := db.GetFeedsWithErrors()
@@ -55,5 +51,4 @@ func badFeeds(cmd *flagutil.Command, args []string) {
 		fmt.Printf("  Last Update: %s\n", f.LastPollTime)
 		fmt.Println()
 	}
-
 }

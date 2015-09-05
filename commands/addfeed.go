@@ -1,30 +1,26 @@
 package commands
 
 import (
-	"flag"
 	"fmt"
 
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
-	"github.com/hobeone/rss2go/flagutil"
+	"github.com/spf13/cobra"
 )
 
 // MakeCmdAddFeed defines the addfeed command line mode
-func MakeCmdAddFeed() *flagutil.Command {
-	cmd := &flagutil.Command{
-		Run:       runAddFeed,
-		UsageLine: "addfeed FeedName FeedUrl [user email]....",
-		Short:     "Add a feed to the database. Optionally subscribing the given emails to it.",
+func MakeCmdAddFeed() *cobra.Command {
+	cmd := &cobra.Command{
+		Run:   runAddFeed,
+		Use:   "addfeed FeedName FeedUrl [user email]....",
+		Short: "Add a feed to the database. Optionally subscribing the given emails to it.",
 		Long: `
 		Add a feed URL to the database and optionally subscribe a list of existing users to it.
 
 		Example:
 		addfeed TestFeed http://test/feed.rss
 		`,
-		Flag: *flag.NewFlagSet("addfeed", flag.ExitOnError),
 	}
-	cmd.Flag.String("config_file", defaultConfig, "Config file to use.")
-
 	return cmd
 }
 
@@ -70,7 +66,7 @@ func (adder *AddFeedCommand) AddFeed(feedName, feedURL string, userEmails []stri
 	}
 }
 
-func runAddFeed(cmd *flagutil.Command, args []string) {
+func runAddFeed(cmd *cobra.Command, args []string) {
 	if len(args) < 2 {
 		PrintErrorAndExit("Must supply feed name and url")
 	}
@@ -79,7 +75,7 @@ func runAddFeed(cmd *flagutil.Command, args []string) {
 	feedURL := args[1]
 	userEmails := args[2:]
 
-	cfg := loadConfig(cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
+	cfg := loadConfig(ConfigFile)
 
 	af := NewAddFeedCommand(cfg)
 	af.AddFeed(feedName, feedURL, userEmails)

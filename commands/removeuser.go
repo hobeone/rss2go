@@ -1,11 +1,11 @@
 package commands
 
 import (
-	"flag"
 	"fmt"
+
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
-	"github.com/hobeone/rss2go/flagutil"
+	"github.com/spf13/cobra"
 )
 
 type RemoveUserCommand struct {
@@ -13,11 +13,11 @@ type RemoveUserCommand struct {
 	Dbh    *db.Handle
 }
 
-func MakeCmdRemoveUser() *flagutil.Command {
-	cmd := &flagutil.Command{
-		Run:       runRemoveUser,
-		UsageLine: "removeuser email@address",
-		Short:     "Remove a user from rss2go",
+func MakeCmdRemoveUser() *cobra.Command {
+	cmd := &cobra.Command{
+		Run:   runRemoveUser,
+		Use:   "removeuser email@address",
+		Short: "Remove a user from rss2go",
 		Long: `
 		Removes a user from the database including their subscriptions.
 
@@ -25,22 +25,19 @@ func MakeCmdRemoveUser() *flagutil.Command {
 
 		removeuser email@address
 		`,
-		Flag: *flag.NewFlagSet("removeuser", flag.ExitOnError),
 	}
-	cmd.Flag.String("config_file", defaultConfig, "Config file to use.")
-
 	return cmd
 }
 
-func runRemoveUser(cmd *flagutil.Command, args []string) {
+func runRemoveUser(cmd *cobra.Command, args []string) {
 	if len(args) < 1 {
 		PrintErrorAndExit("Must give an email address to remove")
 	}
-	user_email := args[0]
+	userEmail := args[0]
 
-	cfg := loadConfig(cmd.Flag.Lookup("config_file").Value.(flag.Getter).Get().(string))
+	cfg := loadConfig(ConfigFile)
 	ru := NewRemoveUserCommand(cfg)
-	ru.RemoveUser(user_email)
+	ru.RemoveUser(userEmail)
 }
 
 func NewRemoveUserCommand(cfg *config.Config) *RemoveUserCommand {

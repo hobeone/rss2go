@@ -2,7 +2,6 @@ package commands
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
 	"io/ioutil"
 	netmail "net/mail"
@@ -10,15 +9,15 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/feed"
-	"github.com/hobeone/rss2go/flagutil"
 	"github.com/hobeone/rss2go/mail"
+	"github.com/spf13/cobra"
 )
 
-func MakeCmdTestFeed() *flagutil.Command {
-	cmd := &flagutil.Command{
-		Run:       testFeed,
-		UsageLine: "testfeed",
-		Short:     "Crawl and try to parse a feed from the command line.",
+func MakeCmdTestFeed() *cobra.Command {
+	cmd := &cobra.Command{
+		Run:   testFeed,
+		Use:   "testfeed",
+		Short: "Crawl and try to parse a feed from the command line.",
 		Long: `
 		Test crawl and parse one feed.  Doesn't need to exist in the database.
 
@@ -26,13 +25,12 @@ func MakeCmdTestFeed() *flagutil.Command {
 
 		test_feed http://test/feed.rss
 		`,
-		Flag: *flag.NewFlagSet("testfeed", flag.ExitOnError),
 	}
 
 	return cmd
 }
 
-func testFeed(cmd *flagutil.Command, args []string) {
+func testFeed(cmd *cobra.Command, args []string) {
 	if len(args) < 1 {
 		PrintErrorAndExit("Need to provide a url to crawl.\n")
 	}
