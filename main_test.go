@@ -47,6 +47,10 @@ func TestEndToEndIntegration(t *testing.T) {
 
 	d := commands.NewDaemon(cfg)
 	d.Dbh = db.NewMemoryDBHandle(false, true)
+	err := d.Dbh.Migrate("db/migrations/sqlite3")
+	if err != nil {
+		t.Fatalf("Error loading migrations: %s", err)
+	}
 	db.LoadFixtures(t, d.Dbh, ts.URL)
 	allFeeds, err := d.Dbh.GetAllFeeds()
 

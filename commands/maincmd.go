@@ -43,6 +43,7 @@ func init() {
 	//Other Commands
 	Rss2goCmd.AddCommand(MakeCmdDaemon())
 	Rss2goCmd.AddCommand(MakeCmdRunOne())
+	Rss2goCmd.AddCommand(MakeCmdCreateDB())
 
 	Rss2goCmd.AddCommand(MakeCmdExportOPML())
 	Rss2goCmd.AddCommand(MakeCmdImportOpml())

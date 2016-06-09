@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Sirupsen/logrus"
 	testdb "github.com/erikstmartin/go-testdb"
 	. "github.com/onsi/gomega"
 )
@@ -37,8 +38,9 @@ func TestGettingFeedWithTestDB(t *testing.T) {
 }
 
 func TestGettingFeedsWithError(t *testing.T) {
+	logrus.SetLevel(logrus.DebugLevel)
 	RegisterTestingT(t)
-	d := NewMemoryDBHandle(false, true)
+	d := NewMemoryDBHandle(true, true)
 	fixtureFeeds, _ := LoadFixtures(t, d, "http://localhost")
 
 	feeds, err := d.GetFeedsWithErrors()
@@ -155,7 +157,9 @@ func TestAddAndDeleteFeed(t *testing.T) {
 	Expect(err).ToNot(HaveOccurred())
 
 	err = d.RemoveFeed(f.URL)
-	Expect(err).ToNot(HaveOccurred())
+	if err != nil {
+		t.Fatalf("Error removing feed: %s", err)
+	}
 
 	_, err = d.GetFeedByURL(f.URL)
 	Expect(err).To(HaveOccurred())
