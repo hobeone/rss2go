@@ -15,7 +15,7 @@ func (sc *showconfigCommand) init() {
 }
 
 func (sc *showconfigCommand) configure(app *kingpin.Application) {
-	app.Command("createdb", "create or migrate the database").Action(sc.showconfig)
+	app.Command("showconfig", "create or migrate the database").Action(sc.showconfig)
 }
 
 func (sc *showconfigCommand) showconfig(c *kingpin.ParseContext) error {
