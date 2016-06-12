@@ -1,7 +1,13 @@
 package main
 
-import "github.com/hobeone/rss2go/commands"
+import (
+	"os"
+
+	"github.com/hobeone/rss2go/commands"
+	"gopkg.in/alecthomas/kingpin.v2"
+)
 
 func main() {
-	commands.Rss2goCmd.Execute()
+	commands.RegisterCommands()
+	kingpin.MustParse(commands.App.Parse(os.Args[1:]))
 }

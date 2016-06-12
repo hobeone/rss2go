@@ -43,16 +43,16 @@ func TestEndToEndIntegration(t *testing.T) {
 
 	cfg := config.NewConfig()
 	cfg.Mail.SendMail = false
-	cfg.Db.Verbose = false
+	cfg.DB.Verbose = false
 
 	d := commands.NewDaemon(cfg)
-	d.Dbh = db.NewMemoryDBHandle(false, true)
-	err := d.Dbh.Migrate("db/migrations/sqlite3")
+	d.DBH = db.NewMemoryDBHandle(false, true)
+	err := d.DBH.Migrate("db/migrations/sqlite3")
 	if err != nil {
 		t.Fatalf("Error loading migrations: %s", err)
 	}
-	db.LoadFixtures(t, d.Dbh, ts.URL)
-	allFeeds, err := d.Dbh.GetAllFeeds()
+	db.LoadFixtures(t, d.DBH, ts.URL)
+	allFeeds, err := d.DBH.GetAllFeeds()
 
 	if err != nil {
 		logrus.Fatalf("Error reading feeds: %s", err.Error())

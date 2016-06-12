@@ -126,7 +126,7 @@ func openDB(dbType string, dbArgs string, verbose bool) *gorm.DB {
 	// Error only returns from this if it is an unknown driver.
 	d, err := gorm.Open(dbType, dbArgs)
 	if err != nil {
-		panic(err.Error())
+		panic(fmt.Sprintf("Error connecting to %s database %s: %s", dbType, dbArgs, err.Error()))
 	}
 	d.SingularTable(true)
 	d.SetLogger(newDBLogger())
@@ -134,7 +134,7 @@ func openDB(dbType string, dbArgs string, verbose bool) *gorm.DB {
 	// Actually test that we have a working connection
 	err = d.DB().Ping()
 	if err != nil {
-		panic(err.Error())
+		panic(fmt.Sprintf("Error connecting to database: %s", err.Error()))
 	}
 	return d
 }
@@ -359,9 +359,9 @@ func (d *Handle) GetFeedByURL(url string) (*FeedInfo, error) {
 }
 
 func (d *Handle) unsafeGetFeedByURL(url string) (*FeedInfo, error) {
-	feed := FeedInfo{}
-	err := d.db.Where("url = ?", url).First(&feed).Error
-	return &feed, err
+	feed := &FeedInfo{}
+	err := d.db.Where("url = ?", url).First(feed).Error
+	return feed, err
 }
 
 /*

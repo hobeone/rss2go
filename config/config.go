@@ -17,7 +17,7 @@ import (
 type Config struct {
 	Mail      mailConfig
 	Crawl     crawlConfig
-	Db        dbConfig
+	DB        dbConfig
 	WebServer webConfig
 }
 
@@ -73,7 +73,7 @@ func NewConfig() *Config {
 			ListenAddress: "localhost:7000",
 			EnableAPI:     false,
 		},
-		Db: dbConfig{
+		DB: dbConfig{
 			Verbose:       true,
 			UpdateDb:      true,
 			WatchInterval: 60,
@@ -88,8 +88,8 @@ func NewTestConfig() *Config {
 	c.Mail.UseSendmail = false
 	c.Mail.UseSMTP = false
 	c.Mail.SendMail = false
-	c.Db.Type = "memory"
-	c.Db.Verbose = false
+	c.DB.Type = "memory"
+	c.DB.Verbose = false
 	return c
 }
 

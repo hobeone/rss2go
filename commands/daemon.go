@@ -8,28 +8,57 @@ import (
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
-	"github.com/spf13/cobra"
-	//set log defaults
-	_ "github.com/hobeone/rss2go/log"
 	"github.com/hobeone/rss2go/mail"
 	"github.com/hobeone/rss2go/webui"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
-// MakeCmdDaemon returns a command struct ready to be called.
-func MakeCmdDaemon() *cobra.Command {
-	cmd := &cobra.Command{
-		Run:   runDaemon,
-		Use:   "daemon",
-		Short: "Start a daemon to collect feeds and mail items.",
-		Long: `
-		Starts up as a daemon and will watch feeds and send new items to the configured
-		mail address.
-		`,
+type daemonCommand struct {
+	Config    *config.Config
+	DBH       *db.Handle
+	SendMail  bool
+	UpdateDB  bool
+	PollFeeds bool
+}
+
+func (dc *daemonCommand) init() {
+	dc.Config, dc.DBH = commonInit()
+}
+
+func (dc *daemonCommand) configure(app *kingpin.Application) {
+	daemonCmd := app.Command("daemon", "run rss2go daemon").Action(dc.run)
+	daemonCmd.Flag("send_mail", "Send mail on new items").Default("true").BoolVar(&dc.SendMail)
+	daemonCmd.Flag("db_updates", "Controls if the database is updated with new items").Default("true").BoolVar(&dc.UpdateDB)
+	daemonCmd.Flag("poll_feeds", "Poll the feeds (Disable for testing)").Default("true").BoolVar(&dc.PollFeeds)
+}
+
+func (dc *daemonCommand) run(c *kingpin.ParseContext) error {
+	if *debug || *debugdb {
+		logrus.SetLevel(logrus.DebugLevel)
 	}
-	cmd.Flags().BoolVar(&SendMail, "send_mail", true, "Actually send mail or not.")
-	cmd.Flags().BoolVar(&DBUpdates, "db_updates", true, "Don't actually update feed info in the db.")
-	cmd.Flags().BoolVar(&PollFeeds, "poll_feeds", true, "Poll the feeds (Disable for testing).")
-	return cmd
+	dc.Config = loadConfig(*configfile)
+	dc.Config.Mail.SendMail = dc.SendMail
+	dc.Config.DB.UpdateDb = dc.UpdateDB
+
+	d := NewDaemon(dc.Config)
+	d.PollFeeds = dc.PollFeeds
+
+	allFeeds, err := d.DBH.GetAllFeeds()
+	if err != nil {
+		logrus.Fatal(err.Error())
+	}
+	d.CreateAndStartFeedWatchers(allFeeds)
+
+	logrus.Infof("Got %d feeds to watch.\n", len(allFeeds))
+
+	go d.feedDbUpdateLoop()
+
+	go webui.RunWebUi(d.Config, d.DBH, d.Feeds)
+	for {
+		_ = <-d.RespChan
+	}
+
+	return nil
 }
 
 // Daemon encapsulates all the information about a Daemon instance.
@@ -39,17 +68,17 @@ type Daemon struct {
 	RespChan  chan *feedwatcher.FeedCrawlResponse
 	MailChan  chan *mail.Request
 	Feeds     map[string]*feedwatcher.FeedWatcher
-	Dbh       *db.Handle
+	DBH       *db.Handle
 	PollFeeds bool
 }
 
 // NewDaemon returns a pointer to a new Daemon struct with defaults set.
 func NewDaemon(cfg *config.Config) *Daemon {
 	var dbh *db.Handle
-	if cfg.Db.Type == "memory" {
-		dbh = db.NewMemoryDBHandle(cfg.Db.Verbose, cfg.Db.UpdateDb)
+	if cfg.DB.Type == "memory" {
+		dbh = db.NewMemoryDBHandle(cfg.DB.Verbose, cfg.DB.UpdateDb)
 	} else {
-		dbh = db.NewDBHandle(cfg.Db.Path, cfg.Db.Verbose, cfg.Db.UpdateDb)
+		dbh = db.NewDBHandle(cfg.DB.Path, cfg.DB.Verbose, cfg.DB.UpdateDb)
 	}
 	cc := make(chan *feedwatcher.FeedCrawlRequest, 1)
 	rc := make(chan *feedwatcher.FeedCrawlResponse)
@@ -60,7 +89,7 @@ func NewDaemon(cfg *config.Config) *Daemon {
 		CrawlChan: cc,
 		RespChan:  rc,
 		MailChan:  mc,
-		Dbh:       dbh,
+		DBH:       dbh,
 		Feeds:     make(map[string]*feedwatcher.FeedWatcher),
 		PollFeeds: true,
 	}
@@ -68,7 +97,7 @@ func NewDaemon(cfg *config.Config) *Daemon {
 
 // Watch the db config and update feeds based on removal or addition of feeds
 func (d *Daemon) feedDbUpdateLoop() {
-	ival := time.Duration(d.Config.Db.WatchInterval) * time.Second
+	ival := time.Duration(d.Config.DB.WatchInterval) * time.Second
 	logrus.Errorf("Watching the db for changed feeds every %v\n", ival)
 	for {
 		time.Sleep(ival)
@@ -77,7 +106,7 @@ func (d *Daemon) feedDbUpdateLoop() {
 }
 
 func (d *Daemon) feedDbUpdate() {
-	dbFeeds, err := d.Dbh.GetAllFeeds()
+	dbFeeds, err := d.DBH.GetAllFeeds()
 	if err != nil {
 		logrus.Errorf("Error getting feeds from db: %s\n", err.Error())
 		return
@@ -119,7 +148,7 @@ func (d *Daemon) startPollers(newFeeds []db.FeedInfo) {
 			d.CrawlChan,
 			d.RespChan,
 			d.MailChan,
-			d.Dbh,
+			d.DBH,
 			[]string{},
 			d.Config.Crawl.MinInterval,
 			d.Config.Crawl.MaxInterval,
@@ -137,37 +166,4 @@ func (d *Daemon) CreateAndStartFeedWatchers(feeds []db.FeedInfo) {
 
 	// Start Polling
 	d.startPollers(feeds)
-}
-
-func runDaemon(cmd *cobra.Command, args []string) {
-	if Verbose {
-		logrus.SetLevel(logrus.DebugLevel)
-	} else {
-		logrus.SetLevel(logrus.WarnLevel)
-	}
-
-	cfg := loadConfig(ConfigFile)
-
-	// Override config settings from flags:
-	cfg.Mail.SendMail = SendMail
-	cfg.Db.UpdateDb = DBUpdates
-
-	d := NewDaemon(cfg)
-	d.PollFeeds = PollFeeds
-
-	allFeeds, err := d.Dbh.GetAllFeeds()
-
-	if err != nil {
-		logrus.Fatal(err.Error())
-	}
-	d.CreateAndStartFeedWatchers(allFeeds)
-
-	logrus.Infof("Got %d feeds to watch.\n", len(allFeeds))
-
-	go d.feedDbUpdateLoop()
-
-	go webui.RunWebUi(d.Config, d.Dbh, d.Feeds)
-	for {
-		_ = <-d.RespChan
-	}
 }

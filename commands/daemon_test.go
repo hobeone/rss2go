@@ -20,13 +20,13 @@ func TestConfigUpdater(t *testing.T) {
 	feed.Name = "Test Feed"
 	feed.URL = "https://testfeed.com/test"
 	feed.LastPollTime = time.Now()
-	err := d.Dbh.SaveFeed(&feed)
+	err := d.DBH.SaveFeed(&feed)
 	if err != nil {
 		t.Fatal("Error saving test feed.")
 	}
 
 	d.Feeds["http://test/url"] = feedwatcher.NewFeedWatcher(
-		f, d.CrawlChan, d.RespChan, d.MailChan, d.Dbh, []string{}, 300, 600,
+		f, d.CrawlChan, d.RespChan, d.MailChan, d.DBH, []string{}, 300, 600,
 	)
 
 	d.feedDbUpdate()
