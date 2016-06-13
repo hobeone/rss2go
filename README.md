@@ -31,13 +31,13 @@ Example usage:
 ```
 go build -o rss2go main.go
 mkdir -p ~/.config/rss2go
-cp config_example.toml ~/.config/rss2go/config.toml
+cp config_example.json ~/.config/rss2go/config.json
 ```
-Edit ~/.config/rss2go/config.toml to have the right addresses and paths in it.
+Edit ~/.config/rss2go/config.json to have the right addresses and paths in it.
 ```
-./rss2go addfeed "FeedName" 'http://feed/url.atom'
-./rss2go adduser yourname your@email password 'http://feed/url.atom'
-./rss2go runone --send_mail=false http://localhost/test.rss
+./rss2go --config ~/.config/rss2go/config.json feeds add "FeedName" 'http://feed/url.atom'
+./rss2go --config ~/.config/rss2go/config.json users add yourname your@email password 'http://feed/url.atom'
+./rss2go feeds runone --send_mail=false http://localhost/test.rss
 ```
 
 To Build a binary:
