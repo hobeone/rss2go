@@ -41,9 +41,9 @@ func (fc *feedCommand) configure(app *kingpin.Application) {
 	feedCmd.Command("badfeeds", "Show feed with problems").Action(fc.badfeeds)
 
 	add := feedCmd.Command("add", "Add a new feed to watch").Action(fc.addCMD)
-	add.Flag("name", "Name of feed to add").Required().StringVar(&fc.FeedName)
-	add.Flag("url", "URL of feed to add").Required().StringVar(&fc.FeedURL)
-	add.Flag("emails", "List of emails to subscribe to feed.").StringsVar(&fc.UserEmails)
+	add.Arg("name", "Name of feed to add").Required().StringVar(&fc.FeedName)
+	add.Arg("url", "URL of feed to add").Required().StringVar(&fc.FeedURL)
+	add.Arg("emails", "List of emails to subscribe to feed.").StringsVar(&fc.UserEmails)
 
 	delete := feedCmd.Command("delete", "Delete a feed from the database").Action(fc.delete)
 	delete.Arg("url", "URL of the Feed to delete").Required().StringsVar(&fc.Feeds)

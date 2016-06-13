@@ -7,11 +7,13 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
+const defaultConfig = "~/.config/rss2go/config.json"
+
 var (
 	App        = kingpin.New("rss2go", "A rss watcher and mailer")
 	debug      = App.Flag("debug", "Enable Debug mode.").Bool()
 	debugdb    = App.Flag("debugdb", "Log Database queries (noisy).").Default("false").Bool()
-	configfile = App.Flag("config", "Config file to use").Default("config.json").ExistingFile()
+	configfile = App.Flag("config", "Config file to use").Default(defaultConfig).String()
 )
 
 func RegisterCommands() {
