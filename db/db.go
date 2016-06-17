@@ -176,8 +176,8 @@ func NewDBHandle(dbPath string, verbose bool, writeUpdates bool) *Handle {
 // NewMemoryDBHandle creates a new in memory database.  Only used for testing.
 // The name of the database is a random string so multiple tests can run in
 // parallel with their own database.
-func NewMemoryDBHandle(verbose bool, writeUpdates bool) *Handle {
-	constructedPath := fmt.Sprintf("file:%s?cache=shared&mode=%s", randString(), "memory")
+func NewMemoryDBHandle(verbose bool, writeUpdates bool, loadFixtures bool) *Handle {
+	constructedPath := fmt.Sprintf("file:%s?cache=shared&mode=memory", randString())
 	db := openDB("sqlite3", constructedPath, verbose)
 	err := setupDB(db)
 	if err != nil {
@@ -191,6 +191,14 @@ func NewMemoryDBHandle(verbose bool, writeUpdates bool) *Handle {
 	err = d.Migrate("../db/migrations/sqlite3")
 	if err != nil {
 		panic(err)
+	}
+
+	if loadFixtures {
+		// load Fixtures
+		err = d.Migrate("../db/testdata/fixtures")
+		if err != nil {
+			panic(err)
+		}
 	}
 	return d
 }
@@ -210,7 +218,7 @@ func (d *Handle) Migrate(path string) error {
 	l.Level = logrus.ErrorLevel
 	migrator, err := gomigrate.NewMigratorWithLogger(d.db.DB(), gomigrate.Sqlite3{}, path, l)
 	if err != nil {
-		logrus.Fatalf("Error starting migration: %v", err)
+		return err
 	}
 	err = migrator.Migrate()
 	return err
@@ -662,75 +670,4 @@ func (d *Handle) GetFeedUsers(feedURL string) ([]User, error) {
 		err = nil
 	}
 	return all, err
-}
-
-//
-// Exported Testing Functions
-// - not sure if there is a better way to do this
-//
-
-// TestReporter is a shim interface so we don't need to include the testing
-// package in the compiled binary
-type TestReporter interface {
-	Errorf(format string, args ...interface{})
-	Fatalf(format string, args ...interface{})
-}
-
-// LoadFixtures adds a base set of Fixtures to the given database.
-func LoadFixtures(t TestReporter, d *Handle, feedHost string) ([]*FeedInfo, []*User) {
-	if feedHost == "" {
-		feedHost = "http://localhost"
-	}
-	users := []*User{
-		{
-			Name:     "testuser1",
-			Email:    "test1@example.com",
-			Password: "pass1",
-			Enabled:  true,
-		},
-		{
-			Name:     "testuser2",
-			Email:    "test2@example.com",
-			Password: "pass2",
-			Enabled:  true,
-		},
-		{
-			Name:     "testuser3",
-			Email:    "test3@example.com",
-			Password: "pass3",
-			Enabled:  true,
-		},
-	}
-	feeds := []*FeedInfo{
-		{
-			Name: "testfeed1",
-			URL:  fmt.Sprintf("%s/feed1.atom", feedHost),
-		},
-		{
-			Name: "testfeed2",
-			URL:  fmt.Sprintf("%s/feed2.atom", feedHost),
-		},
-		{
-			Name: "testfeed3",
-			URL:  fmt.Sprintf("%s/feed3.atom", feedHost),
-		},
-	}
-	for _, f := range feeds {
-		err := d.SaveFeed(f)
-		if err != nil {
-			t.Fatalf("Error saving feed fixture to db: %s", err)
-		}
-	}
-	for _, u := range users {
-		err := d.SaveUser(u)
-		if err != nil {
-			t.Fatalf("Error saving user fixture to db: %s", err)
-		}
-		err = d.AddFeedsToUser(u, feeds)
-		if err != nil {
-			t.Fatalf("Error adding feeds to fixture user: %s", err)
-		}
-	}
-
-	return feeds, users
 }

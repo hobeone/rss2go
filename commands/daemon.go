@@ -76,7 +76,7 @@ type Daemon struct {
 func NewDaemon(cfg *config.Config) *Daemon {
 	var dbh *db.Handle
 	if cfg.DB.Type == "memory" {
-		dbh = db.NewMemoryDBHandle(cfg.DB.Verbose, cfg.DB.UpdateDb)
+		dbh = db.NewMemoryDBHandle(cfg.DB.Verbose, cfg.DB.UpdateDb, false)
 	} else {
 		dbh = db.NewDBHandle(cfg.DB.Path, cfg.DB.Verbose, cfg.DB.UpdateDb)
 	}

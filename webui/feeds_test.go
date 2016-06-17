@@ -40,8 +40,7 @@ const getAllFeedGoldenOutput = `{
 }`
 
 func TestGetAllFeeds(t *testing.T) {
-	dbh, m := setupTest(t)
-	db.LoadFixtures(t, dbh, "http://localhost")
+	_, m := setupTest(t)
 	RegisterTestingT(t)
 	response := httptest.NewRecorder()
 	req, err := http.NewRequest("GET", "/api/1/feeds", nil)
@@ -75,8 +74,7 @@ const getSomeFeedsGoldenResponse = `{
 }`
 
 func TestGetSomeFeeds(t *testing.T) {
-	dbh, m := setupTest(t)
-	db.LoadFixtures(t, dbh, "http://localhost")
+	_, m := setupTest(t)
 	RegisterTestingT(t)
 	response := httptest.NewRecorder()
 	req, err := http.NewRequest("GET", "/api/1/feeds?ids[]=1&ids[]=2", nil)
@@ -94,7 +92,7 @@ func TestGetSomeFeeds(t *testing.T) {
 
 const addFeedGoldenResponse = `{
   "feed": {
-    "id": 1,
+    "id": 4,
     "name": "test",
     "url": "http://test/url/feed.atom",
     "lastPollTime": "0001-01-01T00:00:00Z",
@@ -182,7 +180,6 @@ const getFeedGoldenOutput = `{
 
 func TestGetFeed(t *testing.T) {
 	dbh, m := setupTest(t)
-	db.LoadFixtures(t, dbh, "http://localhost")
 	RegisterTestingT(t)
 
 	dbfeeds, err := dbh.GetAllFeeds()
@@ -206,7 +203,6 @@ func TestGetFeed(t *testing.T) {
 
 func TestDeleteFeed(t *testing.T) {
 	dbh, m := setupTest(t)
-	db.LoadFixtures(t, dbh, "http://localhost")
 
 	feeds, err := dbh.GetAllFeeds()
 	failOnError(t, err)

@@ -8,13 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hobeone/rss2go/db"
 	. "github.com/onsi/gomega"
 )
 
 const testGetUserGoldenResponse = `{
   "user": {
-    "id": 1,
+    "id": 4,
     "name": "test",
     "email": "test@test.com",
     "enabled": true,
@@ -99,8 +98,7 @@ const testAllUsersGoldenResponse = `{
 }`
 
 func TestGetAllUsers(t *testing.T) {
-	dbh, m := setupTest(t)
-	db.LoadFixtures(t, dbh, "http://localhost")
+	_, m := setupTest(t)
 	RegisterTestingT(t)
 
 	response := httptest.NewRecorder()
@@ -143,8 +141,7 @@ const getSomeUsersGoldenResponse = `{
 }`
 
 func TestGetSomeUsers(t *testing.T) {
-	dbh, m := setupTest(t)
-	db.LoadFixtures(t, dbh, "http://localhost")
+	_, m := setupTest(t)
 	RegisterTestingT(t)
 
 	response := httptest.NewRecorder()
@@ -166,7 +163,6 @@ const updateUserReq = `
 
 func TestUpdateUser(t *testing.T) {
 	dbh, m := setupTest(t)
-	db.LoadFixtures(t, dbh, "http://localhost")
 
 	_, err := dbh.GetUserByEmail("test1@example.com")
 	failOnError(t, err)
@@ -190,7 +186,7 @@ func TestUpdateUser(t *testing.T) {
 
 const addUserGoldenOutput = `{
   "user": {
-    "id": 1,
+    "id": 4,
     "name": "test1",
     "email": "test1_changed@example.com",
     "enabled": true,
@@ -202,7 +198,7 @@ func TestAddUser(t *testing.T) {
 	RegisterTestingT(t)
 	u := unmarshalUserJSONContainer{
 		unmarshalUserJSON{
-			ID:       1,
+			ID:       4,
 			Name:     "test1",
 			Email:    "test1_changed@example.com",
 			Password: "123",
@@ -231,15 +227,14 @@ func TestAddUser(t *testing.T) {
 
 	Expect(response.Body.String()).Should(MatchJSON(addUserGoldenOutput))
 
-	if response.Header().Get("Location") != "/users/1" {
-		t.Fatalf("Expected location of '/users/1' got %s",
+	if response.Header().Get("Location") != "/users/4" {
+		t.Fatalf("Expected location of '/users/4' got %s",
 			response.Header().Get("Location"))
 	}
 }
 
 func TestDeleteUser(t *testing.T) {
 	dbh, m := setupTest(t)
-	db.LoadFixtures(t, dbh, "http://localhost")
 
 	users, err := dbh.GetAllUsers()
 	failOnError(t, err)

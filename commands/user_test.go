@@ -12,7 +12,7 @@ func TestListUsers(t *testing.T) {
 
 	ucmd := userCommand{
 		Config: cfg,
-		DBH:    db.NewMemoryDBHandle(false, true),
+		DBH:    db.NewMemoryDBHandle(false, true, false),
 	}
 
 	_, err := ucmd.DBH.AddUser("test", "test@test.com", "pass")
@@ -28,7 +28,7 @@ func TestListUsers(t *testing.T) {
 func TestAddUser(t *testing.T) {
 	ucmd := userCommand{
 		Config: config.NewTestConfig(),
-		DBH:    db.NewMemoryDBHandle(false, true),
+		DBH:    db.NewMemoryDBHandle(false, true, false),
 		Name:   "test",
 		Email:  "test@example.com",
 		Pass:   "pass",
@@ -48,7 +48,7 @@ func TestAddUser(t *testing.T) {
 func TestAddDuplicateUser(t *testing.T) {
 	ucmd := userCommand{
 		Config: config.NewTestConfig(),
-		DBH:    db.NewMemoryDBHandle(false, true),
+		DBH:    db.NewMemoryDBHandle(false, true, false),
 		Name:   "test",
 		Email:  "test@example.com",
 		Pass:   "pass",
@@ -72,7 +72,7 @@ func TestAddDuplicateUser(t *testing.T) {
 func TestAddUserWithFeeds(t *testing.T) {
 	ucmd := userCommand{
 		Config: config.NewTestConfig(),
-		DBH:    db.NewMemoryDBHandle(false, true),
+		DBH:    db.NewMemoryDBHandle(false, true, false),
 		Name:   "test",
 		Email:  "test@example.com",
 		Pass:   "pass",
@@ -106,7 +106,7 @@ func TestAddUserWithFeeds(t *testing.T) {
 func TestAddUserWithUnknownFeeds(t *testing.T) {
 	ucmd := userCommand{
 		Config: config.NewTestConfig(),
-		DBH:    db.NewMemoryDBHandle(false, true),
+		DBH:    db.NewMemoryDBHandle(false, true, false),
 		Name:   "test",
 		Email:  "test@example.com",
 		Pass:   "pass",
@@ -122,7 +122,7 @@ func TestAddUserWithUnknownFeeds(t *testing.T) {
 func TestAddUserWithInvalidEmailFormat(t *testing.T) {
 	ucmd := userCommand{
 		Config: config.NewTestConfig(),
-		DBH:    db.NewMemoryDBHandle(false, true),
+		DBH:    db.NewMemoryDBHandle(false, true, false),
 		Name:   "test",
 		Email:  ".test@example.com",
 		Pass:   "",
@@ -138,7 +138,7 @@ func TestAddUserWithInvalidEmailFormat(t *testing.T) {
 func TestRemoveUnknownUser(t *testing.T) {
 	ucmd := userCommand{
 		Config: config.NewTestConfig(),
-		DBH:    db.NewMemoryDBHandle(false, true),
+		DBH:    db.NewMemoryDBHandle(false, true, false),
 		Email:  "test@example.com",
 	}
 	err := ucmd.delete()
@@ -150,7 +150,7 @@ func TestRemoveUnknownUser(t *testing.T) {
 func TestRemoveUser(t *testing.T) {
 	ucmd := userCommand{
 		Config: config.NewTestConfig(),
-		DBH:    db.NewMemoryDBHandle(false, true),
+		DBH:    db.NewMemoryDBHandle(false, true, false),
 		Email:  "test@example.com",
 	}
 	_, err := ucmd.DBH.AddUser("test", ucmd.Email, "pass")
@@ -167,7 +167,7 @@ func TestRemoveUser(t *testing.T) {
 func TestSubscribeUser(t *testing.T) {
 	ucmd := userCommand{
 		Config: config.NewTestConfig(),
-		DBH:    db.NewMemoryDBHandle(false, true),
+		DBH:    db.NewMemoryDBHandle(false, true, false),
 		Email:  "test@example.com",
 		Feeds:  []string{"https://testing/feed.atom"},
 	}
@@ -190,7 +190,7 @@ func TestSubscribeUser(t *testing.T) {
 func TestSubscribeUserToUnknownFeed(t *testing.T) {
 	ucmd := userCommand{
 		Config: config.NewTestConfig(),
-		DBH:    db.NewMemoryDBHandle(false, true),
+		DBH:    db.NewMemoryDBHandle(false, true, false),
 		Email:  "test@example.com",
 		Feeds:  []string{"https://testing/feed.atom"},
 	}
@@ -208,7 +208,7 @@ func TestSubscribeUserToUnknownFeed(t *testing.T) {
 func TestUnsubscribeUser(t *testing.T) {
 	ucmd := userCommand{
 		Config: config.NewTestConfig(),
-		DBH:    db.NewMemoryDBHandle(false, true),
+		DBH:    db.NewMemoryDBHandle(false, true, false),
 		Email:  "test@example.com",
 		Feeds:  []string{"https://testing/feed.atom"},
 	}
@@ -231,7 +231,7 @@ func TestUnsubscribeUser(t *testing.T) {
 func TestUnsubscribeUserToUnknownFeed(t *testing.T) {
 	ucmd := userCommand{
 		Config: config.NewTestConfig(),
-		DBH:    db.NewMemoryDBHandle(false, true),
+		DBH:    db.NewMemoryDBHandle(false, true, false),
 		Email:  "test@example.com",
 		Feeds:  []string{"https://testing/feed.atom"},
 	}

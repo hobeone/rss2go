@@ -13,7 +13,7 @@ func TestAddFeed(t *testing.T) {
 
 	fcmd := feedCommand{
 		Config: cfg,
-		DBH:    db.NewMemoryDBHandle(false, true),
+		DBH:    db.NewMemoryDBHandle(false, true, true),
 	}
 
 	testFeedURL := "http://testfeedurl"
@@ -38,13 +38,11 @@ func TestAddFeedWithUsers(t *testing.T) {
 
 	fcmd := feedCommand{
 		Config: cfg,
-		DBH:    db.NewMemoryDBHandle(false, true),
+		DBH:    db.NewMemoryDBHandle(false, true, true),
 	}
 
 	testFeedURL := "http://testfeedurl"
 	testUserEmail := "test1@example.com"
-
-	db.LoadFixtures(t, fcmd.DBH, "")
 
 	fcmd.FeedName = "testfeedname"
 	fcmd.FeedURL = testFeedURL

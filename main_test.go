@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -19,6 +20,7 @@ var fakeServerHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Req
 	var content []byte
 	switch {
 	case strings.HasSuffix(r.URL.Path, "feed1.atom"):
+		fmt.Println("SERVING feed1.atim")
 		feedResp, err := ioutil.ReadFile("testdata/ars.rss")
 		if err != nil {
 			logrus.Fatalf("Error reading test feed: %s", err.Error())
@@ -41,21 +43,32 @@ func TestEndToEndIntegration(t *testing.T) {
 		return time.After(time.Second * time.Duration(1))
 	}
 
-	cfg := config.NewConfig()
-	cfg.Mail.SendMail = false
-	cfg.DB.Verbose = false
-
+	cfg := config.NewTestConfig()
 	d := commands.NewDaemon(cfg)
-	d.DBH = db.NewMemoryDBHandle(false, true)
 	err := d.DBH.Migrate("db/migrations/sqlite3")
 	if err != nil {
-		t.Fatalf("Error loading migrations: %s", err)
+		t.Fatalf("Error loading fixture data: %v", err)
 	}
-	db.LoadFixtures(t, d.DBH, ts.URL)
+
+	u, err := d.DBH.AddUser("user1", "foo@localhost", "foo")
+	if err != nil {
+		t.Fatalf("Error adding user: %v", err)
+	}
+
+	f, err := d.DBH.AddFeed("test feed", fmt.Sprintf("%s/feed1.atom", ts.URL))
+	if err != nil {
+		t.Fatalf("Error adding feed: %v", err)
+	}
+
+	err = d.DBH.AddFeedsToUser(u, []*db.FeedInfo{f})
+	if err != nil {
+		t.Fatalf("Error adding feed to user: %v", err)
+	}
+
 	allFeeds, err := d.DBH.GetAllFeeds()
 
 	if err != nil {
-		logrus.Fatalf("Error reading feeds: %s", err.Error())
+		t.Fatalf("Error reading feeds: %s", err.Error())
 	}
 
 	d.CreateAndStartFeedWatchers(allFeeds[0:1])

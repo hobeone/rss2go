@@ -13,7 +13,7 @@ import (
 
 func setupTest(t *testing.T) (*db.Handle, *martini.Martini) {
 	feeds := make(map[string]*feedwatcher.FeedWatcher)
-	dbh := db.NewMemoryDBHandle(false, true)
+	dbh := db.NewMemoryDBHandle(false, true, true)
 	authenticateUser = func(res http.ResponseWriter, req *http.Request, dbh *db.Handle) {
 	}
 	m := createMartini(dbh, feeds)

@@ -33,8 +33,15 @@ func TestSendToUsersWithNoMailSender(t *testing.T) {
 }
 
 func TestSendToUsers(t *testing.T) {
-	dbh := db.NewMemoryDBHandle(false, true)
-	feeds, users := db.LoadFixtures(t, dbh, "http://localhost")
+	dbh := db.NewMemoryDBHandle(false, true, true)
+	users, err := dbh.GetAllUsers()
+	if err != nil {
+		t.Fatalf("Error getting users: %v", err)
+	}
+	feeds, err := dbh.GetAllFeeds()
+	if err != nil {
+		t.Fatalf("Error getting feeds: %v", err)
+	}
 
 	mm := &MockedMailer{}
 	md := NewDispatcher(
@@ -55,7 +62,7 @@ func TestSendToUsers(t *testing.T) {
 			{Address: users[1].Email},
 		},
 	}
-	err := md.handleMailRequest(&mr)
+	err = md.handleMailRequest(&mr)
 	if err != nil {
 		t.Fatalf("Error sending to users: %s", err)
 	}

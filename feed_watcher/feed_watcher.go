@@ -27,13 +27,13 @@ import (
 	"github.com/hobeone/rss2go/mail"
 )
 
-// CrawlerNotAvailable is when the crawler channel would block
+// ErrCrawlerNotAvailable is when the crawler channel would block
 var ErrCrawlerNotAvailable = errors.New("no crawler available")
 
-// Already Crawling a feed
+// ErrAlreadyCrawlingFeed is when you are already Crawling a feed
 var ErrAlreadyCrawlingFeed = errors.New("already crawling feed")
 
-// To allow stubbing out
+// After allows for stubbing out in test
 var After = func(d time.Duration) <-chan time.Time {
 	return time.After(d)
 }

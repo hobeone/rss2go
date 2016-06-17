@@ -45,15 +45,18 @@ func SetupTest(t *testing.T, feedPath string) (*FeedWatcher, []byte, *mail.Dispa
 	crawlChan := make(chan *FeedCrawlRequest)
 	responseChan := make(chan *FeedCrawlResponse)
 	mailDispatcher := mail.CreateAndStartStubMailer()
-	d := db.NewMemoryDBHandle(false, true)
-	feeds, _ := db.LoadFixtures(t, d, "http://localhost")
+	d := db.NewMemoryDBHandle(false, true, true)
+	feeds, err := d.GetAllFeeds()
+	if err != nil {
+		t.Fatalf("Error getting feeds: %v", err)
+	}
 
 	feedResp, err := ioutil.ReadFile(feedPath)
 	if err != nil {
 		t.Fatal("Error reading test feed.")
 	}
 
-	return NewFeedWatcher(*feeds[0], crawlChan, responseChan, mailDispatcher.OutgoingMail, d, []string{}, 30, 100), feedResp, mailDispatcher
+	return NewFeedWatcher(feeds[0], crawlChan, responseChan, mailDispatcher.OutgoingMail, d, []string{}, 30, 100), feedResp, mailDispatcher
 }
 
 func TestNewFeedWatcher(t *testing.T) {

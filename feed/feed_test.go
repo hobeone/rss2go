@@ -46,9 +46,12 @@ func TestInvalidCharacter(t *testing.T) {
 }
 
 func TestFeedWithBadEntity(t *testing.T) {
-	d := db.NewMemoryDBHandle(false, true)
-	feeds, _ := db.LoadFixtures(t, d, "http://localhost")
-	u := *feeds[0]
+	d := db.NewMemoryDBHandle(false, true, true)
+	feeds, err := d.GetAllFeeds()
+	if err != nil {
+		t.Fatalf("Error getting all feeds: %v", err)
+	}
+	u := feeds[0]
 
 	feedResp, err := ioutil.ReadFile("../testdata/bad_entity.rss")
 	if err != nil {
