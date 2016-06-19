@@ -70,15 +70,17 @@ type Daemon struct {
 	Feeds     map[string]*feedwatcher.FeedWatcher
 	DBH       *db.Handle
 	PollFeeds bool
+	Logger    logrus.FieldLogger
 }
 
 // NewDaemon returns a pointer to a new Daemon struct with defaults set.
 func NewDaemon(cfg *config.Config) *Daemon {
 	var dbh *db.Handle
+	logger := logrus.StandardLogger()
 	if cfg.DB.Type == "memory" {
-		dbh = db.NewMemoryDBHandle(cfg.DB.Verbose, logrus.StandardLogger(), false)
+		dbh = db.NewMemoryDBHandle(cfg.DB.Verbose, logger, false)
 	} else {
-		dbh = db.NewDBHandle(cfg.DB.Path, cfg.DB.Verbose, logrus.StandardLogger())
+		dbh = db.NewDBHandle(cfg.DB.Path, cfg.DB.Verbose, logger)
 	}
 	cc := make(chan *feedwatcher.FeedCrawlRequest, 1)
 	rc := make(chan *feedwatcher.FeedCrawlResponse)
@@ -92,6 +94,7 @@ func NewDaemon(cfg *config.Config) *Daemon {
 		DBH:       dbh,
 		Feeds:     make(map[string]*feedwatcher.FeedWatcher),
 		PollFeeds: true,
+		Logger:    logger,
 	}
 }
 

@@ -74,6 +74,7 @@ type FeedWatcher struct {
 	KnownGuids        map[string]bool
 	LastCrawlResponse *FeedCrawlResponse
 	After             func(d time.Duration) <-chan time.Time // Allow for mocking out in test.
+	Logger            logrus.FieldLogger
 }
 
 // NewFeedWatcher returns a new FeedWatcher instance.
@@ -105,6 +106,7 @@ func NewFeedWatcher(
 		KnownGuids:        guids,
 		LastCrawlResponse: &FeedCrawlResponse{},
 		After:             After,
+		Logger:            logrus.StandardLogger(),
 	}
 }
 
@@ -169,11 +171,11 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 
 	if feed == nil || stories == nil || len(stories) == 0 {
 		if err != nil {
-			logrus.Infof("Error parsing response from %s: %#v", resp.URI, err)
+			fw.Logger.Infof("Error parsing response from %s: %#v", resp.URI, err)
 			resp.Error = err
 		} else {
 			e := fmt.Errorf("no items found in %s", resp.URI)
-			logrus.Info(e)
+			fw.Logger.Info(e)
 			resp.Error = e
 		}
 		return resp.Error
@@ -194,39 +196,39 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 
 	guidsToLoad := int(math.Ceil(float64(len(stories)) * 1.1))
 
-	logrus.Infof("Got %d stories from feed %s.", len(stories), fw.FeedInfo.URL)
+	fw.Logger.Infof("Got %d stories from feed %s.", len(stories), fw.FeedInfo.URL)
 
 	if len(fw.KnownGuids) == 0 {
 		var err error
 		fw.KnownGuids, err = fw.LoadGuidsFromDb(guidsToLoad)
 		if err != nil {
 			e := fmt.Errorf("error getting Guids from DB: %s", err)
-			logrus.Info(e)
+			fw.Logger.Info(e)
 			resp.Error = e
 			return resp.Error
 		}
-		logrus.Infof("Loaded %d known guids for Feed %s.",
+		fw.Logger.Infof("Loaded %d known guids for Feed %s.",
 			len(fw.KnownGuids), fw.FeedInfo.URL)
 	}
 
 	resp.Items = fw.filterNewItems(stories)
-	logrus.Infof("Feed %s has %d new items", feed.Title, len(resp.Items))
+	fw.Logger.Infof("Feed %s has %d new items", feed.Title, len(resp.Items))
 
 	for _, item := range resp.Items {
 		item.Title = fmt.Sprintf("%s: %s", fw.FeedInfo.Name, item.Title)
-		logrus.Infof("New Story: %s, sending for mail.", item.Title)
+		fw.Logger.Infof("New Story: %s, sending for mail.", item.Title)
 		err := fw.sendMail(item)
 		if err != nil {
-			logrus.Infof("Error sending mail: %s", err.Error())
+			fw.Logger.Infof("Error sending mail: %s", err.Error())
 			resp.Error = err
 		} else {
 			err := fw.recordGUID(item.ID)
 			if err != nil {
 				e := fmt.Errorf("error writing guid to db: %s", err)
 				resp.Error = e
-				logrus.Info(e)
+				fw.Logger.Info(e)
 			} else {
-				logrus.Infof("Added guid %s for feed %s", item.ID, fw.FeedInfo.URL)
+				fw.Logger.Infof("Added guid %s for feed %s", item.ID, fw.FeedInfo.URL)
 			}
 		}
 	}
@@ -237,7 +239,7 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 		fw.KnownGuids, err = fw.LoadGuidsFromDb(guidsToLoad)
 		if err != nil {
 			e := fmt.Errorf("error getting Guids from DB: %s", err)
-			logrus.Info(e)
+			fw.Logger.Info(e)
 			resp.Error = e
 		}
 	}
@@ -248,7 +250,7 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 // PollFeed is designed to be called as a Goroutine.  Use UpdateFeed to just update once.
 func (fw *FeedWatcher) PollFeed() bool {
 	if !fw.lockPoll() {
-		logrus.Infof("Called PollLoop on %v when already polling. ignoring.\n",
+		fw.Logger.Infof("Called PollLoop on %v when already polling. ignoring.\n",
 			fw.FeedInfo.URL)
 		return false
 	}
@@ -258,7 +260,7 @@ func (fw *FeedWatcher) PollFeed() bool {
 	toSleep := time.Duration(0)
 	if timeSinceLastPoll < fw.minSleepTime {
 		toSleep = fw.minSleepTime - timeSinceLastPoll
-		logrus.Infof("Last poll of %s was only %v ago, waiting at least %v.",
+		fw.Logger.Infof("Last poll of %s was only %v ago, waiting at least %v.",
 			fw.FeedInfo.URL, timeSinceLastPoll, toSleep)
 	}
 	for {
@@ -266,7 +268,7 @@ func (fw *FeedWatcher) PollFeed() bool {
 		//
 		select {
 		case <-fw.exitChan:
-			logrus.Infof("Got exit signal, stopping poll of %v", fw.FeedInfo.URL)
+			fw.Logger.Infof("Got exit signal, stopping poll of %v", fw.FeedInfo.URL)
 			return true
 		case <-fw.afterWithJitter(toSleep):
 			// see if we can crawl
@@ -274,19 +276,19 @@ func (fw *FeedWatcher) PollFeed() bool {
 			resp := fw.CrawlFeed()
 			if resp.Error == ErrCrawlerNotAvailable {
 				toSleep = fw.minSleepTime
-				logrus.Infof("No crawler available, sleeping.")
+				fw.Logger.Infof("No crawler available, sleeping.")
 				break
 			}
 			fw.LastCrawlResponse = resp
 			err := fw.UpdateFeed(resp)
 			if err != nil {
-				logrus.Errorf("Error updating feed information: %s", err)
+				fw.Logger.Errorf("Error updating feed information: %s", err)
 			}
 			fw.responseChan <- fw.LastCrawlResponse
 			toSleep = fw.minSleepTime
 			if fw.LastCrawlResponse.Error != nil {
 				toSleep = fw.maxSleepTime
-				logrus.Infof("Feed %s had error. Waiting maxium allowed time before next poll.",
+				fw.Logger.Infof("Feed %s had error. Waiting maxium allowed time before next poll.",
 					fw.FeedInfo.URL)
 			}
 		}
@@ -296,7 +298,7 @@ func (fw *FeedWatcher) PollFeed() bool {
 // call time.After for the given amount of seconds plus a up to 60 extra seconds.
 func (fw *FeedWatcher) afterWithJitter(d time.Duration) <-chan time.Time {
 	s := d + time.Duration(rand.Int63n(60))*time.Second
-	logrus.Infof("Waiting %v until next poll of %s", s, fw.FeedInfo.URL)
+	fw.Logger.Infof("Waiting %v until next poll of %s", s, fw.FeedInfo.URL)
 	return fw.After(s)
 }
 
@@ -320,7 +322,7 @@ func (fw *FeedWatcher) recordGUID(guid string) error {
 }
 
 func (fw *FeedWatcher) filterNewItems(stories []*feed.Story) []*feed.Story {
-	logrus.Infof("Filtering stories we already know about.")
+	fw.Logger.Infof("Filtering stories we already know about.")
 	newStories := []*feed.Story{}
 	for _, story := range stories {
 		if _, found := fw.KnownGuids[story.ID]; !found {
@@ -334,7 +336,7 @@ func (fw *FeedWatcher) sendMail(item *feed.Story) error {
 	_, err := fw.dbh.GetFeedItemByGUID(fw.FeedInfo.ID, item.ID)
 	// Guid found, so sending would be a duplicate.
 	if err == nil {
-		logrus.Warningf("Tried to send duplicate GUID: %s for feed %s",
+		fw.Logger.Warningf("Tried to send duplicate GUID: %s for feed %s",
 			item.ID, fw.FeedInfo.URL)
 		return nil
 	}
@@ -377,9 +379,9 @@ func (fw *FeedWatcher) CrawlFeed() (r *FeedCrawlResponse) {
 	for {
 		select {
 		case fw.crawlChan <- req:
-			logrus.Infof("Requesting crawl of feed %v", fw.FeedInfo.URL)
+			fw.Logger.Infof("Requesting crawl of feed %v", fw.FeedInfo.URL)
 			resp = <-req.ResponseChan
-			logrus.Infof("Got response to crawl of %v of length (%d)", resp.URI, len(resp.Body))
+			fw.Logger.Infof("Got response to crawl of %v of length (%d)", resp.URI, len(resp.Body))
 			return resp
 		default:
 			resp.Error = ErrCrawlerNotAvailable
