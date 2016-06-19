@@ -8,12 +8,19 @@ import (
 
 	"gopkg.in/gomail.v2"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed"
 	"github.com/hobeone/rss2go/log"
 	"github.com/hobeone/rss2go/mail"
 	. "github.com/onsi/gomega"
 )
+
+func NullLogger() logrus.FieldLogger {
+	l := logrus.New()
+	l.Out = ioutil.Discard
+	return l
+}
 
 type FailMailer struct{}
 
@@ -45,7 +52,7 @@ func SetupTest(t *testing.T, feedPath string) (*FeedWatcher, []byte, *mail.Dispa
 	crawlChan := make(chan *FeedCrawlRequest)
 	responseChan := make(chan *FeedCrawlResponse)
 	mailDispatcher := mail.CreateAndStartStubMailer()
-	d := db.NewMemoryDBHandle(false, true, true)
+	d := db.NewMemoryDBHandle(false, NullLogger(), true)
 	feeds, err := d.GetAllFeeds()
 	if err != nil {
 		t.Fatalf("Error getting feeds: %v", err)

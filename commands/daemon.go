@@ -76,9 +76,9 @@ type Daemon struct {
 func NewDaemon(cfg *config.Config) *Daemon {
 	var dbh *db.Handle
 	if cfg.DB.Type == "memory" {
-		dbh = db.NewMemoryDBHandle(cfg.DB.Verbose, cfg.DB.UpdateDb, false)
+		dbh = db.NewMemoryDBHandle(cfg.DB.Verbose, logrus.StandardLogger(), false)
 	} else {
-		dbh = db.NewDBHandle(cfg.DB.Path, cfg.DB.Verbose, cfg.DB.UpdateDb)
+		dbh = db.NewDBHandle(cfg.DB.Path, cfg.DB.Verbose, logrus.StandardLogger())
 	}
 	cc := make(chan *feedwatcher.FeedCrawlRequest, 1)
 	rc := make(chan *feedwatcher.FeedCrawlResponse)

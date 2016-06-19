@@ -16,6 +16,7 @@ var (
 	configfile = App.Flag("config", "Config file to use").Default(defaultConfig).String()
 )
 
+// RegisterCommands registers all sub commands usable by Kingpin.
 func RegisterCommands() {
 	feedCmd := &feedCommand{}
 	feedCmd.configure(App)
@@ -42,7 +43,7 @@ func commonInit() (*config.Config, *db.Handle) {
 	}
 	cfg := loadConfig(*configfile)
 
-	dbh := db.NewDBHandle(cfg.DB.Path, cfg.DB.Verbose, true)
+	dbh := db.NewDBHandle(cfg.DB.Path, cfg.DB.Verbose, logrus.StandardLogger())
 
 	return cfg, dbh
 }

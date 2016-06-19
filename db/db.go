@@ -26,24 +26,6 @@ func init() {
 	}
 }
 
-// debugLogger satisfies Gorm's logger interface
-// so that we can log SQL queries at Logrus' debug level
-type debugLogger struct {
-	logger *logrus.Logger
-}
-
-func (*debugLogger) Print(msg ...interface{}) {
-	logrus.Debug(msg)
-}
-
-func newDBLogger() *debugLogger {
-	d := &debugLogger{
-		logger: logrus.New(),
-	}
-	d.logger.Level = logrus.DebugLevel
-	return d
-}
-
 // FeedInfo represents a feed (atom, rss or rdf) that rss2go is polling.
 type FeedInfo struct {
 	ID            int64     `json:"id"`
@@ -116,20 +98,20 @@ type Service interface {
 // Handle controls access to the database and makes sure only one
 // operation is in process at a time.
 type Handle struct {
-	db           *gorm.DB
-	writeUpdates bool
-	syncMutex    sync.Mutex
+	db        *gorm.DB
+	logger    logrus.FieldLogger
+	syncMutex sync.Mutex
 }
 
-func openDB(dbType string, dbArgs string, verbose bool) *gorm.DB {
-	logrus.Infof("Opening database %s:%s", dbType, dbArgs)
+func openDB(dbType string, dbArgs string, verbose bool, logger logrus.FieldLogger) *gorm.DB {
+	logger.Infof("Opening database %s:%s", dbType, dbArgs)
 	// Error only returns from this if it is an unknown driver.
 	d, err := gorm.Open(dbType, dbArgs)
 	if err != nil {
 		panic(fmt.Sprintf("Error connecting to %s database %s: %s", dbType, dbArgs, err.Error()))
 	}
 	d.SingularTable(true)
-	d.SetLogger(newDBLogger())
+	d.SetLogger(logger)
 	d.LogMode(verbose)
 	// Actually test that we have a working connection
 	err = d.DB().Ping()
@@ -159,34 +141,33 @@ func setupDB(db *gorm.DB) error {
 // NewDBHandle creates a new DBHandle
 //	dbPath: the path to the database to use.
 //	verbose: when true database accesses are logged to stdout
-//	writeUpdates: when true actually write to the databse (useful for testing)
-func NewDBHandle(dbPath string, verbose bool, writeUpdates bool) *Handle {
+func NewDBHandle(dbPath string, verbose bool, logger logrus.FieldLogger) *Handle {
 	constructedPath := fmt.Sprintf("file:%s?cache=shared&mode=rwc", dbPath)
-	db := openDB("sqlite3", constructedPath, verbose)
+	db := openDB("sqlite3", constructedPath, verbose, logger)
 	err := setupDB(db)
 	if err != nil {
 		panic(err.Error())
 	}
 	return &Handle{
-		db:           db,
-		writeUpdates: writeUpdates,
+		db:     db,
+		logger: logger,
 	}
 }
 
 // NewMemoryDBHandle creates a new in memory database.  Only used for testing.
 // The name of the database is a random string so multiple tests can run in
 // parallel with their own database.
-func NewMemoryDBHandle(verbose bool, writeUpdates bool, loadFixtures bool) *Handle {
+func NewMemoryDBHandle(verbose bool, logger logrus.FieldLogger, loadFixtures bool) *Handle {
 	constructedPath := fmt.Sprintf("file:%s?cache=shared&mode=memory", randString())
-	db := openDB("sqlite3", constructedPath, verbose)
+	db := openDB("sqlite3", constructedPath, verbose, logger)
 	err := setupDB(db)
 	if err != nil {
 		panic(err.Error())
 	}
 
 	d := &Handle{
-		db:           db,
-		writeUpdates: writeUpdates,
+		db:     db,
+		logger: logger,
 	}
 	err = d.Migrate("../db/migrations/sqlite3")
 	if err != nil {
@@ -214,9 +195,7 @@ func randString() string {
 
 // Migrate uses the migrations at the given path to update the database.
 func (d *Handle) Migrate(path string) error {
-	l := logrus.New()
-	l.Level = logrus.ErrorLevel
-	migrator, err := gomigrate.NewMigratorWithLogger(d.db.DB(), gomigrate.Sqlite3{}, path, l)
+	migrator, err := gomigrate.NewMigratorWithLogger(d.db.DB(), gomigrate.Sqlite3{}, path, d.logger)
 	if err != nil {
 		return err
 	}
@@ -229,7 +208,6 @@ func (d *Handle) Migrate(path string) error {
 * FeedInfo related functions
 *
  */
-
 func validateFeed(f *FeedInfo) error {
 	if f.Name == "" || f.URL == "" {
 		return errors.New("name and url can't be empty")
@@ -261,10 +239,7 @@ func (d *Handle) AddFeed(name string, feedURL string) (*FeedInfo, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 
-	if d.writeUpdates {
-		return f, d.db.Save(f).Error
-	}
-	return f, nil
+	return f, d.db.Save(f).Error
 }
 
 //SaveFeed creates or updates the given FeedInfo in the database.
@@ -276,10 +251,7 @@ func (d *Handle) SaveFeed(f *FeedInfo) error {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 
-	if d.writeUpdates {
-		return d.db.Save(f).Error
-	}
-	return nil
+	return d.db.Save(f).Error
 }
 
 // RemoveFeed removes a FeedInfo from the database given it's URL.  Optioanlly
@@ -389,19 +361,16 @@ func (d *Handle) GetFeedItemByGUID(feedID int64, guid string) (*FeedItem, error)
 
 // RecordGUID adds a FeedItem record for the given feedID and guid.
 func (d *Handle) RecordGUID(feedID int64, guid string) error {
-	if d.writeUpdates {
-		logrus.Infof("Adding GUID '%s' for feed %d", guid, feedID)
-		f := FeedItem{
-			FeedInfoID: feedID,
-			GUID:       guid,
-			AddedOn:    time.Now(),
-		}
-		d.syncMutex.Lock()
-		defer d.syncMutex.Unlock()
-
-		return d.db.Save(&f).Error
+	d.logger.Infof("Adding GUID '%s' for feed %d", guid, feedID)
+	f := FeedItem{
+		FeedInfoID: feedID,
+		GUID:       guid,
+		AddedOn:    time.Now(),
 	}
-	return nil
+	d.syncMutex.Lock()
+	defer d.syncMutex.Unlock()
+
+	return d.db.Save(&f).Error
 }
 
 // GetMostRecentGUIDsForFeed retrieves the most recent GUIDs for a given feed
@@ -420,7 +389,7 @@ func (d *Handle) GetMostRecentGUIDsForFeed(feedID int64, max int) ([]string, err
 	if err == gorm.ErrRecordNotFound {
 		err = nil
 	}
-	logrus.Infof("Got last %d guids for feed_id: %d.", len(items), feedID)
+	d.logger.Infof("Got last %d guids for feed_id: %d.", len(items), feedID)
 	knownGuids := make([]string, len(items))
 	for i, v := range items {
 		knownGuids[i] = v.GUID

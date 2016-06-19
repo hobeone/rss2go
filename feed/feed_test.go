@@ -5,8 +5,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/rss2go/db"
 )
+
+func NullLogger() logrus.FieldLogger {
+	l := logrus.New()
+	l.Out = ioutil.Discard
+	return l
+}
 
 func TestParseFeed(t *testing.T) {
 	feedResp, err := ioutil.ReadFile("../testdata/ars.rss")
@@ -46,7 +53,7 @@ func TestInvalidCharacter(t *testing.T) {
 }
 
 func TestFeedWithBadEntity(t *testing.T) {
-	d := db.NewMemoryDBHandle(false, true, true)
+	d := db.NewMemoryDBHandle(false, NullLogger(), true)
 	feeds, err := d.GetAllFeeds()
 	if err != nil {
 		t.Fatalf("Error getting all feeds: %v", err)

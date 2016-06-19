@@ -2,6 +2,7 @@ package mail
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/mail"
 	"os"
 	"os/exec"
@@ -9,9 +10,16 @@ import (
 
 	"gopkg.in/gomail.v2"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed"
 )
+
+func NullLogger() logrus.FieldLogger {
+	l := logrus.New()
+	l.Out = ioutil.Discard
+	return l
+}
 
 type MockedMailer struct {
 	Called int
@@ -33,7 +41,7 @@ func TestSendToUsersWithNoMailSender(t *testing.T) {
 }
 
 func TestSendToUsers(t *testing.T) {
-	dbh := db.NewMemoryDBHandle(false, true, true)
+	dbh := db.NewMemoryDBHandle(false, NullLogger(), true)
 	users, err := dbh.GetAllUsers()
 	if err != nil {
 		t.Fatalf("Error getting users: %v", err)

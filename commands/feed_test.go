@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"io/ioutil"
 	"testing"
 
 	"github.com/Sirupsen/logrus"
@@ -8,12 +9,18 @@ import (
 	"github.com/hobeone/rss2go/db"
 )
 
+func NullLogger() logrus.FieldLogger {
+	l := logrus.New()
+	l.Out = ioutil.Discard
+	return l
+}
+
 func TestAddFeed(t *testing.T) {
 	cfg := config.NewTestConfig()
 
 	fcmd := feedCommand{
 		Config: cfg,
-		DBH:    db.NewMemoryDBHandle(false, true, true),
+		DBH:    db.NewMemoryDBHandle(false, NullLogger(), true),
 	}
 
 	testFeedURL := "http://testfeedurl"
@@ -34,11 +41,10 @@ func TestAddFeed(t *testing.T) {
 
 func TestAddFeedWithUsers(t *testing.T) {
 	cfg := config.NewTestConfig()
-	logrus.SetLevel(logrus.DebugLevel)
 
 	fcmd := feedCommand{
 		Config: cfg,
-		DBH:    db.NewMemoryDBHandle(false, true, true),
+		DBH:    db.NewMemoryDBHandle(false, NullLogger(), true),
 	}
 
 	testFeedURL := "http://testfeedurl"

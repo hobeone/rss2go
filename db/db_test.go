@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql/driver"
 	"errors"
+	"io/ioutil"
 	"testing"
 	"time"
 
@@ -11,8 +12,14 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+func NullLogger() logrus.FieldLogger {
+	l := logrus.New()
+	l.Out = ioutil.Discard
+	return l
+}
+
 func NewTestDBHandle(t *testing.T, verbose bool, w bool) *Handle {
-	db := openDB("testdb", "", verbose)
+	db := openDB("testdb", "", verbose, NullLogger())
 	return &Handle{db: db}
 }
 
@@ -30,7 +37,7 @@ func TestConnectionError(t *testing.T) {
 func TestGettingFeedWithTestDB(t *testing.T) {
 	logrus.SetLevel(logrus.DebugLevel)
 	RegisterTestingT(t)
-	d := NewMemoryDBHandle(true, true, true)
+	d := NewMemoryDBHandle(false, NullLogger(), true)
 
 	feeds, err := d.GetAllFeeds()
 	Expect(err).ToNot(HaveOccurred(), "Error getting all Feeds: %s", err)
@@ -40,7 +47,7 @@ func TestGettingFeedWithTestDB(t *testing.T) {
 func TestGettingFeedsWithError(t *testing.T) {
 	logrus.SetLevel(logrus.DebugLevel)
 	RegisterTestingT(t)
-	d := NewMemoryDBHandle(false, true, true)
+	d := NewMemoryDBHandle(false, NullLogger(), true)
 
 	allFeeds, err := d.GetAllFeeds()
 	Expect(err).ToNot(HaveOccurred(), "Error getting all Feeds: %s", err)
@@ -60,7 +67,7 @@ func TestGettingFeedsWithError(t *testing.T) {
 
 func TestGettingUsers(t *testing.T) {
 	RegisterTestingT(t)
-	d := NewMemoryDBHandle(false, true, true)
+	d := NewMemoryDBHandle(false, NullLogger(), true)
 
 	dbusers, err := d.GetAllUsers()
 	if err != nil {
@@ -80,7 +87,7 @@ func TestGettingUsers(t *testing.T) {
 
 func TestGetMostRecentGuidsForFeed(t *testing.T) {
 	RegisterTestingT(t)
-	d := NewMemoryDBHandle(false, true, true)
+	d := NewMemoryDBHandle(false, NullLogger(), true)
 
 	Expect(d.RecordGUID(1, "123")).NotTo(HaveOccurred())
 	Expect(d.RecordGUID(1, "1234")).NotTo(HaveOccurred())
@@ -100,7 +107,7 @@ func TestGetMostRecentGuidsForFeed(t *testing.T) {
 func TestGetMostRecentGuidsForFeedWithNoRecords(t *testing.T) {
 	RegisterTestingT(t)
 
-	d := NewMemoryDBHandle(false, true, true)
+	d := NewMemoryDBHandle(false, NullLogger(), true)
 
 	guids, err := d.GetMostRecentGUIDsForFeed(1, -1)
 
@@ -110,7 +117,7 @@ func TestGetMostRecentGuidsForFeedWithNoRecords(t *testing.T) {
 
 func TestAddFeedValidation(t *testing.T) {
 	RegisterTestingT(t)
-	d := NewMemoryDBHandle(false, true, true)
+	d := NewMemoryDBHandle(false, NullLogger(), true)
 	inputs := [][]string{
 		{"good name", "bad url"},
 		{"good name", "http://"},
@@ -124,7 +131,7 @@ func TestAddFeedValidation(t *testing.T) {
 	}
 }
 func TestFeedValidation(t *testing.T) {
-	d := NewMemoryDBHandle(false, true, true)
+	d := NewMemoryDBHandle(false, NullLogger(), true)
 	inputs := []FeedInfo{
 		{
 			Name: "",
@@ -143,7 +150,7 @@ func TestFeedValidation(t *testing.T) {
 
 func TestAddAndDeleteFeed(t *testing.T) {
 	RegisterTestingT(t)
-	d := NewMemoryDBHandle(false, true, true)
+	d := NewMemoryDBHandle(false, NullLogger(), true)
 	u, err := d.GetUserByID(1)
 	if err != nil {
 		t.Fatalf("Error getting user: %v", err)
@@ -180,7 +187,7 @@ func TestAddAndDeleteFeed(t *testing.T) {
 
 func TestGetFeedItemByGuid(t *testing.T) {
 	RegisterTestingT(t)
-	d := NewMemoryDBHandle(false, true, true)
+	d := NewMemoryDBHandle(false, NullLogger(), true)
 	err := d.RecordGUID(1, "feed0GUID")
 	Expect(err).ToNot(HaveOccurred())
 	err = d.RecordGUID(2, "feed1GUID")
@@ -195,14 +202,14 @@ func TestGetFeedItemByGuid(t *testing.T) {
 
 func TestRemoveUserByEmail(t *testing.T) {
 	RegisterTestingT(t)
-	d := NewMemoryDBHandle(false, true, true)
+	d := NewMemoryDBHandle(false, NullLogger(), true)
 	err := d.RemoveUserByEmail("test1@example.com")
 	Expect(err).ToNot(HaveOccurred())
 }
 
 func TestGetStaleFeeds(t *testing.T) {
 	RegisterTestingT(t)
-	d := NewMemoryDBHandle(false, true, true)
+	d := NewMemoryDBHandle(false, NullLogger(), true)
 	d.RecordGUID(1, "foobar")
 	d.RecordGUID(2, "foobaz")
 	d.RecordGUID(3, "foobaz")
@@ -223,7 +230,7 @@ func TestGetStaleFeeds(t *testing.T) {
 
 func TestAddUserValidation(t *testing.T) {
 	RegisterTestingT(t)
-	d := NewMemoryDBHandle(false, true, true)
+	d := NewMemoryDBHandle(false, NullLogger(), true)
 
 	inputs := [][]string{
 		{"test", ".bad@address"},
@@ -244,7 +251,7 @@ func TestAddUserValidation(t *testing.T) {
 
 func TestAddRemoveUser(t *testing.T) {
 	RegisterTestingT(t)
-	d := NewMemoryDBHandle(false, true, true)
+	d := NewMemoryDBHandle(false, NullLogger(), true)
 
 	feeds, err := d.GetAllFeeds()
 	if err != nil {
@@ -282,7 +289,7 @@ func TestAddRemoveUser(t *testing.T) {
 
 func TestAddRemoveFeedsFromUser(t *testing.T) {
 	RegisterTestingT(t)
-	d := NewMemoryDBHandle(false, true, true)
+	d := NewMemoryDBHandle(false, NullLogger(), true)
 	users, err := d.GetAllUsers()
 	if err != nil {
 		t.Fatalf("Error getting users: %v", err)
@@ -320,7 +327,7 @@ func TestAddRemoveFeedsFromUser(t *testing.T) {
 
 func TestGetUsersFeeds(t *testing.T) {
 	RegisterTestingT(t)
-	d := NewMemoryDBHandle(false, true, true)
+	d := NewMemoryDBHandle(false, NullLogger(), true)
 	users, err := d.GetAllUsers()
 	if err != nil {
 		t.Fatalf("Error getting users: %v", err)
@@ -337,7 +344,7 @@ func TestGetUsersFeeds(t *testing.T) {
 
 func TestGetFeedUsers(t *testing.T) {
 	RegisterTestingT(t)
-	d := NewMemoryDBHandle(false, true, true)
+	d := NewMemoryDBHandle(false, NullLogger(), true)
 	users, err := d.GetAllUsers()
 	if err != nil {
 		t.Fatalf("Error getting users: %v", err)
@@ -353,7 +360,7 @@ func TestGetFeedUsers(t *testing.T) {
 
 func TestUpdateUsersFeeds(t *testing.T) {
 	RegisterTestingT(t)
-	d := NewMemoryDBHandle(false, true, true)
+	d := NewMemoryDBHandle(false, NullLogger(), true)
 	users, err := d.GetAllUsers()
 	if err != nil {
 		t.Fatalf("Error getting users: %v", err)
