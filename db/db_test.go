@@ -35,12 +35,11 @@ func TestConnectionError(t *testing.T) {
 }
 
 func TestGettingFeedWithTestDB(t *testing.T) {
-	logrus.SetLevel(logrus.DebugLevel)
 	RegisterTestingT(t)
 	d := NewMemoryDBHandle(false, NullLogger(), true)
 
 	feeds, err := d.GetAllFeeds()
-	Expect(err).ToNot(HaveOccurred(), "Error getting all Feeds: %s", err)
+	Expect(err).ShouldNot(HaveOccurred(), "Error getting all Feeds: %s", err)
 	Expect(feeds).To(HaveLen(3))
 }
 

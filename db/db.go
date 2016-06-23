@@ -11,8 +11,8 @@ import (
 
 	"crypto/rand"
 
-	"github.com/DavidHuie/gomigrate"
 	"github.com/Sirupsen/logrus"
+	"github.com/hobeone/gomigrate"
 	"github.com/jinzhu/gorm"
 	"golang.org/x/crypto/bcrypt"
 
@@ -28,12 +28,13 @@ func init() {
 
 // FeedInfo represents a feed (atom, rss or rdf) that rss2go is polling.
 type FeedInfo struct {
-	ID            int64     `json:"id"`
-	Name          string    `sql:"not null;unique" json:"name" binding:"required"`
-	URL           string    `sql:"not null;unique" json:"url" binding:"required"`
-	LastPollTime  time.Time `json:"lastPollTime"`
-	LastPollError string    `json:"lastPollError"`
-	Users         []User    `gorm:"many2many:user_feeds;" json:"-"`
+	ID                int64     `json:"id"`
+	Name              string    `sql:"not null;unique" json:"name" binding:"required"`
+	URL               string    `sql:"not null;unique" json:"url" binding:"required"`
+	LastPollTime      time.Time `json:"lastPollTime"`
+	LastPollError     string    `json:"lastPollError"`
+	LastErrorResponse string    `json:"-"`
+	Users             []User    `gorm:"many2many:user_feeds;" json:"-"`
 }
 
 //TableName sets the name of the sql table to use.
@@ -169,18 +170,20 @@ func NewMemoryDBHandle(verbose bool, logger logrus.FieldLogger, loadFixtures boo
 		db:     db,
 		logger: logger,
 	}
-	err = d.Migrate("../db/migrations/sqlite3")
+
+	err = d.Migrate(migrations)
 	if err != nil {
 		panic(err)
 	}
 
 	if loadFixtures {
 		// load Fixtures
-		err = d.Migrate("../db/testdata/fixtures")
+		err = d.Migrate(fixtures)
 		if err != nil {
 			panic(err)
 		}
 	}
+
 	return d
 }
 
@@ -194,11 +197,12 @@ func randString() string {
 }
 
 // Migrate uses the migrations at the given path to update the database.
-func (d *Handle) Migrate(path string) error {
-	migrator, err := gomigrate.NewMigratorWithLogger(d.db.DB(), gomigrate.Sqlite3{}, path, d.logger)
+func (d *Handle) Migrate(m []*gomigrate.Migration) error {
+	migrator, err := gomigrate.NewMigratorWithMigrations(d.db.DB(), gomigrate.Sqlite3{}, m)
 	if err != nil {
 		return err
 	}
+	migrator.Logger = d.logger
 	err = migrator.Migrate()
 	return err
 }
