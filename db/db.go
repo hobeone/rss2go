@@ -171,14 +171,14 @@ func NewMemoryDBHandle(verbose bool, logger logrus.FieldLogger, loadFixtures boo
 		logger: logger,
 	}
 
-	err = d.Migrate(migrations)
+	err = d.Migrate(SchemaMigrations)
 	if err != nil {
 		panic(err)
 	}
 
 	if loadFixtures {
 		// load Fixtures
-		err = d.Migrate(fixtures)
+		err = d.Migrate(TestFixtures)
 		if err != nil {
 			panic(err)
 		}

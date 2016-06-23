@@ -13,6 +13,7 @@ func TestConfigUpdater(t *testing.T) {
 	cfg := config.NewTestConfig()
 
 	d := NewDaemon(cfg)
+	d.Logger = NullLogger()
 
 	f := *new(db.FeedInfo)
 

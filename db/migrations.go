@@ -2,7 +2,9 @@ package db
 
 import "github.com/hobeone/gomigrate"
 
-var migrations = []*gomigrate.Migration{
+// SchemaMigrations contains the series of migrations needed to create and
+// update the rss2go db schema.
+var SchemaMigrations = []*gomigrate.Migration{
 	{
 		ID:   100,
 		Name: "Base Schema",
@@ -46,7 +48,8 @@ CREATE UNIQUE INDEX user_feed_idx ON user_feeds (user_id,feed_info_id);`,
 	},
 }
 
-var fixtures = []*gomigrate.Migration{
+// TestFixtures contains the base fixture data for testing with a db.
+var TestFixtures = []*gomigrate.Migration{
 	{
 		ID:   900,
 		Name: "Base Test Fixtures",
