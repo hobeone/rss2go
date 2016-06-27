@@ -24,7 +24,7 @@ import (
 	"github.com/hobeone/rss2go/feed"
 )
 
-// Default MTA binary to exec when sending mail locally.
+// MTABINARY sets the default MTA binary to exec when sending mail locally.
 // sendmail is supported by sendmail and postfix
 const MTABINARY = "sendmail"
 
@@ -59,7 +59,9 @@ func (r SendmailRunner) Run(from string, to []string, msg []byte) error {
 	return err
 }
 
-// Sender is the interface for something that can send mail.
+// Sender is the interface for something that can send mail. The argument is a
+// two dimensional array of messages grouped by Feed Item.  This is to allow
+// reporting back of which items were successfully sent.
 type Sender interface {
 	SendMail(*gomail.Message) error
 }
@@ -111,24 +113,83 @@ type SMTPSender struct {
 	Port     int
 	Username string
 	Password string
+	reqChan  chan smtpRequest
+	dialer   dialer
+}
+
+type smtpRequest struct {
+	Message  *gomail.Message
+	Response chan error
 }
 
 // SendMail sends the given message to the configured server.
 //
 // It does no batching or delay and just sends immediately.
 func (s *SMTPSender) SendMail(msg *gomail.Message) error {
-	d := gomail.NewPlainDialer(s.Hostname, s.Port, s.Username, s.Password)
-	return d.DialAndSend(msg)
+	r := make(chan error)
+	s.reqChan <- smtpRequest{
+		Message:  msg,
+		Response: r,
+	}
+	return <-r
 }
 
 // NewSMTPSender returns a pointer to a new SMTPSender instance with
 // defaults set.
 func NewSMTPSender(server string, port int, username string, password string) Sender {
-	return &SMTPSender{
+	s := &SMTPSender{
 		Hostname: server,
 		Port:     port,
 		Username: username,
 		Password: password,
+		reqChan:  make(chan smtpRequest),
+		dialer:   gomail.NewDialer(server, port, username, password),
+	}
+	go s.smtpDaemon()
+	return s
+}
+
+type dialer interface {
+	Dial() (gomail.SendCloser, error)
+}
+
+func (s *SMTPSender) smtpDaemon() {
+	open := false
+	var sender gomail.SendCloser
+	var err error
+
+	for {
+		select {
+		case m, ok := <-s.reqChan:
+			if !ok {
+				// Closed channel, stop and return
+				return
+			}
+			if !open {
+				if sender, err = s.dialer.Dial(); err != nil {
+					logrus.Errorf("Error connecting to mail server: %v", err)
+					m.Response <- err
+					continue
+				}
+				open = true
+			}
+			if err := gomail.Send(sender, m.Message); err != nil {
+				m.Response <- err
+				logrus.Errorf("Error sending mail: %v", err)
+				continue
+			}
+			m.Response <- nil
+		// Close the connection to the SMTP server if no email was sent in
+		// the last 30 seconds.
+		case <-time.After(30 * time.Second):
+			if open {
+				logrus.Infof("Closing SMTP connection after 30 seconds of inactivity.")
+				if err := sender.Close(); err != nil {
+					logrus.Errorf("Error closing connection: %v", err)
+				}
+				open = false
+			}
+		}
 	}
 }
 

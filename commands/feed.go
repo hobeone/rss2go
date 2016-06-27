@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"strings"
 	"time"
 
 	netmail "net/mail"
@@ -58,7 +59,7 @@ func (fc *feedCommand) configure(app *kingpin.Application) {
 
 func (fc *feedCommand) runone(c *kingpin.ParseContext) error {
 	fc.init()
-	fc.Config.Mail.SendMail = false
+	fc.Config.Mail.SendMail = true
 	fc.Config.DB.UpdateDb = false
 
 	mailer := mail.CreateAndStartMailer(fc.Config)
@@ -89,16 +90,25 @@ func (fc *feedCommand) runone(c *kingpin.ParseContext) error {
 	if fc.Loops == -1 {
 		for {
 			resp := fw.CrawlFeed()
-			fw.UpdateFeed(resp)
+			err := fw.UpdateFeed(resp)
+			if err != nil {
+				fmt.Printf("Error when updating feed: %v\n", err)
+			}
 			time.Sleep(time.Second * time.Duration(fc.Config.Crawl.MinInterval))
 		}
 	} else if fc.Loops == 1 {
 		resp := fw.CrawlFeed()
-		fw.UpdateFeed(resp)
+		err := fw.UpdateFeed(resp)
+		if err != nil {
+			fmt.Printf("Error when updating feed: %v\n", err)
+		}
 	} else {
 		for i := 0; i < fc.Loops; i++ {
 			resp := fw.CrawlFeed()
-			fw.UpdateFeed(resp)
+			err := fw.UpdateFeed(resp)
+			if err != nil {
+				fmt.Printf("Error when updating feed: %v\n", err)
+			}
 			time.Sleep(time.Second * time.Duration(fc.Config.Crawl.MinInterval))
 		}
 	}
@@ -116,7 +126,13 @@ func (fc *feedCommand) badfeeds(c *kingpin.ParseContext) error {
 		fmt.Printf("  Name: %s\n", f.Name)
 		fmt.Printf("  Url: %s\n", f.URL)
 		fmt.Printf("  Last Update: %s\n", f.LastPollTime)
-		fmt.Printf("  Error: %s\n", f.LastPollError)
+		fmt.Printf("  Error: %s\n", strings.TrimSpace(f.LastPollError))
+		blen := len(f.LastErrorResponse)
+		if blen > 100 {
+			blen = 100
+		}
+		fmt.Printf("  Last Content: %s...\n", f.LastErrorResponse[0:blen])
+		fmt.Println()
 	}
 
 	fmt.Println()

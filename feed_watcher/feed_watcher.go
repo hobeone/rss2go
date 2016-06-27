@@ -14,10 +14,13 @@
 package feedwatcher
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"math/rand"
+	"net/http"
 	netmail "net/mail"
 	"time"
 
@@ -50,12 +53,13 @@ type FeedCrawlRequest struct {
 // value if Error is non nil.
 //
 type FeedCrawlResponse struct {
-	URI                string
-	Body               []byte
-	Feed               *feed.Feed
-	Items              []*feed.Story
-	HTTPResponseStatus string
-	Error              error
+	URI                    string
+	Body                   []byte
+	Feed                   *feed.Feed
+	Items                  []*feed.Story
+	HTTPResponseStatus     string
+	HTTPResponseStatusCode int
+	Error                  error
 }
 
 // FeedWatcher controlls the crawling of a Feed.  It keeps state about the
@@ -150,16 +154,39 @@ func (fw *FeedWatcher) Crawling() (r bool) {
 // UpdateFeed will crawl the feed, check for new items, mail them out and
 // update the database with the new information
 func (fw *FeedWatcher) UpdateFeed(resp *FeedCrawlResponse) error {
-	fw.updateFeed(resp)
-	// Update DB Record
 	fw.FeedInfo.LastPollTime = time.Now()
 	fw.FeedInfo.LastPollError = ""
-	if resp.Error != nil {
-		fw.FeedInfo.LastPollError = resp.Error.Error()
+	fw.FeedInfo.LastErrorResponse = ""
+
+	if resp.HTTPResponseStatusCode != http.StatusOK || resp.Error != nil {
+		if resp.HTTPResponseStatusCode != http.StatusOK {
+			fw.FeedInfo.LastPollError = fmt.Sprintf("Non 200 HTTP Status Code: %d", resp.HTTPResponseStatusCode)
+		}
+		bod, err := ioutil.ReadAll(bytes.NewReader(resp.Body))
+		if err != nil {
+			fw.FeedInfo.LastErrorResponse = fmt.Sprintf("rss2go: Couldn't read response: %v", err)
+		} else {
+			fw.FeedInfo.LastErrorResponse = string(bod)
+		}
+	} else {
+		fw.updateFeed(resp)
+		// Update DB Record
+		if resp.Error != nil {
+			fw.FeedInfo.LastPollError = resp.Error.Error()
+			bod, err := ioutil.ReadAll(bytes.NewReader(resp.Body))
+			if err != nil {
+				fw.FeedInfo.LastErrorResponse = fmt.Sprintf("rss2go: Couldn't read response: %v", err)
+			} else {
+				fw.FeedInfo.LastErrorResponse = string(bod)
+			}
+		}
 	}
 	err := fw.dbh.SaveFeed(&fw.FeedInfo)
 	if err != nil {
 		resp.Error = err
+	}
+	if fw.FeedInfo.LastPollError != "" && resp.Error == nil {
+		resp.Error = errors.New(fw.FeedInfo.LastPollError)
 	}
 	return resp.Error
 }
@@ -171,12 +198,11 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 
 	if feed == nil || stories == nil || len(stories) == 0 {
 		if err != nil {
-			fw.Logger.Infof("Error parsing response from %s: %#v", resp.URI, err)
-			resp.Error = err
+			resp.Error = fmt.Errorf("Error parsing response from %s: %#v", resp.URI, err)
+			fw.Logger.Error(resp.Error)
 		} else {
-			e := fmt.Errorf("no items found in %s", resp.URI)
-			fw.Logger.Info(e)
-			resp.Error = e
+			resp.Error = fmt.Errorf("no items found in %s", resp.URI)
+			fw.Logger.Info(resp.Error)
 		}
 		return resp.Error
 	}
@@ -202,13 +228,10 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 		var err error
 		fw.KnownGuids, err = fw.LoadGuidsFromDb(guidsToLoad)
 		if err != nil {
-			e := fmt.Errorf("error getting Guids from DB: %s", err)
-			fw.Logger.Info(e)
-			resp.Error = e
+			resp.Error = fmt.Errorf("error getting Guids from DB: %s", err)
 			return resp.Error
 		}
-		fw.Logger.Infof("Loaded %d known guids for Feed %s.",
-			len(fw.KnownGuids), fw.FeedInfo.URL)
+		fw.Logger.Infof("Loaded %d known guids for Feed %s.", len(fw.KnownGuids), fw.FeedInfo.URL)
 	}
 
 	resp.Items = fw.filterNewItems(stories)

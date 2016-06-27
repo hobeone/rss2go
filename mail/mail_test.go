@@ -2,6 +2,7 @@ package mail
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/mail"
 	"os"
@@ -128,5 +129,48 @@ func TestLocalMTASender(t *testing.T) {
 	err = mta.SendMail(gmsg)
 	if err == nil {
 		t.Fatalf("Unexpected success with SendMail.")
+	}
+}
+
+type testDialer struct {
+	Called int
+	Opened bool
+}
+
+func (d *testDialer) Dial() (gomail.SendCloser, error) {
+	d.Called++
+	d.Opened = true
+	return &testSender{}, nil
+}
+
+type testSender struct{}
+
+func (s *testSender) Send(from string, to []string, msg io.WriterTo) error {
+	return nil
+}
+
+func (s *testSender) Close() error {
+	return nil
+}
+
+func TestSMTPSender(t *testing.T) {
+	gmsg := gomail.NewMessage()
+	gmsg.SetHeader("From", "from@example.com")
+	gmsg.SetHeader("To", "to@example.com")
+	gmsg.SetHeader("Subject", "Testing subject")
+	gmsg.SetBody("text/html", "Test Body")
+
+	s := &SMTPSender{
+		Hostname: "foo",
+		Port:     1234,
+		Username: "user",
+		Password: "pwd",
+		reqChan:  make(chan smtpRequest),
+		dialer:   &testDialer{},
+	}
+	go s.smtpDaemon()
+	err := s.SendMail(gmsg)
+	if err != nil {
+		t.Fatalf("Unexpected error on sendmail: %v", err)
 	}
 }

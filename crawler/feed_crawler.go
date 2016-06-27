@@ -26,7 +26,14 @@ func GetFeed(url string, client *http.Client) (*http.Response, error) {
 		client = httpclient.NewTimeoutClient(connectTimeout, readWriteTimeout)
 	}
 
-	r, err := client.Get(url)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		logrus.Errorf("Error creating request: %v", err)
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.103 Safari/537.36")
+
+	r, err := client.Do(req)
 
 	if err != nil {
 		logrus.Infof("Error getting %s: %s", url, err)
@@ -51,12 +58,14 @@ func GetFeedAndMakeResponse(url string, client *http.Client) *feedwatcher.FeedCr
 		// If there are connection issues the response will be nil
 		defer r.Body.Close()
 	}
+
 	if err != nil {
 		resp.Error = err
 		return resp
 	}
 
 	resp.HTTPResponseStatus = r.Status
+	resp.HTTPResponseStatusCode = r.StatusCode
 	if r.ContentLength > 0 {
 		b := make([]byte, r.ContentLength)
 		_, err := io.ReadFull(r.Body, b)

@@ -92,9 +92,11 @@ func TestPollFeedWithDBErrors(t *testing.T) {
 	go n.PollFeed()
 	req := <-n.crawlChan
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.URL,
-		Body:  feedResp,
-		Error: nil,
+		URI:                    n.FeedInfo.URL,
+		Body:                   feedResp,
+		Error:                  nil,
+		HTTPResponseStatus:     "200 OK",
+		HTTPResponseStatusCode: 200,
 	}
 	resp := <-n.responseChan
 	if resp.Error == nil {
@@ -114,9 +116,11 @@ func TestFeedWatcherPolling(t *testing.T) {
 	}
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.URL,
-		Body:  feedResp,
-		Error: nil,
+		URI:                    n.FeedInfo.URL,
+		Body:                   feedResp,
+		Error:                  nil,
+		HTTPResponseStatus:     "200 OK",
+		HTTPResponseStatusCode: 200,
 	}
 	resp := <-n.responseChan
 	if resp.Error != nil {
@@ -128,9 +132,11 @@ func TestFeedWatcherPolling(t *testing.T) {
 	// Second Poll, should not have new items
 	req = <-n.crawlChan
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.URL,
-		Body:  feedResp,
-		Error: nil,
+		URI:                    n.FeedInfo.URL,
+		Body:                   feedResp,
+		Error:                  nil,
+		HTTPResponseStatus:     "200 OK",
+		HTTPResponseStatusCode: 200,
 	}
 	go n.StopPoll()
 	resp = <-n.responseChan
@@ -163,9 +169,11 @@ func TestFeedWatcherWithEmailErrors(t *testing.T) {
 	req := <-n.crawlChan
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.URL,
-		Body:  feedResp,
-		Error: nil,
+		URI:                    n.FeedInfo.URL,
+		Body:                   feedResp,
+		Error:                  nil,
+		HTTPResponseStatus:     "200 OK",
+		HTTPResponseStatusCode: 200,
 	}
 	resp := <-n.responseChan
 
@@ -190,9 +198,11 @@ func TestFeedWatcherPollingRssWithNoItemDates(t *testing.T) {
 	req := <-n.crawlChan
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.URL,
-		Body:  feedResp,
-		Error: nil,
+		URI:                    n.FeedInfo.URL,
+		Body:                   feedResp,
+		Error:                  nil,
+		HTTPResponseStatus:     "200 OK",
+		HTTPResponseStatusCode: 200,
 	}
 	resp := <-n.responseChan
 	if len(resp.Items) != 20 {
@@ -201,9 +211,11 @@ func TestFeedWatcherPollingRssWithNoItemDates(t *testing.T) {
 	// Second Poll, should not have new items
 	req = <-n.crawlChan
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.URL,
-		Body:  feedResp,
-		Error: nil,
+		URI:                    n.FeedInfo.URL,
+		Body:                   feedResp,
+		Error:                  nil,
+		HTTPResponseStatus:     "200 OK",
+		HTTPResponseStatusCode: 200,
 	}
 	go n.StopPoll()
 	resp = <-n.responseChan
@@ -223,8 +235,10 @@ func TestFeedWatcherWithMalformedFeed(t *testing.T) {
 
 	req := <-n.crawlChan
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.URL,
-		Body:  []byte("Testing"),
+		URI:                    n.FeedInfo.URL,
+		Body:                   []byte("Testing"),
+		HTTPResponseStatus:     "200 OK",
+		HTTPResponseStatusCode: 200,
 		Error: nil,
 	}
 	go n.StopPoll()
@@ -256,9 +270,11 @@ func TestFeedWatcherWithGuidsSet(t *testing.T) {
 	req := <-n.crawlChan
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.URL,
-		Body:  feedResp,
-		Error: nil,
+		URI:                    n.FeedInfo.URL,
+		Body:                   feedResp,
+		Error:                  nil,
+		HTTPResponseStatus:     "200 OK",
+		HTTPResponseStatusCode: 200,
 	}
 	resp := <-n.responseChan
 	if len(resp.Items) != 0 {
@@ -269,9 +285,11 @@ func TestFeedWatcherWithGuidsSet(t *testing.T) {
 	req = <-n.crawlChan
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.URL,
-		Body:  feedResp,
-		Error: nil,
+		URI:                    n.FeedInfo.URL,
+		Body:                   feedResp,
+		Error:                  nil,
+		HTTPResponseStatus:     "200 OK",
+		HTTPResponseStatusCode: 200,
 	}
 	resp = <-n.responseChan
 	if len(resp.Items) != 25 {
@@ -293,9 +311,11 @@ func TestFeedWatcherWithTooRecentLastPoll(t *testing.T) {
 	req := <-n.crawlChan
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.URL,
-		Body:  feedResp,
-		Error: nil,
+		URI:                    n.FeedInfo.URL,
+		Body:                   feedResp,
+		Error:                  nil,
+		HTTPResponseStatus:     "200 OK",
+		HTTPResponseStatusCode: 200,
 	}
 	_ = <-n.responseChan
 
@@ -311,9 +331,11 @@ func TestWithEmptyFeed(t *testing.T) {
 	req := <-n.crawlChan
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.URL,
-		Body:  feedResp,
-		Error: nil,
+		URI:                    n.FeedInfo.URL,
+		Body:                   feedResp,
+		Error:                  nil,
+		HTTPResponseStatus:     "200 OK",
+		HTTPResponseStatusCode: 200,
 	}
 	resp := <-n.responseChan
 	if resp.Error == nil {
@@ -328,15 +350,34 @@ func TestWithErrorOnCrawl(t *testing.T) {
 	req := <-n.crawlChan
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.URL,
-		Body:  feedResp,
-		Error: fmt.Errorf("error crawling feed"),
+		URI:                    n.FeedInfo.URL,
+		Body:                   feedResp,
+		Error:                  fmt.Errorf("error crawling feed"),
+		HTTPResponseStatus:     "403 Forbidden",
+		HTTPResponseStatusCode: 403,
 	}
 	resp := <-n.responseChan
 	if resp.Error == nil {
 		t.Fatalf("Expected and error on an empty feed. Got %d items", len(resp.Items))
 	}
+
+	req = <-n.crawlChan
+	// No error on crawl, but got 403
+	req.ResponseChan <- &FeedCrawlResponse{
+		URI:                    n.FeedInfo.URL,
+		Body:                   feedResp,
+		HTTPResponseStatus:     "403 Forbidden",
+		HTTPResponseStatusCode: 403,
+	}
+	resp = <-n.responseChan
+	if resp.Error == nil {
+		t.Fatalf("Expected and error on an empty feed.")
+	}
+	if len(resp.Items) > 0 {
+		t.Fatalf("Expected 0 items on error got %d", len(resp.Items))
+	}
 }
+
 func TestWithDoublePollFeed(t *testing.T) {
 	n, feedResp, _ := SetupTest(t, "../testdata/empty.rss")
 	OverrideAfter(n)
@@ -345,9 +386,11 @@ func TestWithDoublePollFeed(t *testing.T) {
 	req := <-n.crawlChan
 
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:   n.FeedInfo.URL,
-		Body:  feedResp,
-		Error: nil,
+		URI:                    n.FeedInfo.URL,
+		Body:                   feedResp,
+		Error:                  nil,
+		HTTPResponseStatus:     "200 OK",
+		HTTPResponseStatusCode: 200,
 	}
 	resp := <-n.responseChan
 	if len(resp.Items) != 0 {
