@@ -81,13 +81,9 @@ func TestFeedIframeExtraction(t *testing.T) {
 	if len(s) != 1 {
 		t.Fatalf("Expected 1 story from feed, got %d", len(s))
 	}
-	replaced, err := cleanFeedContent(s[0].Content)
-	if err != nil {
-		t.Fatalf("Error replacing Iframes: %s", err)
-	}
 	expected := `<a href="//www.youtube.com/embed/dwcwjXLSw00"`
-	if !strings.Contains(replaced, expected) {
-		t.Fatalf("Couldn't find %v in %v", expected, replaced)
+	if !strings.Contains(s[0].Content, expected) {
+		t.Fatalf("Couldn't find %v in %v", expected, s[0].Content)
 	}
 }
 
@@ -108,5 +104,21 @@ func TestBoingBoingFeedIframeExtraction(t *testing.T) {
 	expected := `<a href="//cdn.embedly.com/widgets/media.html`
 	if !strings.Contains(s[1].Content, expected) {
 		t.Fatalf("Couldn't find %v in %v", expected, s[1].Content)
+	}
+}
+
+func TestRadavistImageSizer(t *testing.T) {
+	feedResp, err := ioutil.ReadFile("../testdata/radavist.rss")
+	if err != nil {
+		t.Fatal("Error reading test feed.")
+	}
+	_, s, _ := ParseFeed("http://localhost/feed.rss", feedResp)
+
+	if len(s) != 1 {
+		t.Fatalf("Expected 1 story from feed, got %d", len(s))
+	}
+	expected := `<img src="http://theradavist.com/wp-content/uploads/2016/06/TooShort.png" alt="TooShort" style="padding: 0; display: inline;	margin: 0 auto; max-height: 100%; max-width: 100%;"/>`
+	if !strings.Contains(s[0].Content, expected) {
+		t.Fatalf("Couldn't find %v in %v", expected, s[0].Content)
 	}
 }

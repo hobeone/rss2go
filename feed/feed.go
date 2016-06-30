@@ -19,8 +19,8 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/go-html-transform/h5"
 	htmltransform "github.com/hobeone/go-html-transform/html/transform"
-
 	"github.com/microcosm-cc/bluemonday"
+
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
 	"golang.org/x/text/transform"
@@ -303,7 +303,7 @@ func ParseFeed(url string, b []byte) (*Feed, []*Story, error) {
 
 	err := fmt.Errorf("couldn't find ATOM, RSS or RDF feed for %s. ATOM Error: %s, RSS Error: %s, RDF Error: %s\n", url, atomerr, rsserr, rdferr)
 
-	logrus.Info(err.Error())
+	logrus.Errorf("feed: %v", err.Error())
 	return nil, nil, err
 }
 
@@ -390,7 +390,7 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 			if err == nil {
 				s.Link = link.String()
 			} else {
-				logrus.Infof("unable to resolve link: %s: %v", err, s.Link)
+				logrus.Infof("feed: unable to resolve link: %s: %v", err, s.Link)
 			}
 		}
 		_, serr := url.Parse(s.Link)
@@ -404,10 +404,17 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 		// mail.
 		s.Content, err = cleanFeedContent(s.Content)
 		if err != nil {
-			logrus.Errorf("Error cleaning up content: %s", err)
+			logrus.Errorf("feed: error cleaning up content: %s", err)
 		}
+
 		p := bluemonday.UGCPolicy()
 		s.Content = fullyHTMLUnescape(p.Sanitize(s.Content))
+
+		s.Content, err = rewriteFeedContent(s.Content)
+		if err != nil {
+			logrus.Errorf("feed: error cleaning up content: %s", err)
+		}
+
 	}
 
 	return f, ss, nil
@@ -468,6 +475,26 @@ func removeFeedPortalJunk(n *html.Node) {
 	}
 }
 
+func setMaxImageSize(n *html.Node) {
+	if n.Parent == nil {
+		// Won't mess with the root node
+		return
+	}
+	newAttrs := []html.Attribute{}
+	for _, attr := range n.Attr {
+		if attr.Key == "width" || attr.Key == "height" || attr.Key == "style" {
+			continue
+		}
+		newAttrs = append(newAttrs, attr)
+	}
+	n.Attr = newAttrs
+	a := html.Attribute{
+		Key: "style",
+		Val: `padding: 0; display: inline;	margin: 0 auto; max-height: 100%; max-width: 100%;`,
+	}
+	n.Attr = append(n.Attr, a)
+}
+
 func cleanFeedContent(htmlFrag string) (string, error) {
 	doc, err := htmltransform.NewFromReader(strings.NewReader(htmlFrag))
 	if err != nil {
@@ -476,6 +503,20 @@ func cleanFeedContent(htmlFrag string) (string, error) {
 	doc.ApplyAll(
 		htmltransform.MustTrans(convertIframeToAnchor, "iframe"),
 		htmltransform.MustTrans(removeFeedPortalJunk, "a"),
+	)
+	return doc.String(), nil
+}
+
+// Run post bluemonday sanitization.  These rewrites will introduce
+// modifications that bluemonday would strip but since we control them they
+// should be safe.
+func rewriteFeedContent(htmlFrag string) (string, error) {
+	doc, err := htmltransform.NewFromReader(strings.NewReader(htmlFrag))
+	if err != nil {
+		return htmlFrag, err
+	}
+	doc.ApplyAll(
+		htmltransform.MustTrans(setMaxImageSize, "img"),
 	)
 	return doc.String(), nil
 }

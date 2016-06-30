@@ -3,23 +3,17 @@ package log
 import (
 	"io/ioutil"
 	"os"
-	"time"
 
 	"github.com/Sirupsen/logrus"
+	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 )
 
-func init() {
-	fmter := &logrus.TextFormatter{}
-	fmter.FullTimestamp = true
-	fmter.TimestampFormat = time.StampMilli
-	fmter.TimestampFormat = "Mon, 02 Jan 2006 15:04:05.000 -0700"
+func SetupLogger() {
+	fmter := &prefixed.TextFormatter{}
 	logrus.SetFormatter(fmter)
-
-	// Output to stderr instead of stdout, could also be a file.
 	logrus.SetOutput(os.Stdout)
-
-	// Only log the warning severity or above.
-	logrus.SetLevel(logrus.WarnLevel)
+	// Only log the info severity or above.
+	logrus.SetLevel(logrus.InfoLevel)
 }
 
 // SetNullOutput sets the looger to send everything to /dev/null.

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"
+	xmlns:content="http://purl.org/rss/1.0/modules/content/"
+	xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+	xmlns:dc="http://purl.org/dc/elements/1.1/"
+	xmlns:atom="http://www.w3.org/2005/Atom"
+	xmlns:sy="http://purl.org/rss/1.0/modules/syndication/"
+	xmlns:slash="http://purl.org/rss/1.0/modules/slash/"
+	>
+
+<channel>
+	<title>The Radavist</title>
+	<atom:link href="http://theradavist.com/feed/" rel="self" type="application/rss+xml" />
+	<link>http://theradavist.com</link>
+	<description>Rubber Side Up</description>
+	<lastBuildDate>Tue, 28 Jun 2016 22:27:11 +0000</lastBuildDate>
+	<language>en-US</language>
+	<sy:updatePeriod>hourly</sy:updatePeriod>
+	<sy:updateFrequency>1</sy:updateFrequency>
+	<generator>http://wordpress.org/?v=4.1</generator>
+	<item>
+		<title>FYXO: Life is Too Short&#8230; T-Shirts</title>
+		<link>http://theradavist.com/2016/06/fyxo-life-is-too-short-t-shirts/</link>
+		<comments>http://theradavist.com/2016/06/fyxo-life-is-too-short-t-shirts/#comments</comments>
+		<pubDate>Tue, 28 Jun 2016 22:27:11 +0000</pubDate>
+		<dc:creator><![CDATA[prolly]]></dc:creator>
+				<category><![CDATA[Products]]></category>
+		<category><![CDATA[Fyxo]]></category>
+		<category><![CDATA[shirts]]></category>
+
+		<guid isPermaLink="false">http://theradavist.com/?p=119234</guid>
+		<description><![CDATA[The latest from FYXO features one of his classic quotes on a heather grey t-shirt, making a bold statement. You don&#8217;t have to spend a lot of money to ride a nice bike, it&#8217;s all a matter of perspective. Pick up a Life is Too Short&#8230; t-shirt at FYXO!]]></description>
+				<content:encoded><![CDATA[<p><img src="http://theradavist.com/wp-content/uploads/2016/06/TooShort.png" alt="TooShort" width="1721" height="1229" class="aligncenter size-full wp-image-119235" /></p>
+<p>The latest from FYXO features one of his classic quotes on a heather grey t-shirt, making a bold statement. <a href="http://theradavist.com/2013/08/beautiful-bicycle-fyxo-fauxnago-commuter/" title="Fyxo Fauxnago Commuter" target="_blank">You don&#8217;t have to spend a lot of money to ride a nice bike</a>, it&#8217;s all a matter of perspective. Pick up a Life is Too Short&#8230; t-shirt at <a href="https://shop.fyxo.co/collections/cycling-tshirts/products/life-is-too-short-t-shirt" target="_blank">FYXO</a>!</p>
+]]></content:encoded>
+			<wfw:commentRss>http://theradavist.com/2016/06/fyxo-life-is-too-short-t-shirts/feed/</wfw:commentRss>
+		<slash:comments>0</slash:comments>
+		</item>
+	</channel>
+</rss>
