@@ -16,9 +16,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/Sirupsen/logrus"
-	"github.com/hobeone/go-html-transform/h5"
-	htmltransform "github.com/hobeone/go-html-transform/html/transform"
 	"github.com/microcosm-cc/bluemonday"
 
 	"golang.org/x/net/html"
@@ -434,89 +433,57 @@ func fullyHTMLUnescape(orig string) string {
 	return mod
 }
 
-func convertIframeToAnchor(n *html.Node) {
-	p := n.Parent
-	if n.Parent == nil {
-		// Won't mess with the root node
-		return
-	}
-	linkSrc := ""
-	for i, attr := range n.Attr {
-		if attr.Key == "src" {
-			linkSrc = n.Attr[i].Val
-		}
-	}
-	if linkSrc != "" {
-		escLinkSrc, err := url.QueryUnescape(linkSrc)
-		if err == nil {
-			linkSrc = escLinkSrc
-		} else {
-			logrus.Info("Error unescaping url. Error: %s, Url: %#v", err, linkSrc)
-		}
-		p.InsertBefore(h5.Anchor(linkSrc, linkSrc), n)
-		p.RemoveChild(n)
-	}
-}
-
-func removeFeedPortalJunk(n *html.Node) {
-	p := n.Parent
-	if n.Parent == nil {
-		return
-	}
-
-	linkSrc := ""
-	for i, attr := range n.Attr {
-		if attr.Key == "href" {
-			linkSrc = n.Attr[i].Val
-		}
-	}
-	if strings.Contains(linkSrc, "da.feedsportal.com") {
-		p.RemoveChild(n)
-	}
-}
-
-func setMaxImageSize(n *html.Node) {
-	if n.Parent == nil {
-		// Won't mess with the root node
-		return
-	}
-	newAttrs := []html.Attribute{}
-	for _, attr := range n.Attr {
-		if attr.Key == "width" || attr.Key == "height" || attr.Key == "style" {
-			continue
-		}
-		newAttrs = append(newAttrs, attr)
-	}
-	n.Attr = newAttrs
-	a := html.Attribute{
-		Key: "style",
-		Val: `padding: 0; display: inline;	margin: 0 auto; max-height: 100%; max-width: 100%;`,
-	}
-	n.Attr = append(n.Attr, a)
-}
-
 func cleanFeedContent(htmlFrag string) (string, error) {
-	doc, err := htmltransform.NewFromReader(strings.NewReader(htmlFrag))
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlFrag))
 	if err != nil {
 		return htmlFrag, err
 	}
-	doc.ApplyAll(
-		htmltransform.MustTrans(convertIframeToAnchor, "iframe"),
-		htmltransform.MustTrans(removeFeedPortalJunk, "a"),
-	)
-	return doc.String(), nil
+
+	doc.Find("iframe").Each(func(i int, s *goquery.Selection) {
+		val, exists := s.Attr("src")
+		if exists && val != "" {
+			escLinkSrc, err := url.QueryUnescape(val)
+			if err != nil {
+				logrus.Info("feed: error unescaping iframe URL. Error: %s, URL: %#v", err, val)
+				return
+			}
+			s.ReplaceWithHtml(fmt.Sprintf(`<a href="%s">%s</a>`, escLinkSrc, escLinkSrc))
+		}
+	})
+	doc.Find("a").Each(func(i int, s *goquery.Selection) {
+		val, exists := s.Attr("href")
+		if exists && strings.Contains(val, "da.feedsportal.com") {
+			s.Remove()
+		}
+	})
+	r, err := doc.Html()
+	if err != nil {
+		return htmlFrag, err
+	}
+
+	return r, nil
+
 }
 
 // Run post bluemonday sanitization.  These rewrites will introduce
 // modifications that bluemonday would strip but since we control them they
 // should be safe.
 func rewriteFeedContent(htmlFrag string) (string, error) {
-	doc, err := htmltransform.NewFromReader(strings.NewReader(htmlFrag))
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlFrag))
 	if err != nil {
 		return htmlFrag, err
 	}
-	doc.ApplyAll(
-		htmltransform.MustTrans(setMaxImageSize, "img"),
-	)
-	return doc.String(), nil
+	doc.Find("img").Each(func(i int, s *goquery.Selection) {
+		s.RemoveAttr("width")
+		s.RemoveAttr("style")
+		s.RemoveAttr("height")
+		s.RemoveAttr("height")
+		s.SetAttr("style", `padding: 0; display: inline;	margin: 0 auto; max-height: 100%; max-width: 100%;`)
+	})
+	r, err := doc.Html()
+	if err != nil {
+		return htmlFrag, err
+	}
+
+	return r, nil
 }
