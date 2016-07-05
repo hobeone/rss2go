@@ -13,7 +13,6 @@ import (
 	"github.com/hobeone/rss2go/feed"
 	"github.com/hobeone/rss2go/log"
 	"github.com/hobeone/rss2go/mail"
-	. "github.com/onsi/gomega"
 )
 
 func NullLogger() logrus.FieldLogger {
@@ -57,6 +56,9 @@ func SetupTest(t *testing.T, feedPath string) (*FeedWatcher, []byte, *mail.Dispa
 	if err != nil {
 		t.Fatalf("Error getting feeds: %v", err)
 	}
+	if len(feeds) < 1 {
+		t.Fatalf("Error: no feeds returned from database")
+	}
 
 	feedResp, err := ioutil.ReadFile(feedPath)
 	if err != nil {
@@ -67,6 +69,7 @@ func SetupTest(t *testing.T, feedPath string) (*FeedWatcher, []byte, *mail.Dispa
 }
 
 func TestNewFeedWatcher(t *testing.T) {
+	t.Parallel()
 	n, _, _ := SetupTest(t, "../testdata/empty.rss")
 	if n.polling == true {
 		t.Fatal("polling attribute set is true")
@@ -74,6 +77,7 @@ func TestNewFeedWatcher(t *testing.T) {
 }
 
 func TestFeedWatcherPollLocking(t *testing.T) {
+	t.Parallel()
 	n, _, _ := SetupTest(t, "../testdata/empty.rss")
 	if n.Polling() {
 		t.Fatal("A new watcher shouldn't be polling")
@@ -85,6 +89,7 @@ func TestFeedWatcherPollLocking(t *testing.T) {
 }
 
 func TestPollFeedWithDBErrors(t *testing.T) {
+	t.Parallel()
 	n, feedResp, _ := SetupTest(t, "../testdata/ars.rss")
 	OverrideAfter(n)
 
@@ -106,6 +111,7 @@ func TestPollFeedWithDBErrors(t *testing.T) {
 }
 
 func TestFeedWatcherPolling(t *testing.T) {
+	t.Parallel()
 	n, feedResp, mailDispatcher := SetupTest(t, "../testdata/ars.rss")
 	OverrideAfter(n)
 
@@ -155,6 +161,7 @@ func TestFeedWatcherPolling(t *testing.T) {
 }
 
 func TestFeedWatcherWithEmailErrors(t *testing.T) {
+	t.Parallel()
 	n, feedResp, _ := SetupTest(t, "../testdata/bicycling_rss.xml")
 	OverrideAfter(n)
 
@@ -191,6 +198,7 @@ func TestFeedWatcherWithEmailErrors(t *testing.T) {
 }
 
 func TestFeedWatcherPollingRssWithNoItemDates(t *testing.T) {
+	t.Parallel()
 	n, feedResp, _ := SetupTest(t, "../testdata/bicycling_rss.xml")
 	OverrideAfter(n)
 
@@ -229,6 +237,7 @@ func TestFeedWatcherPollingRssWithNoItemDates(t *testing.T) {
 }
 
 func TestFeedWatcherWithMalformedFeed(t *testing.T) {
+	t.Parallel()
 	n, _, _ := SetupTest(t, "../testdata/ars.rss")
 	OverrideAfter(n)
 	go n.PollFeed()
@@ -257,6 +266,7 @@ func TestFeedWatcherWithMalformedFeed(t *testing.T) {
 }
 
 func TestFeedWatcherWithGuidsSet(t *testing.T) {
+	t.Parallel()
 	n, feedResp, _ := SetupTest(t, "../testdata/ars.rss")
 	OverrideAfter(n)
 
@@ -298,6 +308,7 @@ func TestFeedWatcherWithGuidsSet(t *testing.T) {
 }
 
 func TestFeedWatcherWithTooRecentLastPoll(t *testing.T) {
+	t.Parallel()
 	n, feedResp, _ := SetupTest(t, "../testdata/ars.rss")
 	n.FeedInfo.LastPollTime = time.Now()
 
@@ -325,6 +336,7 @@ func TestFeedWatcherWithTooRecentLastPoll(t *testing.T) {
 }
 
 func TestWithEmptyFeed(t *testing.T) {
+	t.Parallel()
 	n, feedResp, _ := SetupTest(t, "../testdata/empty.rss")
 	OverrideAfter(n)
 	go n.PollFeed()
@@ -344,6 +356,7 @@ func TestWithEmptyFeed(t *testing.T) {
 }
 
 func TestWithErrorOnCrawl(t *testing.T) {
+	t.Parallel()
 	n, feedResp, _ := SetupTest(t, "../testdata/empty.rss")
 	OverrideAfter(n)
 	go n.PollFeed()
@@ -379,6 +392,7 @@ func TestWithErrorOnCrawl(t *testing.T) {
 }
 
 func TestWithDoublePollFeed(t *testing.T) {
+	t.Parallel()
 	n, feedResp, _ := SetupTest(t, "../testdata/empty.rss")
 	OverrideAfter(n)
 	go n.PollFeed()
@@ -403,8 +417,11 @@ func TestWithDoublePollFeed(t *testing.T) {
 }
 
 func TestCrawlLock(t *testing.T) {
-	RegisterTestingT(t)
+	t.Parallel()
 	n, _, _ := SetupTest(t, "../testdata/empty.rss")
 	n.lockCrawl()
-	Expect(n.CrawlFeed().Error).To(MatchError(ErrAlreadyCrawlingFeed))
+	err := n.CrawlFeed().Error
+	if err == nil || err != ErrAlreadyCrawlingFeed {
+		t.Fatalf("Expected error to be ErrAlreadyCrawlingFeed got %v", err)
+	}
 }

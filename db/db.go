@@ -1,15 +1,12 @@
 package db
 
 import (
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/mail"
 	"net/url"
 	"sync"
 	"time"
-
-	"crypto/rand"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/gomigrate"
@@ -105,7 +102,7 @@ type Handle struct {
 }
 
 func openDB(dbType string, dbArgs string, verbose bool, logger logrus.FieldLogger) *gorm.DB {
-	logger.Infof("Opening database %s:%s", dbType, dbArgs)
+	logger.Infof("db: opening database %s:%s", dbType, dbArgs)
 	// Error only returns from this if it is an unknown driver.
 	d, err := gorm.Open(dbType, dbArgs)
 	if err != nil {
@@ -117,7 +114,7 @@ func openDB(dbType string, dbArgs string, verbose bool, logger logrus.FieldLogge
 	// Actually test that we have a working connection
 	err = d.DB().Ping()
 	if err != nil {
-		panic(fmt.Sprintf("Error connecting to database: %s", err.Error()))
+		panic(fmt.Sprintf("db: error connecting to database: %s", err.Error()))
 	}
 	return d
 }
@@ -159,13 +156,13 @@ func NewDBHandle(dbPath string, verbose bool, logger logrus.FieldLogger) *Handle
 // The name of the database is a random string so multiple tests can run in
 // parallel with their own database.
 func NewMemoryDBHandle(verbose bool, logger logrus.FieldLogger, loadFixtures bool) *Handle {
-	constructedPath := fmt.Sprintf("file:%s?cache=shared&mode=memory", randString())
-	db := openDB("sqlite3", constructedPath, verbose, logger)
-	err := setupDB(db)
-	if err != nil {
-		panic(err.Error())
-	}
-
+	db := openDB("sqlite3", ":memory:", verbose, logger)
+	
+		err := setupDB(db)
+		if err != nil {
+			panic(err.Error())
+		}
+	
 	d := &Handle{
 		db:     db,
 		logger: logger,
@@ -178,22 +175,13 @@ func NewMemoryDBHandle(verbose bool, logger logrus.FieldLogger, loadFixtures boo
 
 	if loadFixtures {
 		// load Fixtures
-		err = d.Migrate(TestFixtures)
+		err = d.Migrate(TestFixtures())
 		if err != nil {
 			panic(err)
 		}
 	}
 
 	return d
-}
-
-func randString() string {
-	rb := make([]byte, 32)
-	_, err := rand.Read(rb)
-	if err != nil {
-		fmt.Println(err)
-	}
-	return base64.URLEncoding.EncodeToString(rb)
 }
 
 // Migrate uses the migrations at the given path to update the database.

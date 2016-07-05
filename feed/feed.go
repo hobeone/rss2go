@@ -170,7 +170,7 @@ func parseRss(u string, b []byte) (*Feed, []*Story, error) {
 	if t, err := parseDate(r.LastBuildDate, r.PubDate); err == nil {
 		f.Updated = t
 	} else {
-		logrus.Infof("no rss feed date: %v", f.Link)
+		logrus.Infof("feed: no rss feed date: %v", f.Link)
 	}
 
 	for _, i := range r.Items {
@@ -282,25 +282,25 @@ func ParseFeed(url string, b []byte) (*Feed, []*Story, error) {
 	// super lame
 	b = []byte(removeInvalidCharacters(string(b)))
 
-	feed, stories, atomerr := parseAtom(url, b)
-	if atomerr == nil {
-		logrus.Infof("Parsed %s as Atom", url)
+	feed, stories, rsserr := parseRss(url, b)
+	if rsserr == nil {
+		logrus.Infof("feed: parsed %s as RSS", url)
 		return feed, stories, nil
 	}
 
-	feed, stories, rsserr := parseRss(url, b)
-	if rsserr == nil {
-		logrus.Infof("Parsed %s as RSS", url)
+	feed, stories, atomerr := parseAtom(url, b)
+	if atomerr == nil {
+		logrus.Infof("feed: parsed %s as Atom", url)
 		return feed, stories, nil
 	}
 
 	feed, stories, rdferr := parseRdf(url, b)
 	if rdferr == nil {
-		logrus.Infof("Parsed %s as RDF", url)
+		logrus.Infof("feed: parsed %s as RDF", url)
 		return feed, stories, nil
 	}
 
-	err := fmt.Errorf("couldn't find ATOM, RSS or RDF feed for %s. ATOM Error: %s, RSS Error: %s, RDF Error: %s\n", url, atomerr, rsserr, rdferr)
+	err := fmt.Errorf("feed: couldn't find ATOM, RSS or RDF feed for %s. ATOM Error: %s, RSS Error: %s, RDF Error: %s\n", url, atomerr, rsserr, rdferr)
 
 	logrus.Errorf("feed: %v", err.Error())
 	return nil, nil, err
@@ -373,7 +373,7 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 			} else if s.Title != "" {
 				s.ID = s.Title
 			} else {
-				logrus.Infof("story has no id: %v", s)
+				logrus.Infof("feed: story has no id: %v", s)
 				return nil, nil, fmt.Errorf("story has no id: %v", s)
 			}
 		}
@@ -401,6 +401,9 @@ func parseFix(f *Feed, ss []*Story) (*Feed, []*Story, error) {
 		// embedding of things like youtube videos.  By changing them to anchor
 		// tags things like Gmail will do their own embedding when reading the
 		// mail.
+		//
+		// The following ends up parsing each of the feed items at least 3 times
+		// which seems excessive - but meh.
 		s.Content, err = cleanFeedContent(s.Content)
 		if err != nil {
 			logrus.Errorf("feed: error cleaning up content: %s", err)
@@ -476,7 +479,6 @@ func rewriteFeedContent(htmlFrag string) (string, error) {
 	doc.Find("img").Each(func(i int, s *goquery.Selection) {
 		s.RemoveAttr("width")
 		s.RemoveAttr("style")
-		s.RemoveAttr("height")
 		s.RemoveAttr("height")
 		s.SetAttr("style", `padding: 0; display: inline;	margin: 0 auto; max-height: 100%; max-width: 100%;`)
 	})

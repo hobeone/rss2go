@@ -2,9 +2,27 @@ package db
 
 import "github.com/hobeone/gomigrate"
 
+func migrationsCopy(m []gomigrate.Migration) []*gomigrate.Migration {
+	r := make([]*gomigrate.Migration, len(m))
+	for i, mig := range m {
+		c := mig
+		r[i] = &c
+	}
+	return r
+}
+
+// SchemaMigrations gives each caller a new copy of the migrations.  This is
+// mostly useful to allow unit tests to run in parallel.
+func SchemaMigrations() []*gomigrate.Migration {
+	return migrationsCopy(schemaMigrations)
+}
+func TestFixtures() []*gomigrate.Migration {
+	return migrationsCopy(testFixtures)
+}
+
 // SchemaMigrations contains the series of migrations needed to create and
 // update the rss2go db schema.
-var SchemaMigrations = []*gomigrate.Migration{
+var schemaMigrations = []gomigrate.Migration{
 	{
 		ID:   100,
 		Name: "Base Schema",
@@ -49,7 +67,7 @@ CREATE UNIQUE INDEX user_feed_idx ON user_feeds (user_id,feed_info_id);`,
 }
 
 // TestFixtures contains the base fixture data for testing with a db.
-var TestFixtures = []*gomigrate.Migration{
+var testFixtures = []gomigrate.Migration{
 	{
 		ID:   900,
 		Name: "Base Test Fixtures",
