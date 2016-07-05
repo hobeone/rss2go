@@ -22,6 +22,7 @@ import (
 	"math/rand"
 	"net/http"
 	netmail "net/mail"
+	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -70,6 +71,7 @@ type FeedWatcher struct {
 	crawlChan         chan *FeedCrawlRequest
 	responseChan      chan *FeedCrawlResponse
 	mailerChan        chan *mail.Request
+	pollWG            sync.WaitGroup
 	polling           bool // make sure only one PollFeed at a time
 	crawling          bool // make sure only one crawl outstanding at a time
 	minSleepTime      time.Duration
@@ -118,12 +120,14 @@ func (fw *FeedWatcher) lockPoll() bool {
 	if fw.polling {
 		return false
 	}
+	fw.pollWG.Add(1)
 	fw.polling = true
 	return true
 }
 
 func (fw *FeedWatcher) unlockPoll() bool {
 	fw.polling = false
+	fw.pollWG.Done()
 	return true
 }
 
@@ -416,6 +420,7 @@ func (fw *FeedWatcher) CrawlFeed() (r *FeedCrawlResponse) {
 // StopPoll will cause the PollFeed loop to exit.
 func (fw *FeedWatcher) StopPoll() {
 	if fw.Polling() {
-		fw.exitChan <- 1
+		close(fw.exitChan)
 	}
+	fw.pollWG.Wait()
 }

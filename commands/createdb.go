@@ -26,7 +26,7 @@ func (cc *createDBCommand) migrateCmd(c *kingpin.ParseContext) error {
 }
 
 func (cc *createDBCommand) migrate() error {
-	err := cc.DBH.Migrate(db.SchemaMigrations)
+	err := cc.DBH.Migrate(db.SchemaMigrations())
 	if err != nil {
 		logrus.Fatalf("Error starting migration: %v", err)
 	}

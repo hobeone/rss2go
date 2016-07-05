@@ -15,6 +15,7 @@ import (
 )
 
 func TestFeedCrawler(t *testing.T) {
+	t.Parallel()
 	ts := httptest.NewServer(fakeServerHandler)
 	defer ts.Close()
 
@@ -40,6 +41,7 @@ func TestFeedCrawler(t *testing.T) {
 }
 
 func TestGetFeed(t *testing.T) {
+	t.Parallel()
 	ts := httptest.NewServer(fakeServerHandler)
 	defer ts.Close()
 
@@ -75,6 +77,7 @@ func TestGetFeed(t *testing.T) {
 }
 
 func TestGetFeedAndMakeResponse(t *testing.T) {
+	t.Parallel()
 	dialErrorClient := &http.Client{
 		Transport: &http.Transport{
 			Dial: func(netw, addr string) (net.Conn, error) {

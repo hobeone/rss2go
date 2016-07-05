@@ -45,7 +45,7 @@ func TestEndToEndIntegration(t *testing.T) {
 
 	cfg := config.NewTestConfig()
 	d := commands.NewDaemon(cfg)
-	err := d.DBH.Migrate(db.SchemaMigrations)
+	err := d.DBH.Migrate(db.SchemaMigrations())
 	if err != nil {
 		t.Fatalf("Error loading fixture data: %v", err)
 	}

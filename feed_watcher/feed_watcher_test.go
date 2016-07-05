@@ -315,7 +315,10 @@ func TestFeedWatcherWithTooRecentLastPoll(t *testing.T) {
 	afterCalls := 0
 	n.After = func(d time.Duration) <-chan time.Time {
 		afterCalls++
-		return time.After(time.Duration(0))
+		if afterCalls < 2 {
+			d = time.Duration(0)
+		}
+		return time.After(d)
 	}
 
 	go n.PollFeed()
@@ -332,6 +335,10 @@ func TestFeedWatcherWithTooRecentLastPoll(t *testing.T) {
 
 	if afterCalls != 2 {
 		t.Fatalf("Expecting after to be called twice, called %d times", afterCalls)
+	}
+	n.StopPoll()
+	if n.Polling() {
+		t.Fatalf("Called StopPoll but still polling")
 	}
 }
 
