@@ -4,12 +4,12 @@ import (
 	"database/sql/driver"
 	"errors"
 	"io/ioutil"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/Sirupsen/logrus"
 	testdb "github.com/erikstmartin/go-testdb"
-	. "github.com/onsi/gomega"
 )
 
 func NullLogger() logrus.FieldLogger {
@@ -18,104 +18,148 @@ func NullLogger() logrus.FieldLogger {
 	return l
 }
 
-func NewTestDBHandle(t *testing.T, verbose bool, w bool) *Handle {
-	db := openDB("testdb", "", verbose, NullLogger())
-	return &Handle{db: db}
-}
-
 func TestConnectionError(t *testing.T) {
-	RegisterTestingT(t)
+	t.Parallel()
 	defer testdb.Reset()
 
 	testdb.SetOpenFunc(func(dsn string) (driver.Conn, error) {
 		return testdb.Conn(), errors.New("failed to connect")
 	})
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("Didn't get expected panic")
+		}
+	}()
 
-	Expect(func() { NewTestDBHandle(t, false, false) }).To(Panic())
+	openDB("testdb", "", false, NullLogger())
 }
 
 func TestGettingFeedWithTestDB(t *testing.T) {
-	RegisterTestingT(t)
+	t.Parallel()
 	d := NewMemoryDBHandle(false, NullLogger(), true)
 
 	feeds, err := d.GetAllFeeds()
-	Expect(err).ShouldNot(HaveOccurred(), "Error getting all Feeds: %s", err)
-	Expect(feeds).To(HaveLen(3))
+	if err != nil {
+		t.Fatalf("Error getting all Feeds: %v", err)
+	}
+	if len(feeds) != 3 {
+		t.Fatalf("Expected to get 3 feeds got %d", len(feeds))
+	}
 }
 
 func TestGettingFeedsWithError(t *testing.T) {
 	logrus.SetLevel(logrus.DebugLevel)
-	RegisterTestingT(t)
+	t.Parallel()
 	d := NewMemoryDBHandle(false, NullLogger(), true)
 
 	allFeeds, err := d.GetAllFeeds()
-	Expect(err).ToNot(HaveOccurred(), "Error getting all Feeds: %s", err)
+	if err != nil {
+		t.Fatalf("Error getting all Feeds: %v", err)
+	}
 
 	feeds, err := d.GetFeedsWithErrors()
-	Expect(err).ToNot(HaveOccurred(), "Error gettings feeds: %s", err)
-	Expect(feeds).To(HaveLen(0))
+	if err != nil {
+		t.Fatalf("Error getting all Feeds with errors: %v", err)
+	}
+	if len(feeds) != 0 {
+		t.Fatalf("Expected to get 0 feeds got %d", len(feeds))
+	}
 
 	allFeeds[0].LastPollError = "Error"
 	err = d.SaveFeed(&allFeeds[0])
-	Expect(err).ToNot(HaveOccurred(), "Error saving feed: %s", err)
+	if err != nil {
+		t.Fatalf("Error saving feed: %s", err)
+	}
 
 	feeds, err = d.GetFeedsWithErrors()
-	Expect(err).ToNot(HaveOccurred(), "Error gettings feeds: %s", err)
-	Expect(feeds).To(HaveLen(1))
+	if err != nil {
+		t.Fatalf("Error getting all Feeds with errors: %v", err)
+	}
+	if len(feeds) != 1 {
+		t.Fatalf("Expected to get 1 feeds got %d", len(feeds))
+	}
+
 }
 
 func TestGettingUsers(t *testing.T) {
-	RegisterTestingT(t)
+	t.Parallel()
 	d := NewMemoryDBHandle(false, NullLogger(), true)
 
 	dbusers, err := d.GetAllUsers()
 	if err != nil {
 		t.Fatalf("Error getting all users: %v", err)
 	}
-	Expect(dbusers).To(HaveLen(3))
+	if len(dbusers) != 3 {
+		t.Fatalf("Expected to get 3 users got %d", len(dbusers))
+	}
 
 	u, err := d.GetUserByID(1)
-	Expect(err).ToNot(HaveOccurred(), "Error gettings user by id: %s", err)
-	Expect(u.ID).To(BeEquivalentTo(1))
+	if err != nil {
+		t.Fatalf("Error gettings user by id: %v", err)
+	}
+	if u.ID != 1 {
+		t.Fatalf("Expectd user to have ID 1, got %d", u.ID)
+	}
 
 	addr := "test1@example.com"
 	u, err = d.GetUserByEmail(addr)
-	Expect(err).ToNot(HaveOccurred(), "Error gettings user by email: %s", err)
-	Expect(u.Email).To(Equal(addr))
+	if err != nil {
+		t.Fatalf("Error gettings user by email: %v", err)
+	}
+	if u.Email != addr {
+		t.Fatalf("Expecte user email to = %s, got %s", addr, u.Email)
+	}
 }
 
 func TestGetMostRecentGuidsForFeed(t *testing.T) {
-	RegisterTestingT(t)
+	t.Parallel()
 	d := NewMemoryDBHandle(false, NullLogger(), true)
 
-	Expect(d.RecordGUID(1, "123")).NotTo(HaveOccurred())
-	Expect(d.RecordGUID(1, "1234")).NotTo(HaveOccurred())
-	Expect(d.RecordGUID(1, "12345")).NotTo(HaveOccurred())
+	ids := []string{"123", "1234", "12345"}
+	for _, i := range ids {
+		err := d.RecordGUID(1, i)
+		if err != nil {
+			t.Fatalf("Error recoding guid %s: %v", i, err)
+		}
+	}
 
 	maxGuidsToFetch := 2
 	guids, err := d.GetMostRecentGUIDsForFeed(1, maxGuidsToFetch)
-	Expect(err).ToNot(HaveOccurred())
-	Expect(guids).To(HaveLen(maxGuidsToFetch))
-	Expect(guids).To(ConsistOf("12345", "1234"))
+	if err != nil {
+		t.Fatalf("Error getting uids for feed: %v", err)
+	}
+	if len(guids) != maxGuidsToFetch {
+		t.Fatalf("Expected %d GUIDs got %d", maxGuidsToFetch, len(guids))
+	}
+	if !reflect.DeepEqual(guids, []string{"12345", "1234"}) {
+		t.Fatalf("Unexpected GUIDS: %v", guids)
+	}
 
 	guids, err = d.GetMostRecentGUIDsForFeed(1, -1)
-	Expect(err).ToNot(HaveOccurred())
-	Expect(guids).To(HaveLen(3))
+	if err != nil {
+		t.Fatalf("Error getting guids: %v", err)
+	}
+	if len(guids) != 3 {
+		t.Fatalf("Expected 3 GUIDs, got %d", len(guids))
+	}
 }
 
 func TestGetMostRecentGuidsForFeedWithNoRecords(t *testing.T) {
-	RegisterTestingT(t)
+	t.Parallel()
 
 	d := NewMemoryDBHandle(false, NullLogger(), true)
 
 	guids, err := d.GetMostRecentGUIDsForFeed(1, -1)
-
-	Expect(err).ToNot(HaveOccurred())
-	Expect(guids).To(HaveLen(0))
+	if err != nil {
+		t.Fatalf("Error getting guids: %v", err)
+	}
+	if len(guids) != 0 {
+		t.Fatalf("Expected 0 guids got %d", len(guids))
+	}
 }
 
 func TestAddFeedValidation(t *testing.T) {
-	RegisterTestingT(t)
+	t.Parallel()
 	d := NewMemoryDBHandle(false, NullLogger(), true)
 	inputs := [][]string{
 		{"good name", "bad url"},
@@ -124,12 +168,15 @@ func TestAddFeedValidation(t *testing.T) {
 		{"", ""},
 	}
 
-	for _, ins := range inputs {
+	for i, ins := range inputs {
 		_, err := d.AddFeed(ins[0], ins[1])
-		Expect(err).To(HaveOccurred())
+		if err == nil {
+			t.Errorf("Expected error on invalid feed, got non for feed index %d", i)
+		}
 	}
 }
 func TestFeedValidation(t *testing.T) {
+	t.Parallel()
 	d := NewMemoryDBHandle(false, NullLogger(), true)
 	inputs := []FeedInfo{
 		{
@@ -142,30 +189,46 @@ func TestFeedValidation(t *testing.T) {
 
 	for _, f := range inputs {
 		err := d.SaveFeed(&f)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(f.ID).To(BeZero())
+		if err == nil {
+			t.Fatalf("Expected error saving feed, got none.")
+		}
+		if f.ID != 0 {
+			t.Fatalf("Expecte ID to be 0, got %d", f.ID)
+		}
 	}
 }
 
 func TestAddAndDeleteFeed(t *testing.T) {
-	RegisterTestingT(t)
+	t.Parallel()
 	d := NewMemoryDBHandle(false, NullLogger(), true)
 	u, err := d.GetUserByID(1)
 	if err != nil {
 		t.Fatalf("Error getting user: %v", err)
 	}
 	f, err := d.AddFeed("test feed", "http://valid/url.xml")
-	Expect(err).ToNot(HaveOccurred())
-	Expect(f.ID).ToNot(BeZero())
+	if err != nil {
+		t.Fatalf("Error adding feed: %v", err)
+	}
+	if f.ID == 0 {
+		t.Fatalf("Feed ID should not be zero")
+	}
 
 	dupFeed, err := d.AddFeed("test feed", "http://valid/url.xml")
-	Expect(err).To(HaveOccurred())
-	Expect(dupFeed.ID).To(BeZero())
+	if err == nil {
+		t.Fatalf("Error should have occurred adding feed.")
+	}
+	if dupFeed.ID != 0 {
+		t.Fatalf("Feed ID should be zero")
+	}
 
 	err = d.RecordGUID(f.ID, "testGUID")
-	Expect(err).ToNot(HaveOccurred())
+	if err != nil {
+		t.Fatalf("Error adding GUID to feed: %v", err)
+	}
 	err = d.AddFeedsToUser(u, []*FeedInfo{f})
-	Expect(err).ToNot(HaveOccurred())
+	if err != nil {
+		t.Fatalf("Error adding feed to user: %v", err)
+	}
 
 	err = d.RemoveFeed(f.URL)
 	if err != nil {
@@ -173,41 +236,63 @@ func TestAddAndDeleteFeed(t *testing.T) {
 	}
 
 	_, err = d.GetFeedByURL(f.URL)
-	Expect(err).To(HaveOccurred())
+	if err == nil {
+		t.Fatalf("Expected error on removing nonexistant feed")
+	}
 
 	guids, err := d.GetMostRecentGUIDsForFeed(f.ID, -1)
-	Expect(err).ToNot(HaveOccurred())
-	Expect(guids).To(BeEmpty())
+	if err != nil {
+		t.Fatalf("Error when getting guids for feed: %v", err)
+	}
+	if len(guids) != 0 {
+		t.Fatalf("Expected 0 guids, got %d", len(guids))
+	}
 
 	dbusers, err := d.GetFeedUsers(f.URL)
-	Expect(err).ToNot(HaveOccurred())
-	Expect(dbusers).To(BeEmpty())
+	if err != nil {
+		t.Fatalf("Unexpected error when getting feed users: %v", err)
+	}
+	if len(dbusers) != 0 {
+		t.Fatalf("Expected 0 users got %d", len(dbusers))
+	}
 }
 
 func TestGetFeedItemByGuid(t *testing.T) {
-	RegisterTestingT(t)
+	t.Parallel()
 	d := NewMemoryDBHandle(false, NullLogger(), true)
 	err := d.RecordGUID(1, "feed0GUID")
-	Expect(err).ToNot(HaveOccurred())
+	if err != nil {
+		t.Fatalf("Error recording GUID: %v", err)
+	}
 	err = d.RecordGUID(2, "feed1GUID")
-	Expect(err).ToNot(HaveOccurred())
+	if err != nil {
+		t.Fatalf("Error recording GUID: %v", err)
+	}
 
 	guid, err := d.GetFeedItemByGUID(1, "feed0GUID")
-	Expect(err).ToNot(HaveOccurred())
-	Expect(guid.FeedInfoID).To(BeEquivalentTo(1))
-
-	Expect(guid.GUID).To(Equal("feed0GUID"))
+	if err != nil {
+		t.Fatalf("Error getting item by GUID: %v", err)
+	}
+	if guid.FeedInfoID != 1 {
+		t.Fatalf("Expected feed id of 1 got %d", guid.FeedInfoID)
+	}
+	if guid.GUID != "feed0GUID" {
+		t.Fatalf("expected GUID of feed0GUID, got %s", guid.GUID)
+	}
 }
 
 func TestRemoveUserByEmail(t *testing.T) {
-	RegisterTestingT(t)
+	t.Parallel()
 	d := NewMemoryDBHandle(false, NullLogger(), true)
 	err := d.RemoveUserByEmail("test1@example.com")
-	Expect(err).ToNot(HaveOccurred())
+	if err != nil {
+		t.Fatalf("Error removing users %v", err)
+	}
+	//TODO: check that users is removed
 }
 
 func TestGetStaleFeeds(t *testing.T) {
-	RegisterTestingT(t)
+	t.Parallel()
 	d := NewMemoryDBHandle(false, NullLogger(), true)
 	d.RecordGUID(1, "foobar")
 	d.RecordGUID(2, "foobaz")
@@ -218,17 +303,20 @@ func TestGetStaleFeeds(t *testing.T) {
 	}
 	guid.AddedOn = *new(time.Time)
 	err = d.db.Save(guid).Error
-	Expect(err).ToNot(HaveOccurred())
+	if err != nil {
+		t.Fatalf("Error saving item: %v", err)
+	}
 	f, err := d.GetStaleFeeds()
 	if err != nil {
 		t.Fatalf("Got unexpected error from db: %s", err)
 	}
-
-	Expect(f[0].ID).To(BeEquivalentTo(1))
+	if f[0].ID != 1 {
+		t.Fatalf("Expected ID to be 1 got %d", f[0].ID)
+	}
 }
 
 func TestAddUserValidation(t *testing.T) {
-	RegisterTestingT(t)
+	t.Parallel()
 	d := NewMemoryDBHandle(false, NullLogger(), true)
 
 	inputs := [][]string{
@@ -237,19 +325,27 @@ func TestAddUserValidation(t *testing.T) {
 	}
 	for _, ins := range inputs {
 		_, err := d.AddUser(ins[0], ins[1], "pass")
-		Expect(err).To(HaveOccurred())
+		if err == nil {
+			t.Fatalf("Expected err, got none")
+		}
 	}
 
 	_, err := d.AddUser("", "email@address.com", "pass")
-	Expect(err).To(HaveOccurred())
+	if err == nil {
+		t.Fatalf("Expected error, got none")
+	}
 
 	u, err := d.AddUser("new user", "newuser@example.com", "pass")
-	Expect(err).ToNot(HaveOccurred())
-	Expect(u.ID).ToNot(BeZero())
+	if err != nil {
+		t.Fatalf("Unexpected error on validation: %v", err)
+	}
+	if u.ID == 0 {
+		t.Fatalf("Expected ID to not be 0")
+	}
 }
 
 func TestAddRemoveUser(t *testing.T) {
-	RegisterTestingT(t)
+	t.Parallel()
 	d := NewMemoryDBHandle(false, NullLogger(), true)
 
 	feeds, err := d.GetAllFeeds()
@@ -260,34 +356,59 @@ func TestAddRemoveUser(t *testing.T) {
 	userName := "test user name"
 	userEmail := "testuser_name@example.com"
 	u, err := d.AddUser(userName, userEmail, "pass")
-	Expect(err).ToNot(HaveOccurred())
-	Expect(u.ID).ToNot(BeZero())
+	if err != nil {
+		t.Fatalf("Got error when adding user: %v", err)
+	}
+	if u.ID == 0 {
+		t.Fatalf("Expected non zero ID")
+	}
 
 	dupUser, err := d.AddUser(userName, "extra"+userEmail, "pass")
-	Expect(err).To(HaveOccurred())
-	Expect(dupUser.ID).To(BeZero())
+	if err == nil {
+		t.Fatalf("Expected error on save, got none")
+	}
+	if dupUser.ID != 0 {
+		t.Fatalf("Expected ID to be 0, got %d", dupUser.ID)
+	}
 
 	dupUser, err = d.AddUser("extra"+userName, userEmail, "pass")
-	Expect(err).To(HaveOccurred())
-	Expect(dupUser.ID).To(BeZero())
+	if err == nil {
+		t.Fatalf("Expected error, got none")
+	}
+	if dupUser.ID != 0 {
+		t.Fatalf("Expected ID to be 0, got %d", dupUser.ID)
+	}
 
 	dbUser, err := d.GetUser(u.Name)
-	Expect(err).ToNot(HaveOccurred())
-	Expect(dbUser).To(BeEquivalentTo(u))
+	if err != nil {
+		t.Fatalf("Got error when getting user: %v", err)
+	}
+
+	if !reflect.DeepEqual(dbUser, u) {
+		t.Fatalf("Expected %v to equal %v", dbUser, u)
+	}
 
 	err = d.AddFeedsToUser(u, []*FeedInfo{&feeds[0]})
-	Expect(err).ToNot(HaveOccurred())
+	if err != nil {
+		t.Fatalf("Got error when adding feeds to user: %v", err)
+	}
 
 	err = d.RemoveUser(u)
-	Expect(err).ToNot(HaveOccurred())
+	if err != nil {
+		t.Fatalf("Got error when removing user: %v", err)
+	}
 
 	dbfeeds, err := d.GetUsersFeeds(u)
-	Expect(err).ToNot(HaveOccurred())
-	Expect(dbfeeds).To(BeEmpty())
+	if err != nil {
+		t.Fatalf("Got error when getting user feeds: %v", err)
+	}
+	if len(dbfeeds) > 0 {
+		t.Fatalf("Expected empty feed list got: %d", len(dbfeeds))
+	}
 }
 
 func TestAddRemoveFeedsFromUser(t *testing.T) {
-	RegisterTestingT(t)
+	t.Parallel()
 	d := NewMemoryDBHandle(false, NullLogger(), true)
 	users, err := d.GetAllUsers()
 	if err != nil {
@@ -298,34 +419,65 @@ func TestAddRemoveFeedsFromUser(t *testing.T) {
 		URL:  "http://new/test.feed",
 	}
 	err = d.SaveFeed(newFeed)
-	Expect(err).ToNot(HaveOccurred(), "Error saving feed: %s", err)
+	if err != nil {
+		t.Fatalf("Error saving feed: %v", err)
+	}
 	feeds, err := d.GetUsersFeeds(&users[0])
 
-	Expect(err).ToNot(HaveOccurred(), "error getting users feeds: %s", err)
+	if err != nil {
+		t.Fatalf("Error getting users feeds: %v", err)
+	}
 
-	Expect(feeds).To(HaveLen(3))
+	if len(feeds) != 3 {
+		t.Fatalf("Expected 3 feeds got %d", len(feeds))
+	}
 	err = d.AddFeedsToUser(&users[0], []*FeedInfo{newFeed})
-	Expect(err).ToNot(HaveOccurred(), "error adding feed to user: %s", err)
+	if err != nil {
+		t.Fatalf("Error adding feed to user: %v", err)
+	}
+
 	feeds, err = d.GetUsersFeeds(&users[0])
-	Expect(err).ToNot(HaveOccurred(), "error getting users feeds: %s", err)
-	Expect(feeds).To(HaveLen(4))
+	if err != nil {
+		t.Fatalf("Error getting users feeds: %v", err)
+	}
+
+	if len(feeds) != 4 {
+		t.Fatalf("Expected 4 feeds got %d", len(feeds))
+	}
 
 	// Test that we don't add duplicates
 	err = d.AddFeedsToUser(&users[0], []*FeedInfo{newFeed})
-	Expect(err).ToNot(HaveOccurred(), "error adding feed to user: %s", err)
+	if err != nil {
+		t.Fatalf("Error adding feeds to user: %v", err)
+	}
+
 	feeds, err = d.GetUsersFeeds(&users[0])
-	Expect(err).ToNot(HaveOccurred(), "error getting users feeds: %s", err)
-	Expect(feeds).To(HaveLen(4))
+	if err != nil {
+		t.Fatalf("Error getting users feeds: %v", err)
+	}
+
+	if len(feeds) != 4 {
+		t.Fatalf("Expected 4 feeds got %d", len(feeds))
+	}
 
 	err = d.RemoveFeedsFromUser(&users[0], []*FeedInfo{newFeed})
-	Expect(err).ToNot(HaveOccurred(), "error removing users feed: %s", err)
+	if err != nil {
+		t.Fatalf("Error removing users feeds: %v", err)
+	}
+
 	feeds, err = d.GetUsersFeeds(&users[0])
-	Expect(err).ToNot(HaveOccurred(), "error getting users feeds: %s", err)
-	Expect(feeds).To(HaveLen(3))
+	if err != nil {
+		t.Fatalf("Error getting users feeds: %v", err)
+	}
+
+	if len(feeds) != 3 {
+		t.Fatalf("Expected 3 feeds got %d", len(feeds))
+	}
+
 }
 
 func TestGetUsersFeeds(t *testing.T) {
-	RegisterTestingT(t)
+	t.Parallel()
 	d := NewMemoryDBHandle(false, NullLogger(), true)
 	users, err := d.GetAllUsers()
 	if err != nil {
@@ -337,12 +489,16 @@ func TestGetUsersFeeds(t *testing.T) {
 	}
 
 	userFeeds, err := d.GetUsersFeeds(&users[0])
-	Expect(err).ToNot(HaveOccurred())
-	Expect(userFeeds).To(HaveLen(len(feeds)))
+	if err != nil {
+		t.Fatalf("Error getting users feeds: %v", err)
+	}
+	if len(feeds) != len(userFeeds) {
+		t.Fatalf("Expected %d feeds got %d", len(feeds), len(userFeeds))
+	}
 }
 
 func TestGetFeedUsers(t *testing.T) {
-	RegisterTestingT(t)
+	t.Parallel()
 	d := NewMemoryDBHandle(false, NullLogger(), true)
 	users, err := d.GetAllUsers()
 	if err != nil {
@@ -353,12 +509,16 @@ func TestGetFeedUsers(t *testing.T) {
 		t.Fatalf("Error getting feeds: %v", err)
 	}
 	feedUsers, err := d.GetFeedUsers(feeds[0].URL)
-	Expect(err).ToNot(HaveOccurred())
-	Expect(feedUsers).To(HaveLen(len(users)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(feeds) != len(users) {
+		t.Fatalf("Expected %d feeds got %d", len(feeds), len(feedUsers))
+	}
 }
 
 func TestUpdateUsersFeeds(t *testing.T) {
-	RegisterTestingT(t)
+	t.Parallel()
 	d := NewMemoryDBHandle(false, NullLogger(), true)
 	users, err := d.GetAllUsers()
 	if err != nil {
@@ -370,14 +530,24 @@ func TestUpdateUsersFeeds(t *testing.T) {
 	}
 
 	dbFeeds, err := d.GetUsersFeeds(&users[0])
-	Expect(err).ToNot(HaveOccurred())
-	Expect(dbFeeds).ToNot(BeEmpty())
-
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dbFeeds) == 0 {
+		t.Fatal("Expected some feeds got 0")
+	}
 	err = d.UpdateUsersFeeds(&users[0], []int64{})
-	Expect(err).ToNot(HaveOccurred())
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	newFeeds, err := d.GetUsersFeeds(&users[0])
-	Expect(err).ToNot(HaveOccurred())
-	Expect(newFeeds).To(BeEmpty())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(newFeeds) != 0 {
+	}
 	feedIDs := make([]int64, len(feeds))
 	for i := range feeds {
 		feedIDs[i] = feeds[i].ID
@@ -385,6 +555,11 @@ func TestUpdateUsersFeeds(t *testing.T) {
 	d.UpdateUsersFeeds(&users[0], feedIDs)
 
 	newFeeds, err = d.GetUsersFeeds(&users[0])
-	Expect(err).ToNot(HaveOccurred())
-	Expect(newFeeds).To(HaveLen(3))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(newFeeds) != 3 {
+		t.Fatalf("Expected3 feeds, got %d", len(newFeeds))
+	}
 }

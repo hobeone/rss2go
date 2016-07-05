@@ -157,18 +157,18 @@ func NewDBHandle(dbPath string, verbose bool, logger logrus.FieldLogger) *Handle
 // parallel with their own database.
 func NewMemoryDBHandle(verbose bool, logger logrus.FieldLogger, loadFixtures bool) *Handle {
 	db := openDB("sqlite3", ":memory:", verbose, logger)
-	
-		err := setupDB(db)
-		if err != nil {
-			panic(err.Error())
-		}
-	
+
+	err := setupDB(db)
+	if err != nil {
+		panic(err.Error())
+	}
+
 	d := &Handle{
 		db:     db,
 		logger: logger,
 	}
 
-	err = d.Migrate(SchemaMigrations)
+	err = d.Migrate(SchemaMigrations())
 	if err != nil {
 		panic(err)
 	}
