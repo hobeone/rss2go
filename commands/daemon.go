@@ -9,7 +9,6 @@ import (
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/mail"
-	"github.com/hobeone/rss2go/webui"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -53,7 +52,6 @@ func (dc *daemonCommand) run(c *kingpin.ParseContext) error {
 
 	go d.feedDbUpdateLoop()
 
-	go webui.RunWebUi(d.Config, d.DBH, d.Feeds)
 	for {
 		_ = <-d.RespChan
 	}

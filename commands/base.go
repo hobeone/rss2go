@@ -30,6 +30,9 @@ func RegisterCommands() {
 	daemonCmd := &daemonCommand{}
 	daemonCmd.configure(App)
 
+	serverCmd := &serverCommand{}
+	serverCmd.configure(App)
+
 	createDBCmd := &createDBCommand{}
 	createDBCmd.configure(App)
 
