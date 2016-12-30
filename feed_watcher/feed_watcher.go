@@ -174,6 +174,7 @@ func (fw *FeedWatcher) UpdateFeed(resp *FeedCrawlResponse) error {
 		}
 	} else {
 		fw.updateFeed(resp)
+
 		// Update DB Record
 		if resp.Error != nil {
 			fw.FeedInfo.LastPollError = resp.Error.Error()
@@ -185,6 +186,8 @@ func (fw *FeedWatcher) UpdateFeed(resp *FeedCrawlResponse) error {
 			}
 		}
 	}
+
+	fw.FeedInfo.SiteURL = resp.Feed.Link
 	err := fw.dbh.SaveFeed(&fw.FeedInfo)
 	if err != nil {
 		resp.Error = err
@@ -197,6 +200,11 @@ func (fw *FeedWatcher) UpdateFeed(resp *FeedCrawlResponse) error {
 
 // Core logic to poll a feed, find new items, add those to the database, and
 // send them for mail.
+//
+// Populates fields:
+// - Feed with information extracted from the feed
+// - Items with the items in the feed
+// - Error any errors encountered in parsing or handling the feed
 func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 	feed, stories, err := feed.ParseFeed(resp.URI, resp.Body)
 
@@ -211,6 +219,7 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 		return resp.Error
 	}
 
+	resp.Feed = feed
 	/*
 	 * Load most recent X * 1.1 Guids from Db
 	 * Filter New Stories

@@ -25,9 +25,10 @@ func init() {
 
 // FeedInfo represents a feed (atom, rss or rdf) that rss2go is polling.
 type FeedInfo struct {
-	ID                int64     `json:"id"`
-	Name              string    `sql:"not null;unique" json:"name" binding:"required"`
-	URL               string    `sql:"not null;unique" json:"url" binding:"required"`
+	ID                int64  `json:"id"`
+	Name              string `sql:"not null;unique" json:"name" binding:"required"`
+	URL               string `sql:"not null;unique" json:"url" binding:"required"`
+	SiteURL           string
 	LastPollTime      time.Time `json:"lastPollTime"`
 	LastPollError     string    `json:"lastPollError"`
 	LastErrorResponse string    `json:"-"`

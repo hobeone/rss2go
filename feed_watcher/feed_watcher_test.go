@@ -113,6 +113,15 @@ func TestPollFeedWithDBErrors(t *testing.T) {
 func TestFeedWatcherPolling(t *testing.T) {
 	t.Parallel()
 	n, feedResp, mailDispatcher := SetupTest(t, "../testdata/ars.rss")
+
+	feed, err := n.dbh.GetFeedByURL(n.FeedInfo.URL)
+	if err != nil {
+		t.Fatalf("Error getting expected feed: %s", err)
+	}
+	if feed.SiteURL != "" {
+		t.Fatalf("Expected empty SiteURL before crawling")
+	}
+
 	OverrideAfter(n)
 
 	go n.PollFeed()
@@ -135,6 +144,7 @@ func TestFeedWatcherPolling(t *testing.T) {
 	if len(resp.Items) != 25 {
 		t.Fatalf("Expected 25 items from the feed. Got %d", len(resp.Items))
 	}
+
 	// Second Poll, should not have new items
 	req = <-n.crawlChan
 	req.ResponseChan <- &FeedCrawlResponse{
@@ -157,6 +167,14 @@ func TestFeedWatcherPolling(t *testing.T) {
 	// 1 feed * 25 items * 3 users
 	if c != 75 {
 		t.Fatalf("Expected 75 mails to have been sent, got %d", c)
+	}
+	feed, err = n.dbh.GetFeedByURL(n.FeedInfo.URL)
+	if err != nil {
+		t.Fatalf("Error getting expected feed: %s", err)
+	}
+	feedLink := "http://arstechnica.com"
+	if feed.SiteURL != feedLink {
+		t.Fatalf("Expected SiteURL to be '%s' got %s", feedLink, feed.SiteURL)
 	}
 }
 

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/hobeone/rss2go/db"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
@@ -52,7 +51,6 @@ func (s *APIServer) Serve() error {
 	}
 	e.Renderer = t
 
-	spew.Dump(e.URI(s.unsubscribe, 10))
 	customServer := &http.Server{
 		Addr:           ":7999",
 		ReadTimeout:    20 * time.Second,
