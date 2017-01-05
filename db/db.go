@@ -91,6 +91,7 @@ type Service interface {
 	SaveFeed(*FeedInfo) error
 	GetMostRecentGUIDsForFeed(int64, int) ([]string, error)
 	RecordGUID(int64, string) error
+	SetFeedGUIDS(int64, []string) ([]*FeedItem, error)
 	GetFeedItemByGUID(int64, string) (*FeedItem, error)
 }
 
@@ -364,6 +365,37 @@ func (d *Handle) RecordGUID(feedID int64, guid string) error {
 	defer d.syncMutex.Unlock()
 
 	return d.db.Save(&f).Error
+}
+
+// SetFeedGUIDS replaces all of a Feeds items with the given set
+func (d *Handle) SetFeedGUIDS(feedID int64, guids []string) ([]*FeedItem, error) {
+	d.logger.Infof("Setting GUIDs for Feed %d to the given %d", feedID, len(guids))
+	dbguids := make([]*FeedItem, len(guids))
+	for i, guid := range guids {
+		dbguids[i] = &FeedItem{
+			FeedInfoID: feedID,
+			GUID:       guid,
+			AddedOn:    time.Now(),
+		}
+	}
+	d.syncMutex.Lock()
+	defer d.syncMutex.Unlock()
+
+	tx := d.db.Begin()
+	err := tx.Where("feed_info_id = ?", feedID).Delete(FeedItem{}).Error
+	if err != nil {
+		tx.Rollback()
+		return dbguids, err
+	}
+	for _, fi := range dbguids {
+		err := tx.Save(fi).Error
+		if err != nil {
+			tx.Rollback()
+			return dbguids, err
+		}
+	}
+	tx.Commit()
+	return dbguids, nil
 }
 
 // GetMostRecentGUIDsForFeed retrieves the most recent GUIDs for a given feed

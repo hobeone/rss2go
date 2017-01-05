@@ -3,6 +3,7 @@ package feedwatcher
 import (
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"testing"
 	"time"
 
@@ -31,10 +32,13 @@ func (m *FailMailer) SendMail(msg *gomail.Message) error {
 // TODO: rework so failures can be set per test
 type MockDBFailer struct{}
 
-func (d *MockDBFailer) GetFeedByURL(string) (*db.FeedInfo, error)             { return nil, nil }
-func (d *MockDBFailer) GetFeedUsers(string) ([]db.User, error)                { return nil, nil }
-func (d *MockDBFailer) SaveFeed(*db.FeedInfo) error                           { return nil }
-func (d *MockDBFailer) RecordGUID(int64, string) error                        { return nil }
+func (d *MockDBFailer) GetFeedByURL(string) (*db.FeedInfo, error) { return nil, nil }
+func (d *MockDBFailer) GetFeedUsers(string) ([]db.User, error)    { return nil, nil }
+func (d *MockDBFailer) SaveFeed(*db.FeedInfo) error               { return nil }
+func (d *MockDBFailer) RecordGUID(int64, string) error            { return nil }
+func (d *MockDBFailer) SetFeedGUIDS(int64, []string) ([]*db.FeedItem, error) {
+	return []*db.FeedItem{}, nil
+}
 func (d *MockDBFailer) GetFeedItemByGUID(int64, string) (*db.FeedItem, error) { return nil, nil }
 func (d *MockDBFailer) GetMostRecentGUIDsForFeed(i int64, m int) ([]string, error) {
 	return []string{}, fmt.Errorf("test error")
@@ -66,6 +70,67 @@ func SetupTest(t *testing.T, feedPath string) (*FeedWatcher, []byte, *mail.Dispa
 	}
 
 	return NewFeedWatcher(feeds[0], crawlChan, responseChan, mailDispatcher.OutgoingMail, d, []string{}, 30, 100), feedResp, mailDispatcher
+}
+
+func makeRange(min, max int) []int {
+	a := make([]int, max-min+1)
+	for i := range a {
+		a[i] = min + i
+	}
+	return a
+}
+
+func TestPruneGUIDS(t *testing.T) {
+	t.Parallel()
+	watcher, crawlBody, _ := SetupTest(t, "../testdata/ars.rss")
+	guids, err := watcher.LoadGuidsFromDb(1000)
+	if err != nil {
+		t.Fatalf("Error getting GUIDS from db: %v", err)
+	}
+	if len(guids) != 0 {
+		t.Fatalf("Expected 0 guids but got %d", len(guids))
+	}
+
+	r := makeRange(10, 1000)
+	for i := range r {
+		watcher.dbh.RecordGUID(watcher.FeedInfo.ID, fmt.Sprintf("guid-%d", i))
+	}
+
+	resp := &FeedCrawlResponse{
+		HTTPResponseStatusCode: http.StatusOK,
+		Body: crawlBody,
+	}
+
+	// Don't clean
+	watcher.PruneGUIDS = false
+	err = watcher.UpdateFeed(resp)
+	if err != nil {
+		t.Fatalf("Error updating feed: %s", err)
+	}
+	guids, err = watcher.LoadGuidsFromDb(1000)
+	if err != nil {
+		t.Fatalf("Error getting GUIDS from db: %v", err)
+	}
+	if len(guids) < 1000 {
+		t.Fatalf("Cleaned database of old GUIDS.  Expected %d but got %d", 1000, len(guids))
+	}
+
+	//Clean
+	watcher.PruneGUIDS = true
+	err = watcher.UpdateFeed(resp)
+	if err != nil {
+		t.Fatalf("Error updating feed: %s", err)
+	}
+
+	maxguids := len(watcher.KnownGuids)
+
+	guids, err = watcher.LoadGuidsFromDb(1000)
+	if err != nil {
+		t.Fatalf("Error getting GUIDS from db: %v", err)
+	}
+	if len(guids) > maxguids {
+		t.Fatalf("Didn't clean database of old GUIDS.  Expected %d but got %d", maxguids, len(guids))
+	}
 }
 
 func TestNewFeedWatcher(t *testing.T) {
