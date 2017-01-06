@@ -25,12 +25,12 @@ func init() {
 
 // FeedInfo represents a feed (atom, rss or rdf) that rss2go is polling.
 type FeedInfo struct {
-	ID                int64  `json:"id"`
-	Name              string `sql:"not null;unique" json:"name" binding:"required"`
-	URL               string `sql:"not null;unique" json:"url" binding:"required"`
-	SiteURL           string
-	LastPollTime      time.Time `json:"lastPollTime"`
-	LastPollError     string    `json:"lastPollError"`
+	ID                int64     `json:"id" jsonapi:"primary,feeds"`
+	Name              string    `sql:"not null;unique" json:"name" binding:"required" jsonapi:"attr,name"`
+	URL               string    `sql:"not null;unique" json:"url" binding:"required" jsonapi:"attr,url"`
+	SiteURL           string    `jsonapi:"attr,site-url"`
+	LastPollTime      time.Time `json:"lastPollTime" jsonapi:"attr,last-poll-time,iso8601"`
+	LastPollError     string    `json:"lastPollError" jsonapi:"attr,last-poll-error"`
 	LastErrorResponse string    `json:"-"`
 	Users             []User    `gorm:"many2many:user_feeds;" json:"-"`
 }
@@ -70,12 +70,12 @@ func (f *FeedItem) AfterFind() error {
 
 // User represents a user/email address that can subscribe to Feeds
 type User struct {
-	ID       int64      `json:"id"`
-	Name     string     `sql:"size:255;not null;unique" json:"name"`
-	Email    string     `sql:"size:255;not null;unique" json:"email"`
+	ID       int64      `json:"id" jsonapi:"primary,feeds"`
+	Name     string     `sql:"size:255;not null;unique" json:"name" jsonapi:"attr,name"`
+	Email    string     `sql:"size:255;not null;unique" json:"email" jsonapi:"attr,email"`
 	Enabled  bool       `json:"enabled"`
 	Password string     `json:"-"`
-	Feeds    []FeedInfo `gorm:"many2many:user_feeds;" json:"-"`
+	Feeds    []FeedInfo `gorm:"many2many:user_feeds;" json:"-" jsonapi:"relation,feeds"`
 }
 
 //TableName sets the name of the sql table to use.
@@ -277,20 +277,30 @@ func (d *Handle) RemoveFeed(url string) error {
 }
 
 // GetAllFeeds returns all feeds from the database.
-func (d *Handle) GetAllFeeds() (feeds []FeedInfo, err error) {
+func (d *Handle) GetAllFeeds() (feeds []*FeedInfo, err error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	err = d.db.Find(&feeds).Error
 	return
 }
 
+// GetFeedsByName returns all feeds that contain the given string in their
+// name.
+func (d *Handle) GetFeedsByName(name string) ([]*FeedInfo, error) {
+	d.syncMutex.Lock()
+	defer d.syncMutex.Unlock()
+	var feeds []*FeedInfo
+	err := d.db.Where("name LIKE ?", fmt.Sprintf("%%%s%%", name)).Find(&feeds).Error
+	return feeds, err
+}
+
 // GetFeedsWithErrors returns all feeds that had an error on their last
 // check.
-func (d *Handle) GetFeedsWithErrors() ([]FeedInfo, error) {
+func (d *Handle) GetFeedsWithErrors() ([]*FeedInfo, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 
-	var feeds []FeedInfo
+	var feeds []*FeedInfo
 	err := d.db.Where(
 		"last_poll_error IS NOT NULL and last_poll_error <> ''").Find(&feeds).Error
 	if err == gorm.ErrRecordNotFound {
@@ -302,11 +312,11 @@ func (d *Handle) GetFeedsWithErrors() ([]FeedInfo, error) {
 
 // GetStaleFeeds returns all feeds that haven't gotten new content in more
 // than 14 days.
-func (d *Handle) GetStaleFeeds() ([]FeedInfo, error) {
+func (d *Handle) GetStaleFeeds() ([]*FeedInfo, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 
-	var res []FeedInfo
+	var res []*FeedInfo
 	err := d.db.Raw(`
 	select feed_info.id, feed_info.name, feed_info.url,  r.MaxTime, feed_info.last_poll_error FROM (SELECT feed_info_id, MAX(added_on) as MaxTime FROM feed_item GROUP BY feed_info_id) r, feed_info INNER JOIN feed_item f ON f.feed_info_id = r.feed_info_id AND f.added_on = r.MaxTime AND r.MaxTime < datetime('now','-14 days') AND f.feed_info_id = feed_info.id group by f.feed_info_id;
 	`).Scan(&res).Error
@@ -554,11 +564,11 @@ func (d *Handle) RemoveFeedsFromUser(u *User, feeds []*FeedInfo) error {
 }
 
 // GetUsersFeeds returns all the FeedInfos that a user is subscribed to.
-func (d *Handle) GetUsersFeeds(u *User) ([]FeedInfo, error) {
+func (d *Handle) GetUsersFeeds(u *User) ([]*FeedInfo, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 
-	var feedInfos []FeedInfo
+	var feedInfos []*FeedInfo
 
 	err := d.db.Model(u).Association("Feeds").Find(&feedInfos).Error
 	if err == gorm.ErrRecordNotFound {
@@ -579,7 +589,7 @@ func (d *Handle) UpdateUsersFeeds(u *User, feedIDs []int64) error {
 	newFeedIDs := make(map[int64]*FeedInfo, len(feedIDs))
 
 	for i := range feeds {
-		existingFeedIDs[feeds[i].ID] = &feeds[i]
+		existingFeedIDs[feeds[i].ID] = feeds[i]
 	}
 	for _, id := range feedIDs {
 		feed, err := d.GetFeedByID(id)

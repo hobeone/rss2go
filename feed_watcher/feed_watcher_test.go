@@ -65,7 +65,7 @@ func SetupTest(t *testing.T, feedPath string) (*FeedWatcher, []byte, *mail.Dispa
 		t.Fatal("Error reading test feed.")
 	}
 
-	return NewFeedWatcher(feeds[0], crawlChan, responseChan, mailDispatcher.OutgoingMail, d, []string{}, 30, 100), feedResp, mailDispatcher
+	return NewFeedWatcher(*feeds[0], crawlChan, responseChan, mailDispatcher.OutgoingMail, d, []string{}, 30, 100), feedResp, mailDispatcher
 }
 
 func TestNewFeedWatcher(t *testing.T) {

@@ -66,7 +66,7 @@ func TestGettingFeedsWithError(t *testing.T) {
 	}
 
 	allFeeds[0].LastPollError = "Error"
-	err = d.SaveFeed(&allFeeds[0])
+	err = d.SaveFeed(allFeeds[0])
 	if err != nil {
 		t.Fatalf("Error saving feed: %s", err)
 	}
@@ -388,7 +388,7 @@ func TestAddRemoveUser(t *testing.T) {
 		t.Fatalf("Expected %v to equal %v", dbUser, u)
 	}
 
-	err = d.AddFeedsToUser(u, []*FeedInfo{&feeds[0]})
+	err = d.AddFeedsToUser(u, []*FeedInfo{feeds[0]})
 	if err != nil {
 		t.Fatalf("Got error when adding feeds to user: %v", err)
 	}

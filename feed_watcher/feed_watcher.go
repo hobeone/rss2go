@@ -184,10 +184,11 @@ func (fw *FeedWatcher) UpdateFeed(resp *FeedCrawlResponse) error {
 			} else {
 				fw.FeedInfo.LastErrorResponse = string(bod)
 			}
+		} else {
+			fw.FeedInfo.SiteURL = resp.Feed.Link
 		}
 	}
 
-	fw.FeedInfo.SiteURL = resp.Feed.Link
 	err := fw.dbh.SaveFeed(&fw.FeedInfo)
 	if err != nil {
 		resp.Error = err

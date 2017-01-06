@@ -112,7 +112,7 @@ func (d *Daemon) feedDbUpdate() {
 		logrus.Errorf("Error getting feeds from db: %s\n", err.Error())
 		return
 	}
-	allFeeds := make(map[string]db.FeedInfo)
+	allFeeds := make(map[string]*db.FeedInfo)
 	for _, fi := range dbFeeds {
 		allFeeds[fi.URL] = fi
 	}
@@ -123,7 +123,7 @@ func (d *Daemon) feedDbUpdate() {
 			delete(d.Feeds, k)
 		}
 	}
-	var feedsToStart []db.FeedInfo
+	var feedsToStart []*db.FeedInfo
 	for k, v := range allFeeds {
 		if _, ok := d.Feeds[k]; !ok {
 			feedsToStart = append(feedsToStart, v)
@@ -136,7 +136,7 @@ func (d *Daemon) feedDbUpdate() {
 	}
 }
 
-func (d *Daemon) startPollers(newFeeds []db.FeedInfo) {
+func (d *Daemon) startPollers(newFeeds []*db.FeedInfo) {
 	// make feeds unique
 	for _, f := range newFeeds {
 		if _, ok := d.Feeds[f.URL]; ok {
@@ -145,7 +145,7 @@ func (d *Daemon) startPollers(newFeeds []db.FeedInfo) {
 		}
 
 		d.Feeds[f.URL] = feedwatcher.NewFeedWatcher(
-			f,
+			*f,
 			d.CrawlChan,
 			d.RespChan,
 			d.MailChan,
@@ -161,7 +161,7 @@ func (d *Daemon) startPollers(newFeeds []db.FeedInfo) {
 }
 
 // CreateAndStartFeedWatchers does exactly what it says
-func (d *Daemon) CreateAndStartFeedWatchers(feeds []db.FeedInfo) {
+func (d *Daemon) CreateAndStartFeedWatchers(feeds []*db.FeedInfo) {
 	// start crawler pool
 	crawler.StartCrawlerPool(d.Config.Crawl.MaxCrawlers, d.CrawlChan)
 

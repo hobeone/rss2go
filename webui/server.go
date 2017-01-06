@@ -1,7 +1,6 @@
 package webui
 
 import (
-	"encoding/base64"
 	"fmt"
 	"html/template"
 	"io"
@@ -10,6 +9,8 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
+	jwt "github.com/dgrijalva/jwt-go"
+	"github.com/google/jsonapi"
 	"github.com/hobeone/rss2go/db"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
@@ -32,25 +33,36 @@ func (s *APIServer) Serve() error {
 	e.Debug = true
 	e.Use(middleware.Logger())
 	//	e.Use(middleware.Recover())
-	e.Use(basicAuth(s.DBH))
-	e.Use(addDBH(s.DBH))
+	e.Use(middleware.CORS())
 	e.Use(middleware.BodyLimit("1024K"))
 	e.Use(middleware.Gzip())
-	e.Use(headers)
 
-	e.GET("/", s.userOverview)
-	e.POST("/unsubscribe/:id", s.unsubscribe)
-	e.POST("/subscribe", s.subscribe)
+	// Serve the ember app
+	e.File("/", "assets/index.html")
+	e.Static("/assets", "assets/assets")
 
-	funcmap := template.FuncMap{
-		"routeuri": e.URI,
-	}
+	//	e.OPTIONS("/api/login/", s.updateUser)
+	e.POST("/api/login/", s.login)
 
-	t := &Template{
-		templates: template.Must(template.New("rss2go").Funcs(funcmap).ParseGlob("public/*.html")),
-	}
-	e.Renderer = t
+	// Restricted group
+	r := e.Group("/api/v1")
+	r.Use(middleware.JWT([]byte("secret")))
+	r.GET("/feeds", s.getFeeds)
+	r.POST("/feeds", s.addFeed)
+	r.GET("/feeds/:id", s.getFeed)
+	r.PATCH("/feeds/:id", s.updateFeed)
+	r.PUT("/feeds/:id/subscribe", s.subFeed)
+	r.PUT("/feeds/:id/unsubscribe", s.getFeed)
 
+	/*
+		funcmap := template.FuncMap{
+			"routeuri": e.URI,
+		}
+			t := &Template{
+				templates: template.Must(template.New("rss2go").Funcs(funcmap).ParseGlob("public/*.html")),
+			}
+			e.Renderer = t
+	*/
 	customServer := &http.Server{
 		Addr:           ":7999",
 		ReadTimeout:    20 * time.Second,
@@ -75,117 +87,262 @@ func (t *Template) Render(w io.Writer, name string, data interface{}, c echo.Con
 	return t.templates.ExecuteTemplate(w, name, data)
 }
 
-// Set standard headers for all responses
-func headers(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		//		c.Response().Header().Set("Content-Type", "application/json; charset=utf-8")
-		c.Response().Header().Set("Access-Control-Allow-Origin", "*")
-		c.Response().Header().Set("Access-Control-Expose-Headers", "link,content-length")
-		c.Response().Header().Set("Strict-Transport-Security", "max-age=86400")
-		return next(c)
-	}
-}
-func addDBH(dbh *db.Handle) echo.MiddlewareFunc {
-	// Defaults
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			c.Set("dbh", dbh)
-			return next(c)
-		}
-	}
-}
-
-const (
-	basic = "Basic"
-)
-
-func basicAuth(dbh *db.Handle) echo.MiddlewareFunc {
-	// Defaults
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			auth := c.Request().Header.Get(echo.HeaderAuthorization)
-			l := len(basic)
-
-			if len(auth) > l+1 && auth[:l] == basic {
-				b, err := base64.StdEncoding.DecodeString(auth[l+1:])
-				if err != nil {
-					return err
-				}
-				cred := string(b)
-				for i := 0; i < len(cred); i++ {
-					if cred[i] == ':' {
-						// Verify credentials
-						dbuser, err := dbh.GetUserByEmail(cred[:i])
-						if err == nil {
-							//if bcrypt.CompareHashAndPassword([]byte(dbuser.Password), []byte(cred[i+1:])) == nil {
-							c.Set("user", dbuser)
-							return next(c)
-							//}
-							//logrus.Infof("Bad password for user: %s", cred[:i])
-						}
-						logrus.Infof("Unknown user authentication: %s", cred[:i])
-					}
-				}
-			}
-			// Need to return `401` for browsers to pop-up login box.
-			c.Response().Header().Set(echo.HeaderWWWAuthenticate, basic+" realm=Restricted")
-			return echo.ErrUnauthorized
-		}
-	}
-}
-
-type userOverviewData struct {
-	Feeds        []db.FeedInfo
-	UnSubHandler echo.HandlerFunc
-	SubHandler   echo.HandlerFunc
-}
-
-func (s *APIServer) userOverview(c echo.Context) error {
-	user := c.Get("user").(*db.User)
-	feeds, err := s.DBH.GetUsersFeeds(user)
-	if err != nil {
-		return c.String(http.StatusInternalServerError, err.Error())
-	}
-	return c.Render(http.StatusOK, "useroverview.html", userOverviewData{
-		Feeds:        feeds,
-		UnSubHandler: s.unsubscribe,
-		SubHandler:   s.subscribe,
-	})
-}
-
-func (s *APIServer) unsubscribe(c echo.Context) error {
-	// Delete the subscripttion and then redir to userOverview
-	user := c.Get("user").(*db.User)
+func (s *APIServer) subFeed(c echo.Context) error {
 	id := c.Param("id")
 	feedID, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
 		return c.String(http.StatusBadRequest, fmt.Sprintf("Unknown feed id: %s", err))
 	}
+
 	feed, err := s.DBH.GetFeedByID(feedID)
 	if err != nil {
-		return c.String(http.StatusNotFound, "Unknown feed id")
+		return c.String(http.StatusInternalServerError, err.Error())
 	}
-	s.DBH.RemoveFeedsFromUser(user, []*db.FeedInfo{feed})
-	return c.Redirect(302, c.Echo().URI(s.userOverview))
-}
 
-func (s *APIServer) subscribe(c echo.Context) error {
-	user := c.Get("user").(*db.User)
-	feedURI := c.FormValue("uri")
-	feedName := c.FormValue("name")
+	usertoken := c.Get("user").(*jwt.Token)
+	claims := usertoken.Claims.(jwt.MapClaims)
+	useremail := claims["name"].(string)
 
-	feed, err := s.DBH.GetFeedByURL(feedURI)
+	user, err := s.DBH.GetUserByEmail(useremail)
 	if err != nil {
-		// Feed doesn't exist
-		feed, err = s.DBH.AddFeed(feedName, feedURI)
-		if err != nil {
-			return c.String(http.StatusBadRequest, fmt.Sprintf("Error adding feed: %s", err))
-		}
+		return c.String(http.StatusInternalServerError, err.Error())
 	}
-	s.DBH.AddFeedsToUser(user, []*db.FeedInfo{feed})
-	return c.Redirect(302, c.Echo().URI(s.userOverview))
+
+	err = s.DBH.AddFeedsToUser(user, []*db.FeedInfo{feed})
+	if err != nil {
+		fmt.Println(err)
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSONCharsetUTF8)
+	c.Response().WriteHeader(http.StatusOK)
+	return jsonapi.MarshalOnePayload(c.Response(), feed)
 }
 
-func (s *APIServer) updateUser(c echo.Context) error {
-	return nil
+func (s *APIServer) unsubFeed(c echo.Context) error {
+	id := c.Param("id")
+	feedID, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return c.String(http.StatusBadRequest, fmt.Sprintf("Unknown feed id: %s", err))
+	}
+
+	feed, err := s.DBH.GetFeedByID(feedID)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	usertoken := c.Get("user").(*jwt.Token)
+	claims := usertoken.Claims.(jwt.MapClaims)
+	useremail := claims["name"].(string)
+
+	user, err := s.DBH.GetUserByEmail(useremail)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	err = s.DBH.RemoveFeedsFromUser(user, []*db.FeedInfo{feed})
+	if err != nil {
+		fmt.Println(err)
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSONCharsetUTF8)
+	c.Response().WriteHeader(http.StatusOK)
+	return jsonapi.MarshalOnePayload(c.Response(), feed)
+}
+
+func (s *APIServer) updateFeed(c echo.Context) error {
+	b := new(db.FeedInfo)
+
+	errors := &apiErrors{}
+
+	err := jsonapi.UnmarshalPayload(c.Request().Body, b)
+
+	if err != nil {
+		errors.addError("Bad Input", err, http.StatusBadRequest)
+		return c.JSON(http.StatusBadRequest, errors)
+	}
+	err = s.DBH.SaveFeed(b)
+	if err != nil {
+		errors.addError("Error saving Feed", err, http.StatusUnprocessableEntity)
+		c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSONCharsetUTF8)
+
+		return c.JSONPretty(http.StatusUnprocessableEntity, errors, "  ")
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+type apiError struct {
+	Title  string            `json:"title"`
+	Detail string            `json:"detail,omitempty"`
+	Source map[string]string `json:"source,omitempty"`
+	Status int               `json:"status,omitempty"`
+}
+
+type apiErrors struct {
+	Errors []*apiError `json:"errors"`
+}
+
+func (e *apiErrors) addError(title string, err error, status int) {
+	e.Errors = append(e.Errors, &apiError{
+		Title:  title,
+		Detail: err.Error(),
+		Source: map[string]string{
+			"pointer": "data",
+		},
+		Status: status,
+	})
+}
+
+type feedsReqBinder struct {
+	Name string `json:"name" form:"name" query:"name"`
+}
+
+func (s *APIServer) getFeeds(c echo.Context) error {
+	b := new(feedsReqBinder)
+
+	if err := c.Bind(b); err != nil {
+		return err
+	}
+
+	var feeds []*db.FeedInfo
+	var err error
+	if b.Name != "" {
+		feeds, err = s.DBH.GetFeedsByName(b.Name)
+	} else {
+		feeds, err = s.DBH.GetAllFeeds()
+	}
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	feedInterface := make([]interface{}, len(feeds))
+
+	for i, f := range feeds {
+		feedInterface[i] = f
+	}
+
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSONCharsetUTF8)
+	c.Response().WriteHeader(http.StatusOK)
+	return jsonapi.MarshalManyPayload(c.Response(), feedInterface)
+}
+
+func (s *APIServer) getFeed(c echo.Context) error {
+	id := c.Param("id")
+	feedID, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return c.String(http.StatusBadRequest, fmt.Sprintf("Unknown feed id: %s", err))
+	}
+
+	feed, err := s.DBH.GetFeedByID(feedID)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSONCharsetUTF8)
+	c.Response().WriteHeader(http.StatusOK)
+	return jsonapi.MarshalOnePayload(c.Response(), feed)
+}
+
+func (s *APIServer) addFeed(c echo.Context) error {
+	usertoken := c.Get("user").(*jwt.Token)
+	claims := usertoken.Claims.(jwt.MapClaims)
+	useremail := claims["name"].(string)
+
+	dbuser, err := s.DBH.GetUserByEmail(useremail)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	feed := new(db.FeedInfo)
+
+	errors := &apiErrors{}
+
+	err = jsonapi.UnmarshalPayload(c.Request().Body, feed)
+
+	if err != nil {
+		errors.addError("Bad Input", err, http.StatusBadRequest)
+		return c.JSON(http.StatusBadRequest, errors)
+	}
+
+	//scrub
+	//- id
+	//- last pool
+	//- last error
+	feed.ID = 0
+	feed.LastPollTime = time.Time{}
+	feed.LastErrorResponse = ""
+	feed.LastPollError = ""
+
+	// See if Feed already exists:
+	// - subscribe
+	// Else add & subscribe
+
+	// TODO: normalize the url
+	dbfeed, err := s.DBH.GetFeedByURL(feed.URL)
+	if err == nil {
+		err = s.DBH.AddFeedsToUser(dbuser, []*db.FeedInfo{dbfeed})
+		if err != nil {
+			errors.addError("Bad Input", err, http.StatusBadRequest)
+			return c.JSON(http.StatusBadRequest, errors)
+		}
+		c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSONCharsetUTF8)
+		c.Response().WriteHeader(http.StatusOK)
+		return jsonapi.MarshalOnePayload(c.Response(), dbfeed)
+	}
+
+	err = s.DBH.SaveFeed(feed)
+	if err != nil {
+		errors.addError("Error saving Feed", err, http.StatusUnprocessableEntity)
+		return c.JSONPretty(http.StatusUnprocessableEntity, errors, "  ")
+	}
+	err = s.DBH.AddFeedsToUser(dbuser, []*db.FeedInfo{feed})
+	if err != nil {
+		errors.addError("Error subscribing to Feed", err, http.StatusUnprocessableEntity)
+		return c.JSONPretty(http.StatusUnprocessableEntity, errors, "  ")
+	}
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSONCharsetUTF8)
+	c.Response().WriteHeader(http.StatusOK)
+	return jsonapi.MarshalOnePayload(c.Response(), dbfeed)
+}
+
+// AuthInfo decodes auth requests
+type AuthInfo struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// Expects username & password to be passed as JSON in the POST body
+// This is how Ember does it.
+func (s *APIServer) login(c echo.Context) error {
+	a := new(AuthInfo)
+
+	if err := c.Bind(a); err != nil {
+		return err
+	}
+
+	dbuser, err := s.DBH.GetUserByEmail(a.Username)
+	if err == nil {
+		//if bcrypt.CompareHashAndPassword([]byte(dbuser.Password), []byte(a.Password)) == nil {
+		token := jwt.New(jwt.SigningMethodHS256)
+
+		// Set claims
+		claims := token.Claims.(jwt.MapClaims)
+		claims["name"] = dbuser.Email
+		claims["admin"] = false
+		claims["exp"] = time.Now().Add(time.Hour * 72).Unix()
+
+		// Generate encoded token and send it as response.
+		t, err := token.SignedString([]byte("secret"))
+		if err != nil {
+			return err
+		}
+		return c.JSON(http.StatusOK, map[string]string{
+			"token": t,
+		})
+		//}
+	}
+
+	logrus.Infof("Unknown user or bad password for: %s", a.Username)
+	return c.String(http.StatusUnauthorized, "Bad username or password")
 }
