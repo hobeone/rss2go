@@ -16,6 +16,8 @@ func migrationsCopy(m []gomigrate.Migration) []*gomigrate.Migration {
 func SchemaMigrations() []*gomigrate.Migration {
 	return migrationsCopy(schemaMigrations)
 }
+
+// TestFixtures gives the standard fixtures for db testing
 func TestFixtures() []*gomigrate.Migration {
 	return migrationsCopy(testFixtures)
 }
@@ -68,6 +70,11 @@ CREATE UNIQUE INDEX user_feed_idx ON user_feeds (user_id,feed_info_id);`,
 		ID:   120,
 		Name: "Add Feed Site link",
 		Up:   `ALTER TABLE "feed_info" ADD COLUMN site_url text;`,
+	},
+	{
+		ID:   130,
+		Name: "Add Unique constraint to feed_item",
+		Up:   `CREATE UNIQUE INDEX guid_feed_unique_index ON feed_item (feed_info_id,guid);`,
 	},
 }
 

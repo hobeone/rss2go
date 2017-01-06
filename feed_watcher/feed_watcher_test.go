@@ -3,7 +3,6 @@ package feedwatcher
 import (
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"testing"
 	"time"
 
@@ -70,67 +69,6 @@ func SetupTest(t *testing.T, feedPath string) (*FeedWatcher, []byte, *mail.Dispa
 	}
 
 	return NewFeedWatcher(*feeds[0], crawlChan, responseChan, mailDispatcher.OutgoingMail, d, []string{}, 30, 100), feedResp, mailDispatcher
-}
-
-func makeRange(min, max int) []int {
-	a := make([]int, max-min+1)
-	for i := range a {
-		a[i] = min + i
-	}
-	return a
-}
-
-func TestPruneGUIDS(t *testing.T) {
-	t.Parallel()
-	watcher, crawlBody, _ := SetupTest(t, "../testdata/ars.rss")
-	guids, err := watcher.LoadGuidsFromDb(1000)
-	if err != nil {
-		t.Fatalf("Error getting GUIDS from db: %v", err)
-	}
-	if len(guids) != 0 {
-		t.Fatalf("Expected 0 guids but got %d", len(guids))
-	}
-
-	r := makeRange(10, 1000)
-	for i := range r {
-		watcher.dbh.RecordGUID(watcher.FeedInfo.ID, fmt.Sprintf("guid-%d", i))
-	}
-
-	resp := &FeedCrawlResponse{
-		HTTPResponseStatusCode: http.StatusOK,
-		Body: crawlBody,
-	}
-
-	// Don't clean
-	watcher.PruneGUIDS = false
-	err = watcher.UpdateFeed(resp)
-	if err != nil {
-		t.Fatalf("Error updating feed: %s", err)
-	}
-	guids, err = watcher.LoadGuidsFromDb(1000)
-	if err != nil {
-		t.Fatalf("Error getting GUIDS from db: %v", err)
-	}
-	if len(guids) < 1000 {
-		t.Fatalf("Cleaned database of old GUIDS.  Expected %d but got %d", 1000, len(guids))
-	}
-
-	//Clean
-	watcher.PruneGUIDS = true
-	err = watcher.UpdateFeed(resp)
-	if err != nil {
-		t.Fatalf("Error updating feed: %s", err)
-	}
-
-	maxguids := len(watcher.KnownGuids)
-
-	guids, err = watcher.LoadGuidsFromDb(1000)
-	if err != nil {
-		t.Fatalf("Error getting GUIDS from db: %v", err)
-	}
-	if len(guids) > maxguids {
-		t.Fatalf("Didn't clean database of old GUIDS.  Expected %d but got %d", maxguids, len(guids))
-	}
 }
 
 func TestNewFeedWatcher(t *testing.T) {
@@ -224,8 +162,8 @@ func TestFeedWatcherPolling(t *testing.T) {
 	if len(resp.Items) != 0 {
 		t.Fatalf("Expected 0 items from the feed. Got %d", len(resp.Items))
 	}
-	if len(n.KnownGuids) != 25 {
-		t.Fatalf("Expected 25 known GUIDs got %d", len(n.KnownGuids))
+	if len(n.GUIDCache) != 25 {
+		t.Fatalf("Expected 25 known GUIDs got %d", len(n.GUIDCache))
 	}
 	// Hella Ghetto?
 	c := mailDispatcher.MailSender.(*mail.NullMailSender).Count
@@ -275,8 +213,8 @@ func TestFeedWatcherWithEmailErrors(t *testing.T) {
 		t.Fatalf("Expected 20 items from the feed. Got %d", len(resp.Items))
 	}
 
-	if len(n.KnownGuids) != 0 {
-		t.Fatalf("Expected no known guids, got %d", len(n.KnownGuids))
+	if len(n.GUIDCache) != 0 {
+		t.Fatalf("Expected no known guids, got %d", len(n.GUIDCache))
 	}
 }
 
@@ -358,7 +296,7 @@ func TestFeedWatcherWithGuidsSet(t *testing.T) {
 	for _, i := range stories {
 		guids[i.ID] = true
 	}
-	n.KnownGuids = guids
+	n.GUIDCache = guids
 	go n.PollFeed()
 	req := <-n.crawlChan
 
@@ -374,7 +312,7 @@ func TestFeedWatcherWithGuidsSet(t *testing.T) {
 		t.Fatalf("Expected 0 items from the feed but got %d.", len(resp.Items))
 	}
 	// Second poll with an new items.
-	n.KnownGuids = map[string]bool{}
+	n.GUIDCache = map[string]bool{}
 	req = <-n.crawlChan
 
 	req.ResponseChan <- &FeedCrawlResponse{

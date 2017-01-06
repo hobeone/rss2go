@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/davecgh/go-spew/spew"
 	testdb "github.com/erikstmartin/go-testdb"
 )
 
@@ -109,6 +110,29 @@ func TestGettingUsers(t *testing.T) {
 	if u.Email != addr {
 		t.Fatalf("Expecte user email to = %s, got %s", addr, u.Email)
 	}
+}
+
+func TestRecordGUIDDoesntAddDuplicates(t *testing.T) {
+	t.Parallel()
+	d := NewMemoryDBHandle(true, logrus.StandardLogger(), true)
+
+	ids := []string{"one", "one", "two", "one", "three", "one"}
+	for _, i := range ids {
+		err := d.RecordGUID(1, i)
+		if err != nil {
+			t.Fatalf("Error recoding guid %s: %v", i, err)
+		}
+	}
+	var items []FeedItem
+	err := d.db.Where("feed_info_id=?", 1).
+		Order("added_on DESC").
+		Limit(100).
+		Find(&items).Error
+
+	if err != nil {
+		t.Fatalf("Error getting uids for feed: %v", err)
+	}
+	spew.Dump(items)
 }
 
 func TestGetMostRecentGuidsForFeed(t *testing.T) {

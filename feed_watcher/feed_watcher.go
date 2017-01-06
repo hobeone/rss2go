@@ -31,7 +31,8 @@ import (
 	"github.com/hobeone/rss2go/mail"
 )
 
-const guidSaveRatio = 1.5
+// Cache this many times of the most recent GUIDs for each feed.
+const guidCacheSize = 1.5
 
 // ErrCrawlerNotAvailable is when the crawler channel would block
 var ErrCrawlerNotAvailable = errors.New("no crawler available")
@@ -79,11 +80,10 @@ type FeedWatcher struct {
 	minSleepTime      time.Duration
 	maxSleepTime      time.Duration
 	dbh               db.Service
-	KnownGuids        map[string]bool
+	GUIDCache         map[string]bool
 	LastCrawlResponse *FeedCrawlResponse
 	After             func(d time.Duration) <-chan time.Time // Allow for mocking out in test.
 	Logger            logrus.FieldLogger
-	PruneGUIDS        bool
 }
 
 // NewFeedWatcher returns a new FeedWatcher instance.
@@ -93,12 +93,12 @@ func NewFeedWatcher(
 	responseChan chan *FeedCrawlResponse,
 	mailChan chan *mail.Request,
 	dbh db.Service,
-	knownGUIDs []string,
+	GUIDCache []string,
 	minSleep int64,
 	maxSleep int64,
 ) *FeedWatcher {
 	guids := map[string]bool{}
-	for _, i := range knownGUIDs {
+	for _, i := range GUIDCache {
 		guids[i] = true
 	}
 	return &FeedWatcher{
@@ -112,11 +112,10 @@ func NewFeedWatcher(
 		minSleepTime:      time.Duration(minSleep) * time.Second,
 		maxSleepTime:      time.Duration(maxSleep) * time.Second,
 		dbh:               dbh,
-		KnownGuids:        guids,
+		GUIDCache:         guids,
 		LastCrawlResponse: &FeedCrawlResponse{},
 		After:             After,
 		Logger:            logrus.StandardLogger(),
-		PruneGUIDS:        true,
 	}
 }
 
@@ -197,16 +196,8 @@ func (fw *FeedWatcher) UpdateFeed(resp *FeedCrawlResponse) error {
 	if err != nil {
 		resp.Error = err
 	}
-	guids := make([]string, 0, len(fw.KnownGuids))
-	for k := range fw.KnownGuids {
-		guids = append(guids, k)
-	}
-	if fw.PruneGUIDS {
-		_, err = fw.dbh.SetFeedGUIDS(fw.FeedInfo.ID, guids)
-		if err != nil {
-			resp.Error = err
-		}
-	}
+
+	//TODO: if we are to prune old GUIDs do it here
 
 	if fw.FeedInfo.LastPollError != "" && resp.Error == nil {
 		resp.Error = errors.New(fw.FeedInfo.LastPollError)
@@ -249,18 +240,19 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 	// they exist in the DB.  That should be the maximum we should need to
 	// load into memory.
 
-	guidsToLoad := int(math.Ceil(float64(len(stories)) * guidSaveRatio))
+	guidsToLoad := int(math.Ceil(float64(len(stories)) * guidCacheSize))
 
 	fw.Logger.Infof("Got %d stories from feed %s.", len(stories), fw.FeedInfo.URL)
 
-	if len(fw.KnownGuids) == 0 {
+	// On first pass or no stories ever seen
+	if len(fw.GUIDCache) == 0 {
 		var err error
-		fw.KnownGuids, err = fw.LoadGuidsFromDb(guidsToLoad)
+		fw.GUIDCache, err = fw.LoadGuidsFromDb(guidsToLoad)
 		if err != nil {
 			resp.Error = fmt.Errorf("error getting Guids from DB: %s", err)
 			return resp.Error
 		}
-		fw.Logger.Infof("Loaded %d known guids for Feed %s.", len(fw.KnownGuids), fw.FeedInfo.URL)
+		fw.Logger.Infof("Loaded %d known guids for Feed %s.", len(fw.GUIDCache), fw.FeedInfo.URL)
 	}
 
 	resp.Items = fw.filterNewItems(stories)
@@ -288,7 +280,7 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 	// Reload GUIDs to X * guidSaveRatio but only if there were new
 	// items otherwise it would be noop.
 	if len(resp.Items) > 0 {
-		fw.KnownGuids, err = fw.LoadGuidsFromDb(guidsToLoad)
+		fw.GUIDCache, err = fw.LoadGuidsFromDb(guidsToLoad)
 		if err != nil {
 			e := fmt.Errorf("error getting Guids from DB: %s", err)
 			fw.Logger.Info(e)
@@ -368,7 +360,7 @@ func (fw *FeedWatcher) LoadGuidsFromDb(max int) (map[string]bool, error) {
 }
 
 func (fw *FeedWatcher) recordGUID(guid string) error {
-	fw.KnownGuids[guid] = true
+	fw.GUIDCache[guid] = true
 	return fw.dbh.RecordGUID(fw.FeedInfo.ID, guid)
 }
 
@@ -376,7 +368,14 @@ func (fw *FeedWatcher) filterNewItems(stories []*feed.Story) []*feed.Story {
 	fw.Logger.Infof("Filtering stories we already know about.")
 	newStories := []*feed.Story{}
 	for _, story := range stories {
-		if _, found := fw.KnownGuids[story.ID]; !found {
+		if _, found := fw.GUIDCache[story.ID]; !found {
+			_, err := fw.dbh.GetFeedItemByGUID(fw.FeedInfo.ID, story.ID)
+			if err == nil {
+				fw.Logger.Errorf("Got story with known ID that wasn't in GUIDCache, skipping and adding to cache. Feed: %s (%d) - GUID: '%s'", fw.FeedInfo.URL, fw.FeedInfo.ID, story.ID)
+				fw.dbh.RecordGUID(fw.FeedInfo.ID, story.ID)
+				fw.GUIDCache[story.ID] = true
+				continue
+			}
 			newStories = append(newStories, story)
 		}
 	}
@@ -384,14 +383,6 @@ func (fw *FeedWatcher) filterNewItems(stories []*feed.Story) []*feed.Story {
 }
 
 func (fw *FeedWatcher) sendMail(item *feed.Story) error {
-	_, err := fw.dbh.GetFeedItemByGUID(fw.FeedInfo.ID, item.ID)
-	// Guid found, so sending would be a duplicate.
-	if err == nil {
-		fw.Logger.Warningf("Tried to send duplicate GUID: %s for feed %s",
-			item.ID, fw.FeedInfo.URL)
-		return nil
-	}
-
 	users, err := fw.dbh.GetFeedUsers(fw.FeedInfo.URL)
 	if err != nil {
 		return err

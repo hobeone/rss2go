@@ -1,12 +1,16 @@
 package db
 
 import (
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"net/mail"
 	"net/url"
+	"reflect"
+	"regexp"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/gomigrate"
@@ -103,6 +107,79 @@ type Handle struct {
 	syncMutex sync.Mutex
 }
 
+type logrusAdapter struct {
+	logger logrus.FieldLogger
+}
+
+var (
+	sqlRegexp = regexp.MustCompile(`(\$\d+)|\?`)
+)
+
+func (l logrusAdapter) Print(values ...interface{}) {
+	if len(values) > 1 {
+		level := values[0]
+		source := fmt.Sprintf("\033[35m(%v)\033[0m", values[1])
+		messages := []interface{}{source}
+
+		if level == "sql" {
+			// duration
+			messages = append(messages, fmt.Sprintf(" \033[36;1m[%.2fms]\033[0m ", float64(values[2].(time.Duration).Nanoseconds()/1e4)/100.0))
+			// sql
+			var sql string
+			var formattedValues []string
+
+			for _, value := range values[4].([]interface{}) {
+				indirectValue := reflect.Indirect(reflect.ValueOf(value))
+				if indirectValue.IsValid() {
+					value = indirectValue.Interface()
+					if t, ok := value.(time.Time); ok {
+						formattedValues = append(formattedValues, fmt.Sprintf("'%v'", t.Format(time.RFC3339)))
+					} else if b, ok := value.([]byte); ok {
+						if str := string(b); isPrintable(str) {
+							formattedValues = append(formattedValues, fmt.Sprintf("'%v'", str))
+						} else {
+							formattedValues = append(formattedValues, "'<binary>'")
+						}
+					} else if r, ok := value.(driver.Valuer); ok {
+						if value, err := r.Value(); err == nil && value != nil {
+							formattedValues = append(formattedValues, fmt.Sprintf("'%v'", value))
+						} else {
+							formattedValues = append(formattedValues, "NULL")
+						}
+					} else {
+						formattedValues = append(formattedValues, fmt.Sprintf("'%v'", value))
+					}
+				} else {
+					formattedValues = append(formattedValues, fmt.Sprintf("'%v'", value))
+				}
+			}
+
+			var formattedValuesLength = len(formattedValues)
+			for index, value := range sqlRegexp.Split(values[3].(string), -1) {
+				sql += value
+				if index < formattedValuesLength {
+					sql += formattedValues[index]
+				}
+			}
+
+			messages = append(messages, sql)
+		} else {
+			messages = append(messages, "\033[31;1m")
+			messages = append(messages, values[2:]...)
+			messages = append(messages, "\033[0m")
+		}
+		l.logger.Debugln(messages...)
+	}
+}
+func isPrintable(s string) bool {
+	for _, r := range s {
+		if !unicode.IsPrint(r) {
+			return false
+		}
+	}
+	return true
+}
+
 func openDB(dbType string, dbArgs string, verbose bool, logger logrus.FieldLogger) *gorm.DB {
 	logger.Infof("db: opening database %s:%s", dbType, dbArgs)
 	// Error only returns from this if it is an unknown driver.
@@ -111,7 +188,7 @@ func openDB(dbType string, dbArgs string, verbose bool, logger logrus.FieldLogge
 		panic(fmt.Sprintf("Error connecting to %s database %s: %s", dbType, dbArgs, err.Error()))
 	}
 	d.SingularTable(true)
-	d.SetLogger(logger)
+	d.SetLogger(logrusAdapter{logger})
 	d.LogMode(verbose)
 	// Actually test that we have a working connection
 	err = d.DB().Ping()
@@ -365,16 +442,11 @@ func (d *Handle) GetFeedItemByGUID(feedID int64, guid string) (*FeedItem, error)
 
 // RecordGUID adds a FeedItem record for the given feedID and guid.
 func (d *Handle) RecordGUID(feedID int64, guid string) error {
-	d.logger.Infof("Adding GUID '%s' for feed %d", guid, feedID)
-	f := FeedItem{
-		FeedInfoID: feedID,
-		GUID:       guid,
-		AddedOn:    time.Now(),
-	}
+	d.logger.Infof("Adding or Updating GUID '%s' for feed %d", guid, feedID)
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 
-	return d.db.Save(&f).Error
+	return d.db.Exec("insert or replace INTO feed_item (id, feed_info_id, guid, added_on) VALUES ((select id from feed_item WHERE guid = ?), ?, ?, ?)", guid, feedID, guid, time.Now()).Error
 }
 
 // SetFeedGUIDS replaces all of a Feeds items with the given set
