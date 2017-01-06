@@ -31,6 +31,8 @@ import (
 	"github.com/hobeone/rss2go/mail"
 )
 
+const guidSaveRatio = 1.5
+
 // ErrCrawlerNotAvailable is when the crawler channel would block
 var ErrCrawlerNotAvailable = errors.New("no crawler available")
 
@@ -81,6 +83,7 @@ type FeedWatcher struct {
 	LastCrawlResponse *FeedCrawlResponse
 	After             func(d time.Duration) <-chan time.Time // Allow for mocking out in test.
 	Logger            logrus.FieldLogger
+	PruneGUIDS        bool
 }
 
 // NewFeedWatcher returns a new FeedWatcher instance.
@@ -113,6 +116,7 @@ func NewFeedWatcher(
 		LastCrawlResponse: &FeedCrawlResponse{},
 		After:             After,
 		Logger:            logrus.StandardLogger(),
+		PruneGUIDS:        true,
 	}
 }
 
@@ -193,6 +197,17 @@ func (fw *FeedWatcher) UpdateFeed(resp *FeedCrawlResponse) error {
 	if err != nil {
 		resp.Error = err
 	}
+	guids := make([]string, 0, len(fw.KnownGuids))
+	for k := range fw.KnownGuids {
+		guids = append(guids, k)
+	}
+	if fw.PruneGUIDS {
+		_, err = fw.dbh.SetFeedGUIDS(fw.FeedInfo.ID, guids)
+		if err != nil {
+			resp.Error = err
+		}
+	}
+
 	if fw.FeedInfo.LastPollError != "" && resp.Error == nil {
 		resp.Error = errors.New(fw.FeedInfo.LastPollError)
 	}
@@ -222,11 +237,11 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 
 	resp.Feed = feed
 	/*
-	 * Load most recent X * 1.1 Guids from Db
+	 * Load most recent X * guidSaveRatio Guids from Db
 	 * Filter New Stories
 	 * Send New Stories for mailing
 	 *  Add sent guid to list
-	 * prune Guids back to X * 1.1
+	 * prune Guids back to X * guidSaveRatio
 	 */
 
 	// If we don't know about any GUIDs for this feed we haven't been
@@ -234,7 +249,7 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 	// they exist in the DB.  That should be the maximum we should need to
 	// load into memory.
 
-	guidsToLoad := int(math.Ceil(float64(len(stories)) * 1.1))
+	guidsToLoad := int(math.Ceil(float64(len(stories)) * guidSaveRatio))
 
 	fw.Logger.Infof("Got %d stories from feed %s.", len(stories), fw.FeedInfo.URL)
 
@@ -270,7 +285,7 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 		}
 	}
 
-	// Prune guids we know about back down to X * 1.1 but only if there were new
+	// Reload GUIDs to X * guidSaveRatio but only if there were new
 	// items otherwise it would be noop.
 	if len(resp.Items) > 0 {
 		fw.KnownGuids, err = fw.LoadGuidsFromDb(guidsToLoad)
@@ -280,7 +295,6 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 			resp.Error = e
 		}
 	}
-
 	return resp.Error
 }
 
