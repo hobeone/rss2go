@@ -372,6 +372,23 @@ func (d *Handle) GetFeedsByName(name string) ([]*FeedInfo, error) {
 	return feeds, err
 }
 
+// GetUsersFeedsByName returns all feeds that contain the given string in their
+// name.
+func (d *Handle) GetUsersFeedsByName(user *User, name string) ([]*FeedInfo, error) {
+	d.syncMutex.Lock()
+	defer d.syncMutex.Unlock()
+	var feeds []*FeedInfo
+
+	err := d.db.Raw(`SELECT feed_info.* FROM feed_info
+	INNER JOIN user_feeds ON feed_info.id = user_feeds.feed_info_id
+	INNER JOIN user ON user_feeds.user_id = user.id
+	WHERE user.id = ?
+	AND feed_info.name LIKE ?
+	ORDER BY feed_info.name;`, user.ID, fmt.Sprintf("%%%s%%", name)).Scan(&feeds).Error
+
+	return feeds, err
+}
+
 // GetFeedsWithErrors returns all feeds that had an error on their last
 // check.
 func (d *Handle) GetFeedsWithErrors() ([]*FeedInfo, error) {
@@ -669,16 +686,11 @@ func (d *Handle) RemoveFeedsFromUser(u *User, feeds []*FeedInfo) error {
 
 // GetUsersFeeds returns all the FeedInfos that a user is subscribed to.
 func (d *Handle) GetUsersFeeds(u *User) ([]*FeedInfo, error) {
-	d.syncMutex.Lock()
-	defer d.syncMutex.Unlock()
-
-	var feedInfos []*FeedInfo
-
-	err := d.db.Model(u).Association("Feeds").Find(&feedInfos).Error
+	feeds, err := d.GetUsersFeedsByName(u, "")
 	if err == gorm.ErrRecordNotFound {
 		err = nil
 	}
-	return feedInfos, err
+	return feeds, err
 }
 
 // UpdateUsersFeeds replaces a users subscribed feeds with the given

@@ -34,3 +34,6 @@ rss2go.db*
 
 # config
 config.json
+
+# auto reload bin
+gin-bin

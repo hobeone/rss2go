@@ -47,12 +47,13 @@ func (s *APIServer) Serve() error {
 	// Restricted group
 	r := e.Group("/api/v1")
 	r.Use(middleware.JWT([]byte("secret")))
+	r.Use(s.getDBUser)
 	r.GET("/feeds", s.getFeeds)
 	r.POST("/feeds", s.addFeed)
 	r.GET("/feeds/:id", s.getFeed)
 	r.PATCH("/feeds/:id", s.updateFeed)
 	r.PUT("/feeds/:id/subscribe", s.subFeed)
-	r.PUT("/feeds/:id/unsubscribe", s.getFeed)
+	r.PUT("/feeds/:id/unsubscribe", s.unsubFeed)
 
 	/*
 		funcmap := template.FuncMap{
@@ -199,6 +200,7 @@ type feedsReqBinder struct {
 }
 
 func (s *APIServer) getFeeds(c echo.Context) error {
+	dbuser := c.Get("dbuser").(*db.User)
 	b := new(feedsReqBinder)
 
 	if err := c.Bind(b); err != nil {
@@ -208,9 +210,9 @@ func (s *APIServer) getFeeds(c echo.Context) error {
 	var feeds []*db.FeedInfo
 	var err error
 	if b.Name != "" {
-		feeds, err = s.DBH.GetFeedsByName(b.Name)
+		feeds, err = s.DBH.GetUsersFeedsByName(dbuser, b.Name)
 	} else {
-		feeds, err = s.DBH.GetAllFeeds()
+		feeds, err = s.DBH.GetUsersFeeds(dbuser)
 	}
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
@@ -244,21 +246,27 @@ func (s *APIServer) getFeed(c echo.Context) error {
 	return jsonapi.MarshalOnePayload(c.Response(), feed)
 }
 
-func (s *APIServer) addFeed(c echo.Context) error {
-	usertoken := c.Get("user").(*jwt.Token)
-	claims := usertoken.Claims.(jwt.MapClaims)
-	useremail := claims["name"].(string)
-
-	dbuser, err := s.DBH.GetUserByEmail(useremail)
-	if err != nil {
-		return c.String(http.StatusInternalServerError, err.Error())
+func (s *APIServer) getDBUser(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		usertoken := c.Get("user").(*jwt.Token)
+		claims := usertoken.Claims.(jwt.MapClaims)
+		useremail := claims["name"].(string)
+		dbuser, err := s.DBH.GetUserByEmail(useremail)
+		if err != nil {
+			return err
+		}
+		c.Set("dbuser", dbuser)
+		return next(c)
 	}
+}
+
+func (s *APIServer) addFeed(c echo.Context) error {
+	dbuser := c.Get("dbuser").(*db.User)
 
 	feed := new(db.FeedInfo)
-
 	errors := &apiErrors{}
 
-	err = jsonapi.UnmarshalPayload(c.Request().Body, feed)
+	err := jsonapi.UnmarshalPayload(c.Request().Body, feed)
 
 	if err != nil {
 		errors.addError("Bad Input", err, http.StatusBadRequest)

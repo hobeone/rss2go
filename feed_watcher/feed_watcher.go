@@ -188,7 +188,9 @@ func (fw *FeedWatcher) UpdateFeed(resp *FeedCrawlResponse) error {
 				fw.FeedInfo.LastErrorResponse = string(bod)
 			}
 		} else {
-			fw.FeedInfo.SiteURL = resp.Feed.Link
+			if fw.FeedInfo.SiteURL == "" {
+				fw.FeedInfo.SiteURL = resp.Feed.Link
+			}
 		}
 	}
 

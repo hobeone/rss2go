@@ -254,6 +254,14 @@ func TestAddAndDeleteFeed(t *testing.T) {
 		t.Fatalf("Error adding feed to user: %v", err)
 	}
 
+	feeds, err := d.GetUsersFeedsByName(u, "test")
+	if err != nil {
+		t.Fatalf("Error getting users feeds: %v", err)
+	}
+	if len(feeds) < 1 {
+		t.Fatalf("Got no feeds from GetUsersFeedsByName")
+	}
+
 	err = d.RemoveFeed(f.URL)
 	if err != nil {
 		t.Fatalf("Error removing feed: %s", err)
