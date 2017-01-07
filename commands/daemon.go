@@ -42,7 +42,7 @@ func (dc *daemonCommand) run(c *kingpin.ParseContext) error {
 	d := NewDaemon(dc.Config)
 	d.PollFeeds = dc.PollFeeds
 
-	allFeeds, err := d.DBH.GetAllFeeds()
+	allFeeds, err := d.DBH.GetAllFeedsWithUsers()
 	if err != nil {
 		logrus.Fatal(err.Error())
 	}
@@ -107,7 +107,7 @@ func (d *Daemon) feedDbUpdateLoop() {
 }
 
 func (d *Daemon) feedDbUpdate() {
-	dbFeeds, err := d.DBH.GetAllFeeds()
+	dbFeeds, err := d.DBH.GetAllFeedsWithUsers()
 	if err != nil {
 		logrus.Errorf("Error getting feeds from db: %s\n", err.Error())
 		return

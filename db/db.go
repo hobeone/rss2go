@@ -361,6 +361,20 @@ func (d *Handle) GetAllFeeds() (feeds []*FeedInfo, err error) {
 	return
 }
 
+// GetAllFeedsWithUsers returns all feeds from the database that have
+// subscribers
+func (d *Handle) GetAllFeedsWithUsers() ([]*FeedInfo, error) {
+	d.syncMutex.Lock()
+	defer d.syncMutex.Unlock()
+
+	var feeds []*FeedInfo
+	err := d.db.Raw(`SELECT feed_info.* FROM feed_info
+	LEFT JOIN user_feeds ON feed_info.id = user_feeds.feed_info_id
+	GROUP BY user_feeds.feed_info_id
+	HAVING COUNT(user_feeds.feed_info_id) > 0`).Scan(&feeds).Error
+	return feeds, err
+}
+
 // GetFeedsByName returns all feeds that contain the given string in their
 // name.
 func (d *Handle) GetFeedsByName(name string) ([]*FeedInfo, error) {

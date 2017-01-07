@@ -183,7 +183,7 @@ func (s *SMTPSender) smtpDaemon() {
 				open = false
 				continue
 			}
-			logrus.Infof("mail: sent mail to %s: %s", m.Message.GetHeader("From"), m.Message.GetHeader("Subject"))
+			logrus.Infof("mail: sent mail to %s: %s", m.Message.GetHeader("To"), m.Message.GetHeader("Subject"))
 			m.Response <- nil
 		// Close the connection to the SMTP server if no email was sent in
 		// the last 30 seconds.
