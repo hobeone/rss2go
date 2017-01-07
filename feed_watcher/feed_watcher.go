@@ -40,6 +40,15 @@ var ErrCrawlerNotAvailable = errors.New("no crawler available")
 // ErrAlreadyCrawlingFeed is when you are already Crawling a feed
 var ErrAlreadyCrawlingFeed = errors.New("already crawling feed")
 
+// ErrMailDeliveryFailed captures the specific reason for a mail failure
+type ErrMailDeliveryFailed struct {
+	reason string
+}
+
+func (e *ErrMailDeliveryFailed) Error() string {
+	return fmt.Sprintf("mail failure: '%s'", e.reason)
+}
+
 // After allows for stubbing out in test
 var After = func(d time.Duration) <-chan time.Time {
 	return time.After(d)
@@ -260,13 +269,17 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 	resp.Items = fw.filterNewItems(stories)
 	fw.Logger.Infof("Feed %s has %d new items", feed.Title, len(resp.Items))
 
+	handledItems := 0
 	for _, item := range resp.Items {
 		item.Title = fmt.Sprintf("%s: %s", fw.FeedInfo.Name, item.Title)
 		fw.Logger.Infof("New Story: %s, sending for mail.", item.Title)
 		err := fw.sendMail(item)
 		if err != nil {
-			fw.Logger.Infof("Error sending mail: %s", err.Error())
-			resp.Error = err
+			fw.Logger.Infof("Error sending mail: '%s'.  Skipping %d remaining items", err.Error(), len(resp.Items)-handledItems)
+			resp.Error = &ErrMailDeliveryFailed{err.Error()}
+			// An error with the mailer usually means we should just stop trying for
+			// a bit. So skip the rest of the items.
+			break
 		} else {
 			err := fw.recordGUID(item.ID)
 			if err != nil {
@@ -277,6 +290,7 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 				fw.Logger.Infof("Added guid %s for feed %s", item.ID, fw.FeedInfo.URL)
 			}
 		}
+		handledItems++
 	}
 
 	// Reload GUIDs to X * guidSaveRatio but only if there were new
@@ -332,9 +346,14 @@ func (fw *FeedWatcher) PollFeed() bool {
 			fw.responseChan <- fw.LastCrawlResponse
 			toSleep = fw.minSleepTime
 			if fw.LastCrawlResponse.Error != nil {
-				toSleep = fw.maxSleepTime
-				fw.Logger.Infof("Feed %s had error. Waiting maxium allowed time before next poll.",
-					fw.FeedInfo.URL)
+				switch fw.LastCrawlResponse.Error.(type) {
+				case *ErrMailDeliveryFailed:
+					toSleep = fw.minSleepTime
+					fw.Logger.Infof("Feed %s had mail delivery error. Sleeping for %v ", fw.FeedInfo.URL, toSleep)
+				default:
+					toSleep = fw.maxSleepTime
+					fw.Logger.Infof("Feed %s had error. Waiting maxium allowed time before next poll.", fw.FeedInfo.URL)
+				}
 			}
 		}
 	}

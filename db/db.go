@@ -367,7 +367,13 @@ func (d *Handle) GetFeedsByName(name string) ([]*FeedInfo, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	var feeds []*FeedInfo
-	err := d.db.Where("name LIKE ?", fmt.Sprintf("%%%s%%", name)).Find(&feeds).Error
+
+	err := d.db.Raw(`SELECT feed_info.* FROM feed_info
+	INNER JOIN user_feeds ON feed_info.id = user_feeds.feed_info_id
+	INNER JOIN user ON user_feeds.user_id = user.id
+	WHERE feed_info.name LIKE ?
+	ORDER BY feed_info.name;`, fmt.Sprintf("%%%s%%", name)).Scan(&feeds).Error
+
 	return feeds, err
 }
 
@@ -645,12 +651,14 @@ func (d *Handle) RemoveFeedsFromUser(u *User, feeds []*FeedInfo) error {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 
-	for _, f := range feeds {
-		d.db.Exec()
-		err := d.db.Model(u).Association("Feeds").Delete(*f).Error
-		if err != nil {
-			return err
-		}
+	feedIDs := make([]int64, len(feeds))
+	for i, f := range feeds {
+		feedIDs[i] = f.ID
+	}
+
+	err := d.db.Exec(`DELETE FROM user_feeds WHERE user_id = ? AND feed_info_id IN (?);`, u.ID, feedIDs).Error
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -717,16 +725,16 @@ func (d *Handle) GetFeedUsers(feedURL string) ([]User, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	var all []User
-	feed, err := d.unsafeGetFeedByURL(feedURL)
+	err := d.db.Raw(`SELECT user.* FROM user
+	INNER JOIN user_feeds ON user.id = user_feeds.user_id
+	INNER JOIN feed_info ON user_feeds.feed_info_id = feed_info.id
+	WHERE feed_info.url = ?;`, feedURL).Scan(&all).Error
 	if err == gorm.ErrRecordNotFound {
 		return all, nil
 	}
 	if err != nil {
 		return all, err
 	}
-	err = d.db.Model(feed).Association("Users").Find(&all).Error
-	if err == gorm.ErrRecordNotFound {
-		err = nil
-	}
+
 	return all, err
 }

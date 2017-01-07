@@ -544,8 +544,16 @@ func TestGetFeedUsers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(feeds) != len(users) {
-		t.Fatalf("Expected %d feeds got %d", len(feeds), len(feedUsers))
+	if len(users) != len(feedUsers) {
+		t.Fatalf("Expected %d users got %d", len(users), len(feedUsers))
+	}
+
+	feedUsers, err = d.GetFeedUsers("invalid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(feedUsers) != 0 {
+		t.Fatalf("Expected %d feeds got %d", 0, len(feedUsers))
 	}
 }
 
