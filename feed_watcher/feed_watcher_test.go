@@ -31,13 +31,10 @@ func (m *FailMailer) SendMail(msg *gomail.Message) error {
 // TODO: rework so failures can be set per test
 type MockDBFailer struct{}
 
-func (d *MockDBFailer) GetFeedByURL(string) (*db.FeedInfo, error) { return nil, nil }
-func (d *MockDBFailer) GetFeedUsers(string) ([]db.User, error)    { return nil, nil }
-func (d *MockDBFailer) SaveFeed(*db.FeedInfo) error               { return nil }
-func (d *MockDBFailer) RecordGUID(int64, string) error            { return nil }
-func (d *MockDBFailer) SetFeedGUIDS(int64, []string) ([]*db.FeedItem, error) {
-	return []*db.FeedItem{}, nil
-}
+func (d *MockDBFailer) GetFeedByURL(string) (*db.FeedInfo, error)             { return nil, nil }
+func (d *MockDBFailer) GetFeedUsers(string) ([]db.User, error)                { return nil, nil }
+func (d *MockDBFailer) SaveFeed(*db.FeedInfo) error                           { return nil }
+func (d *MockDBFailer) RecordGUID(int64, string) error                        { return nil }
 func (d *MockDBFailer) GetFeedItemByGUID(int64, string) (*db.FeedItem, error) { return nil, nil }
 func (d *MockDBFailer) GetMostRecentGUIDsForFeed(i int64, m int) ([]string, error) {
 	return []string{}, fmt.Errorf("test error")

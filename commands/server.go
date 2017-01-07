@@ -11,6 +11,7 @@ import (
 type serverCommand struct {
 	Config *config.Config
 	DBH    *db.Handle
+	Port   int32
 }
 
 func (sc *serverCommand) init() {
@@ -18,7 +19,8 @@ func (sc *serverCommand) init() {
 }
 
 func (sc *serverCommand) configure(app *kingpin.Application) {
-	app.Command("server", "run rss2go web server").Action(sc.run)
+	cmd := app.Command("server", "run rss2go web server").Action(sc.run)
+	cmd.Flag("port", "port to listen on").Default("7999").OverrideDefaultFromEnvar("PORT").Int32Var(&sc.Port)
 }
 
 func (sc *serverCommand) run(c *kingpin.ParseContext) error {
@@ -32,7 +34,7 @@ func (sc *serverCommand) run(c *kingpin.ParseContext) error {
 	}
 	server := &webui.APIServer{
 		Dependencies: d,
+		Port:         sc.Port,
 	}
-
 	return server.Serve()
 }
