@@ -2,7 +2,6 @@ package commands
 
 import (
 	"testing"
-	"time"
 
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
@@ -14,29 +13,24 @@ func TestConfigUpdater(t *testing.T) {
 
 	d := NewDaemon(cfg)
 	d.Logger = NullLogger()
+	d.DBH = db.NewMemoryDBHandle(false, NullLogger(), true) // Load Fixtures
 
-	f := *new(db.FeedInfo)
-
-	var feed db.FeedInfo
-	feed.Name = "Test Feed"
-	feed.URL = "https://testfeed.com/test"
-	feed.LastPollTime = time.Now()
-	err := d.DBH.SaveFeed(&feed)
+	f, err := d.DBH.GetFeedByURL("http://localhost/feed1.atom")
 	if err != nil {
-		t.Fatal("Error saving test feed.")
+		t.Fatalf("Error getting feed from db: %v", err)
 	}
 
 	d.Feeds["http://test/url"] = feedwatcher.NewFeedWatcher(
-		f, d.CrawlChan, d.RespChan, d.MailChan, d.DBH, []string{}, 300, 600,
+		*f, d.CrawlChan, d.RespChan, d.MailChan, d.DBH, []string{}, 300, 600,
 	)
 
 	d.feedDbUpdate()
 
-	if len(d.Feeds) != 1 {
-		t.Errorf("Expected no feed entries after updater runs.")
+	if len(d.Feeds) != 3 {
+		t.Errorf("Expected three feed entries after updater runs, got %d", len(d.Feeds))
 	}
 
-	if _, ok := d.Feeds[feed.URL]; !ok {
-		t.Errorf("Expected %s in feed map.", feed.URL)
+	if _, ok := d.Feeds[f.URL]; !ok {
+		t.Errorf("Expected %s in feed map.", f.URL)
 	}
 }

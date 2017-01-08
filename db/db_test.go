@@ -47,6 +47,28 @@ func TestGettingFeedWithTestDB(t *testing.T) {
 	}
 }
 
+func TestGetFeedByID(t *testing.T) {
+	t.Parallel()
+	d := NewMemoryDBHandle(false, NullLogger(), true)
+	_, err := d.GetFeedByID(-1)
+	if err == nil {
+		t.Fatalf("Expected error on negative id, got nil")
+	}
+}
+
+func TestGetAllFeedsWithUsers(t *testing.T) {
+	t.Parallel()
+	d := NewMemoryDBHandle(false, NullLogger(), true)
+
+	feeds, err := d.GetAllFeedsWithUsers()
+	if err != nil {
+		t.Fatalf("unexpected error on query: %v", err)
+	}
+	if len(feeds) != 3 {
+		t.Fatalf("Expected 3 feeds, got %d", len(feeds))
+	}
+}
+
 func TestGettingFeedsWithError(t *testing.T) {
 	t.Parallel()
 	d := NewMemoryDBHandle(false, NullLogger(), true)
@@ -122,13 +144,10 @@ func TestRecordGUIDDoesntAddDuplicates(t *testing.T) {
 		}
 	}
 	var items []FeedItem
-	err := d.db.Where("feed_info_id=?", 1).
-		Order("added_on DESC").
-		Limit(100).
-		Find(&items).Error
+	err := d.db.Select(&items, "SELECT * FROM feed_item WHERE feed_info_id = ? ORDER BY added_on DESC LIMIT 100", 1)
 
 	if err != nil {
-		t.Fatalf("Error getting uids for feed: %v", err)
+		t.Fatalf("Error getting guids for feed: %v", err)
 	}
 	if len(items) != 3 {
 		t.Fatalf("Expected 3 items, got %d", len(items))
@@ -237,14 +256,10 @@ func TestAddAndDeleteFeed(t *testing.T) {
 		t.Fatalf("Feed ID should not be zero")
 	}
 
-	dupFeed, err := d.AddFeed("test feed", "http://valid/url.xml")
+	_, err = d.AddFeed("test feed", "http://valid/url.xml")
 	if err == nil {
 		t.Fatalf("Error should have occurred adding feed.")
 	}
-	if dupFeed.ID != 0 {
-		t.Fatalf("Feed ID should be zero")
-	}
-
 	err = d.RecordGUID(f.ID, "testGUID")
 	if err != nil {
 		t.Fatalf("Error adding GUID to feed: %v", err)
@@ -333,8 +348,7 @@ func TestGetStaleFeeds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Got unexpected error from db: %s", err)
 	}
-	guid.AddedOn = *new(time.Time)
-	err = d.db.Save(guid).Error
+	_, err = d.db.Exec("UPDATE feed_item SET added_on = ? WHERE id = ?", *new(time.Time), guid.ID)
 	if err != nil {
 		t.Fatalf("Error saving item: %v", err)
 	}
@@ -399,16 +413,13 @@ func TestAddRemoveUser(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Expected error on save, got none")
 	}
-	if dupUser.ID != 0 {
-		t.Fatalf("Expected ID to be 0, got %d", dupUser.ID)
+	if dupUser != nil {
+		t.Fatalf("Expected nil user return, got %v", dupUser)
 	}
 
 	dupUser, err = d.AddUser("extra"+userName, userEmail, "pass")
 	if err == nil {
 		t.Fatalf("Expected error, got none")
-	}
-	if dupUser.ID != 0 {
-		t.Fatalf("Expected ID to be 0, got %d", dupUser.ID)
 	}
 
 	dbUser, err := d.GetUser(u.Name)
@@ -446,11 +457,7 @@ func TestAddRemoveFeedsFromUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error getting users: %v", err)
 	}
-	newFeed := &FeedInfo{
-		Name: "new test feed",
-		URL:  "http://new/test.feed",
-	}
-	err = d.SaveFeed(newFeed)
+	newFeed, err := d.AddFeed("new test feed", "http://new/test.feed")
 	if err != nil {
 		t.Fatalf("Error saving feed: %v", err)
 	}

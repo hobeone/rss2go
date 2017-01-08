@@ -16,7 +16,6 @@ import (
 	"github.com/hobeone/rss2go/feed"
 	"github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/mail"
-	"github.com/jinzhu/gorm"
 
 	"gopkg.in/alecthomas/kingpin.v2"
 )
@@ -171,27 +170,22 @@ func (fc *feedCommand) addCMD(c *kingpin.ParseContext) error {
 	return fc.add()
 }
 func (fc *feedCommand) add() error {
-	feed, err := fc.DBH.GetFeedByURL(fc.FeedURL)
-	if err == gorm.ErrRecordNotFound {
-		feed, err = fc.DBH.AddFeed(fc.FeedName, fc.FeedURL)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("Added feed %s at url %s\n", feed.Name, feed.URL)
-	} else if err != nil {
+	f, err := fc.DBH.AddFeed(fc.FeedName, fc.FeedURL)
+	if err != nil {
 		return err
 	}
+	fmt.Printf("Added feed %s at url %s\n", f.Name, f.URL)
 
 	for _, email := range fc.UserEmails {
 		user, err := fc.DBH.GetUserByEmail(email)
 		if err != nil {
 			return fmt.Errorf("Error looking up user %s, does it exist? (%v)", email, err)
 		}
-		err = fc.DBH.AddFeedsToUser(user, []*db.FeedInfo{feed})
+		err = fc.DBH.AddFeedsToUser(user, []*db.FeedInfo{f})
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Subscribed %s to %s\n", email, feed.Name)
+		fmt.Printf("Subscribed %s to %s\n", email, f.Name)
 	}
 	return nil
 }
@@ -202,9 +196,6 @@ func (fc *feedCommand) delete(c *kingpin.ParseContext) error {
 	for _, feedURL := range fc.Feeds {
 		err := fc.DBH.RemoveFeed(feedURL)
 		if err != nil {
-			if err == gorm.ErrRecordNotFound {
-				continue
-			}
 			hadError = true
 			fmt.Printf("Error removing %s: %v\n", feedURL, err)
 		}

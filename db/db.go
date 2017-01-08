@@ -14,41 +14,23 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/gomigrate"
-	"github.com/jinzhu/gorm"
+	"github.com/jmoiron/sqlx"
 	"golang.org/x/crypto/bcrypt"
 
 	// Import sqlite3 driver
 	_ "github.com/mattn/go-sqlite3"
 )
 
-func init() {
-	gorm.NowFunc = func() time.Time {
-		return time.Now().UTC()
-	}
-}
-
 // FeedInfo represents a feed (atom, rss or rdf) that rss2go is polling.
 type FeedInfo struct {
-	ID                int64     `json:"id" jsonapi:"primary,feeds"`
-	Name              string    `sql:"not null;unique" json:"name" binding:"required" jsonapi:"attr,name"`
-	URL               string    `sql:"not null;unique" json:"url" binding:"required" jsonapi:"attr,url"`
-	SiteURL           string    `jsonapi:"attr,site-url"`
-	LastPollTime      time.Time `json:"lastPollTime" jsonapi:"attr,last-poll-time,iso8601"`
-	LastPollError     string    `json:"lastPollError" jsonapi:"attr,last-poll-error"`
-	LastErrorResponse string    `json:"-"`
-	Users             []User    `gorm:"many2many:user_feeds;" json:"-"`
-}
-
-//TableName sets the name of the sql table to use.
-func (f FeedInfo) TableName() string {
-	return "feed_info"
-}
-
-// AfterFind is run after a record is returned from the db, it fixes the fact
-// that SQLite driver sets everything to local timezone
-func (f *FeedInfo) AfterFind() error {
-	f.LastPollTime = f.LastPollTime.UTC()
-	return nil
+	ID                int64     `jsonapi:"primary,feeds"`
+	Name              string    `jsonapi:"attr,name"`
+	URL               string    `jsonapi:"attr,url"`
+	SiteURL           string    `db:"site_url" jsonapi:"attr,site-url"`
+	LastPollTime      time.Time `db:"last_poll_time" jsonapi:"attr,last-poll-time,iso8601"`
+	LastPollError     string    `db:"last_poll_error" jsonapi:"attr,last-poll-error"`
+	LastErrorResponse string    `db:"last_error_response"`
+	Users             []User    ``
 }
 
 // FeedItem represents an individual iteam from a feed.  It only captures the
@@ -56,35 +38,19 @@ func (f *FeedInfo) AfterFind() error {
 // seen before.
 type FeedItem struct {
 	ID         int64
-	FeedInfoID int64     `sql:"not null"`
-	GUID       string    `sql:"not null"`
-	AddedOn    time.Time `sql:"not null"`
-}
-
-//TableName sets the name of the sql table to use.
-func (f FeedItem) TableName() string {
-	return "feed_item"
-}
-
-// AfterFind fixes the fact that the SQLite driver sets everything to local timezone
-func (f *FeedItem) AfterFind() error {
-	f.AddedOn = f.AddedOn.UTC()
-	return nil
+	FeedInfoID int64 `db:"feed_info_id"`
+	GUID       string
+	AddedOn    time.Time `db:"added_on"`
 }
 
 // User represents a user/email address that can subscribe to Feeds
 type User struct {
-	ID       int64      `json:"id" jsonapi:"primary,feeds"`
-	Name     string     `sql:"size:255;not null;unique" json:"name" jsonapi:"attr,name"`
-	Email    string     `sql:"size:255;not null;unique" json:"email" jsonapi:"attr,email"`
-	Enabled  bool       `json:"enabled"`
-	Password string     `json:"-"`
-	Feeds    []FeedInfo `gorm:"many2many:user_feeds;" json:"-" jsonapi:"relation,feeds"`
-}
-
-//TableName sets the name of the sql table to use.
-func (u User) TableName() string {
-	return "user"
+	ID       int64      `jsonapi:"primary,feeds"`
+	Name     string     `jsonapi:"attr,name"`
+	Email    string     `jsonapi:"attr,email"`
+	Enabled  bool       ``
+	Password string     ``
+	Feeds    []FeedInfo `jsonapi:"relation,feeds"`
 }
 
 // Service defines the interface that the RSS2Go database provides.
@@ -101,7 +67,7 @@ type Service interface {
 // Handle controls access to the database and makes sure only one
 // operation is in process at a time.
 type Handle struct {
-	db        *gorm.DB
+	db        *sqlx.DB
 	logger    logrus.FieldLogger
 	syncMutex sync.Mutex
 }
@@ -179,34 +145,31 @@ func isPrintable(s string) bool {
 	return true
 }
 
-func openDB(dbType string, dbArgs string, verbose bool, logger logrus.FieldLogger) *gorm.DB {
+func openDB(dbType string, dbArgs string, verbose bool, logger logrus.FieldLogger) *sqlx.DB {
 	logger.Infof("db: opening database %s:%s", dbType, dbArgs)
 	// Error only returns from this if it is an unknown driver.
-	d, err := gorm.Open(dbType, dbArgs)
+	d, err := sqlx.Connect(dbType, dbArgs)
 	if err != nil {
-		panic(fmt.Sprintf("Error connecting to %s database %s: %s", dbType, dbArgs, err.Error()))
+		panic(fmt.Sprintf("Error connecting to %s database %s: %v", dbType, dbArgs, err))
 	}
-	d.SingularTable(true)
-	d.SetLogger(logrusAdapter{logger})
-	d.LogMode(verbose)
 	// Actually test that we have a working connection
-	err = d.DB().Ping()
+	err = d.Ping()
 	if err != nil {
-		panic(fmt.Sprintf("db: error connecting to database: %s", err.Error()))
+		panic(fmt.Sprintf("db: error connecting to database: %v", err))
 	}
 	return d
 }
 
-func setupDB(db *gorm.DB) error {
-	err := db.Exec("PRAGMA journal_mode=WAL;").Error
+func setupDB(db *sqlx.DB) error {
+	_, err := db.Exec("PRAGMA journal_mode=WAL;")
 	if err != nil {
 		return err
 	}
-	err = db.Exec("PRAGMA synchronous = NORMAL;").Error
+	_, err = db.Exec("PRAGMA synchronous = NORMAL;")
 	if err != nil {
 		return err
 	}
-	err = db.Exec("PRAGMA encoding = \"UTF-8\";").Error
+	_, err = db.Exec(`PRAGMA encoding = "UTF-8";`)
 	if err != nil {
 		return err
 	}
@@ -264,7 +227,7 @@ func NewMemoryDBHandle(verbose bool, logger logrus.FieldLogger, loadFixtures boo
 
 // Migrate uses the migrations at the given path to update the database.
 func (d *Handle) Migrate(m []*gomigrate.Migration) error {
-	migrator, err := gomigrate.NewMigratorWithMigrations(d.db.DB(), gomigrate.Sqlite3{}, m)
+	migrator, err := gomigrate.NewMigratorWithMigrations(d.db.DB, gomigrate.Sqlite3{}, m)
 	if err != nil {
 		return err
 	}
@@ -309,7 +272,16 @@ func (d *Handle) AddFeed(name string, feedURL string) (*FeedInfo, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 
-	return f, d.db.Save(f).Error
+	res, err := d.db.Exec(`INSERT INTO feed_info (name, url, site_url, last_poll_time, last_poll_error, last_error_response) VALUES(?,?,?,?,?,?);`,
+		f.Name, f.URL, "", time.Time{}, "", "")
+	if err != nil {
+		return nil, err
+	}
+	f.ID, err = res.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
 }
 
 //SaveFeed creates or updates the given FeedInfo in the database.
@@ -318,14 +290,19 @@ func (d *Handle) SaveFeed(f *FeedInfo) error {
 	if err != nil {
 		return err
 	}
+	if f.ID == 0 {
+		return fmt.Errorf("can't update feed with no id")
+	}
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
-
-	return d.db.Save(f).Error
+	_, err = d.db.Exec(
+		`UPDATE feed_info SET name = ?, url = ?, site_url = ?, last_poll_time = ?, last_poll_error = ?, last_error_response = ? WHERE id = ?`,
+		f.Name, f.URL, f.SiteURL, f.LastPollTime, f.LastPollError, f.LastErrorResponse, f.ID,
+	)
+	return err
 }
 
-// RemoveFeed removes a FeedInfo from the database given it's URL.  Optioanlly
-// it will also remove all of the GUIDs for that FeedInfo.
+// RemoveFeed removes a FeedInfo from the database given it's URL
 func (d *Handle) RemoveFeed(url string) error {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
@@ -334,31 +311,34 @@ func (d *Handle) RemoveFeed(url string) error {
 	if err != nil {
 		return err
 	}
-	tx := d.db.Begin()
-	err = tx.Delete(f).Error
+	tx, err := d.db.Beginx()
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec("DELETE FROM feed_info WHERE id = ?", f.ID)
 	if err == nil {
-		err = tx.Where("feed_info_id = ?", f.ID).Delete(FeedItem{}).Error
+		_, err = tx.Exec("DELETE FROM feed_item WHERE feed_info_id = ?", f.ID)
 		if err != nil {
 			tx.Rollback()
 			return err
 		}
-		err = tx.Model(f).Association("Users").Clear().Error
+		_, err = tx.Exec("DELETE FROM user_feeds WHERE feed_info_id = ?", f.ID)
 		if err != nil {
 			tx.Rollback()
 			return err
 		}
-
 	}
 	tx.Commit()
-	return err
+	return nil
 }
 
 // GetAllFeeds returns all feeds from the database.
-func (d *Handle) GetAllFeeds() (feeds []*FeedInfo, err error) {
+func (d *Handle) GetAllFeeds() ([]*FeedInfo, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
-	err = d.db.Find(&feeds).Error
-	return
+	feeds := []*FeedInfo{}
+	err := d.db.Select(&feeds, "SELECT * FROM feed_info")
+	return feeds, err
 }
 
 // GetAllFeedsWithUsers returns all feeds from the database that have
@@ -368,10 +348,10 @@ func (d *Handle) GetAllFeedsWithUsers() ([]*FeedInfo, error) {
 	defer d.syncMutex.Unlock()
 
 	var feeds []*FeedInfo
-	err := d.db.Raw(`SELECT feed_info.* FROM feed_info
+	err := d.db.Select(&feeds, `SELECT feed_info.* FROM feed_info
 	LEFT JOIN user_feeds ON feed_info.id = user_feeds.feed_info_id
 	GROUP BY user_feeds.feed_info_id
-	HAVING COUNT(user_feeds.feed_info_id) > 0`).Scan(&feeds).Error
+	HAVING COUNT(user_feeds.feed_info_id) > 0`)
 	return feeds, err
 }
 
@@ -382,11 +362,11 @@ func (d *Handle) GetFeedsByName(name string) ([]*FeedInfo, error) {
 	defer d.syncMutex.Unlock()
 	var feeds []*FeedInfo
 
-	err := d.db.Raw(`SELECT feed_info.* FROM feed_info
+	err := d.db.Select(&feeds, `SELECT feed_info.* FROM feed_info
 	INNER JOIN user_feeds ON feed_info.id = user_feeds.feed_info_id
 	INNER JOIN user ON user_feeds.user_id = user.id
 	WHERE feed_info.name LIKE ?
-	ORDER BY feed_info.name;`, fmt.Sprintf("%%%s%%", name)).Scan(&feeds).Error
+	ORDER BY feed_info.name`, fmt.Sprintf("%%%s%%", name))
 
 	return feeds, err
 }
@@ -398,12 +378,12 @@ func (d *Handle) GetUsersFeedsByName(user *User, name string) ([]*FeedInfo, erro
 	defer d.syncMutex.Unlock()
 	var feeds []*FeedInfo
 
-	err := d.db.Raw(`SELECT feed_info.* FROM feed_info
+	err := d.db.Select(&feeds, `SELECT feed_info.* FROM feed_info
 	INNER JOIN user_feeds ON feed_info.id = user_feeds.feed_info_id
 	INNER JOIN user ON user_feeds.user_id = user.id
 	WHERE user.id = ?
 	AND feed_info.name LIKE ?
-	ORDER BY feed_info.name;`, user.ID, fmt.Sprintf("%%%s%%", name)).Scan(&feeds).Error
+	ORDER BY feed_info.name`, user.ID, fmt.Sprintf("%%%s%%", name))
 
 	return feeds, err
 }
@@ -415,12 +395,7 @@ func (d *Handle) GetFeedsWithErrors() ([]*FeedInfo, error) {
 	defer d.syncMutex.Unlock()
 
 	var feeds []*FeedInfo
-	err := d.db.Where(
-		"last_poll_error IS NOT NULL and last_poll_error <> ''").Find(&feeds).Error
-	if err == gorm.ErrRecordNotFound {
-		err = nil
-	}
-
+	err := d.db.Select(&feeds, "SELECT * from feed_info WHERE last_poll_error IS NOT NULL and last_poll_error <> ''")
 	return feeds, err
 }
 
@@ -431,24 +406,20 @@ func (d *Handle) GetStaleFeeds() ([]*FeedInfo, error) {
 	defer d.syncMutex.Unlock()
 
 	var res []*FeedInfo
-	err := d.db.Raw(`
-	select feed_info.id, feed_info.name, feed_info.url,  r.MaxTime, feed_info.last_poll_error FROM (SELECT feed_info_id, MAX(added_on) as MaxTime FROM feed_item GROUP BY feed_info_id) r, feed_info INNER JOIN feed_item f ON f.feed_info_id = r.feed_info_id AND f.added_on = r.MaxTime AND r.MaxTime < datetime('now','-14 days') AND f.feed_info_id = feed_info.id group by f.feed_info_id;
-	`).Scan(&res).Error
+	err := d.db.Select(&res, `SELECT feed_info.id, feed_info.name, feed_info.url, feed_info.last_poll_error FROM (SELECT feed_info_id, MAX(added_on) as MaxTime FROM feed_item GROUP BY feed_info_id) r, feed_info INNER JOIN feed_item f ON f.feed_info_id = r.feed_info_id AND f.added_on = r.MaxTime AND r.MaxTime < datetime('now','-14 days') AND f.feed_info_id = feed_info.id group by f.feed_info_id;`)
 	return res, err
 }
 
-// GetFeedByID returns the FeedInfo for the given id.  It returns a
-// gorm.ErrRecordNotFound error if it doesn't exist.
+// GetFeedByID returns the FeedInfo for the given id.
 func (d *Handle) GetFeedByID(id int64) (*FeedInfo, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	var f FeedInfo
-	err := d.db.First(&f, id).Error
+	err := d.db.Get(&f, "SELECT * from feed_info WHERE id = ? LIMIT 1", id)
 	return &f, err
 }
 
-// GetFeedByURL returns the FeedInfo for the given URL.  It returns a
-// gorm.ErrRecordNotFound error if it doesn't exist.
+// GetFeedByURL returns the FeedInfo for the given URL.
 func (d *Handle) GetFeedByURL(url string) (*FeedInfo, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
@@ -457,7 +428,7 @@ func (d *Handle) GetFeedByURL(url string) (*FeedInfo, error) {
 
 func (d *Handle) unsafeGetFeedByURL(url string) (*FeedInfo, error) {
 	feed := &FeedInfo{}
-	err := d.db.Where("url = ?", url).First(feed).Error
+	err := d.db.Get(feed, `SELECT * FROM feed_info WHERE url = ? LIMIT 1`, url)
 	return feed, err
 }
 
@@ -472,7 +443,7 @@ func (d *Handle) GetFeedItemByGUID(feedID int64, guid string) (*FeedItem, error)
 	fi := FeedItem{}
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
-	err := d.db.Where("feed_info_id = ? AND guid = ?", feedID, guid).First(&fi).Error
+	err := d.db.Get(&fi, "SELECT * FROM feed_item WHERE feed_info_id = ? AND guid = ?", feedID, guid)
 	return &fi, err
 }
 
@@ -482,7 +453,8 @@ func (d *Handle) RecordGUID(feedID int64, guid string) error {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 
-	return d.db.Exec("insert or replace INTO feed_item (id, feed_info_id, guid, added_on) VALUES ((select id from feed_item WHERE guid = ?), ?, ?, ?)", guid, feedID, guid, time.Now()).Error
+	_, err := d.db.Exec("insert or replace INTO feed_item (id, feed_info_id, guid, added_on) VALUES ((select id from feed_item WHERE guid = ?), ?, ?, ?)", guid, feedID, guid, time.Now())
+	return err
 }
 
 // GetMostRecentGUIDsForFeed retrieves the most recent GUIDs for a given feed
@@ -492,15 +464,7 @@ func (d *Handle) GetMostRecentGUIDsForFeed(feedID int64, max int) ([]string, err
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 
-	err := d.db.Where("feed_info_id=?", feedID).
-		Group("guid").
-		Order("added_on DESC").
-		Limit(max).
-		Find(&items).Error
-
-	if err == gorm.ErrRecordNotFound {
-		err = nil
-	}
+	err := d.db.Select(&items, "SELECT guid FROM feed_item WHERE feed_info_id = ? ORDER BY added_on DESC LIMIT ?", feedID, max)
 	d.logger.Infof("Got last %d guids for feed_id: %d.", len(items), feedID)
 	knownGuids := make([]string, len(items))
 	for i, v := range items {
@@ -548,7 +512,15 @@ func (d *Handle) AddUser(name string, email string, pass string) (*User, error) 
 
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
-	err = d.db.Save(u).Error
+	res, err := d.db.Exec("INSERT INTO user (name, email, password, enabled) VALUES(?,?,?,?)", u.Name, u.Email, u.Password, u.Enabled)
+	if err != nil {
+		return nil, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+	u.ID = id
 	return u, err
 }
 
@@ -560,7 +532,8 @@ func (d *Handle) SaveUser(u *User) error {
 	}
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
-	return d.db.Save(u).Error
+	_, err = d.db.Exec("UPDATE user SET name = ?, email = ?, password = ?, enabled = ? WHERE id = ?", u.Name, u.Email, u.Password, u.Enabled, u.ID)
+	return err
 }
 
 // GetAllUsers returns all Users from the database.
@@ -569,7 +542,7 @@ func (d *Handle) GetAllUsers() ([]User, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 
-	err := d.db.Find(&all).Error
+	err := d.db.Select(&all, "SELECT * FROM user")
 	return all, err
 }
 
@@ -578,8 +551,7 @@ func (d *Handle) GetUser(name string) (*User, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	u := &User{}
-	err := d.db.Where("name = ?", name).First(u).Error
-
+	err := d.db.Get(u, "SELECT * FROM user WHERE name = ?", name)
 	return u, err
 }
 
@@ -588,8 +560,7 @@ func (d *Handle) GetUserByID(id int64) (*User, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	u := &User{}
-	err := d.db.First(u, id).Error
-
+	err := d.db.Get(u, "SELECT * FROM user WHERE id = ?", id)
 	return u, err
 }
 
@@ -602,7 +573,7 @@ func (d *Handle) GetUserByEmail(email string) (*User, error) {
 
 func (d *Handle) unsafeGetUserByEmail(email string) (*User, error) {
 	u := &User{}
-	err := d.db.Where("email = ?", email).Find(u).Error
+	err := d.db.Get(u, "SELECT * FROM user WHERE email = ?", email)
 	return u, err
 }
 
@@ -614,14 +585,16 @@ func (d *Handle) RemoveUser(user *User) error {
 }
 
 func (d *Handle) unsafeRemoveUser(user *User) error {
-
-	tx := d.db.Begin()
-	err := tx.Model(user).Association("Feeds").Clear().Error
+	tx, err := d.db.Beginx()
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec("DELETE FROM user_feeds WHERE user_id = ?", user.ID)
 	if err != nil {
 		tx.Rollback()
 		return err
 	}
-	err = tx.Delete(user).Error
+	_, err = tx.Exec("DELETE FROM user WHERE id = ?", user.ID)
 	if err != nil {
 		tx.Rollback()
 		return err
@@ -650,9 +623,9 @@ func (d *Handle) AddFeedsToUser(u *User, feeds []*FeedInfo) error {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	for _, f := range feeds {
-		err := d.db.Exec(`INSERT OR REPLACE INTO user_feeds (id, user_id, feed_info_id)
-		VALUES((select id from user_feeds WHERE user_id = ? AND feed_info_id = ?), ?, ?);`,
-			u.ID, f.ID, u.ID, f.ID).Error
+		_, err := d.db.Exec(`INSERT OR REPLACE INTO user_feeds (id, user_id, feed_info_id)
+		VALUES((select id from user_feeds WHERE user_id = ? AND feed_info_id = ?), ?, ?)`,
+			u.ID, f.ID, u.ID, f.ID)
 		if err != nil {
 			return err
 		}
@@ -670,7 +643,12 @@ func (d *Handle) RemoveFeedsFromUser(u *User, feeds []*FeedInfo) error {
 		feedIDs[i] = f.ID
 	}
 
-	err := d.db.Exec(`DELETE FROM user_feeds WHERE user_id = ? AND feed_info_id IN (?);`, u.ID, feedIDs).Error
+	q := `DELETE FROM user_feeds WHERE user_id = ? AND feed_info_id IN (?)`
+	q, args, err := sqlx.In(q, u.ID, feedIDs)
+	if err != nil {
+		return err
+	}
+	_, err = d.db.Exec(q, args...)
 	if err != nil {
 		return err
 	}
@@ -680,7 +658,7 @@ func (d *Handle) RemoveFeedsFromUser(u *User, feeds []*FeedInfo) error {
 // GetUsersFeeds returns all the FeedInfos that a user is subscribed to.
 func (d *Handle) GetUsersFeeds(u *User) ([]*FeedInfo, error) {
 	feeds, err := d.GetUsersFeedsByName(u, "")
-	if err == gorm.ErrRecordNotFound {
+	if len(feeds) == 0 {
 		err = nil
 	}
 	return feeds, err
@@ -689,6 +667,9 @@ func (d *Handle) GetUsersFeeds(u *User) ([]*FeedInfo, error) {
 // UpdateUsersFeeds replaces a users subscribed feeds with the given
 // list of feedIDs
 func (d *Handle) UpdateUsersFeeds(u *User, feedIDs []int64) error {
+	if len(feedIDs) < 1 {
+		return nil
+	}
 	feeds, err := d.GetUsersFeeds(u)
 	if err != nil {
 		return err
@@ -739,16 +720,9 @@ func (d *Handle) GetFeedUsers(feedURL string) ([]User, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	var all []User
-	err := d.db.Raw(`SELECT user.* FROM user
+	err := d.db.Select(&all, `SELECT user.* FROM user
 	INNER JOIN user_feeds ON user.id = user_feeds.user_id
 	INNER JOIN feed_info ON user_feeds.feed_info_id = feed_info.id
-	WHERE feed_info.url = ?;`, feedURL).Scan(&all).Error
-	if err == gorm.ErrRecordNotFound {
-		return all, nil
-	}
-	if err != nil {
-		return all, err
-	}
-
+	WHERE feed_info.url = ?`, feedURL)
 	return all, err
 }

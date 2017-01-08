@@ -64,12 +64,12 @@ CREATE UNIQUE INDEX user_feed_idx ON user_feeds (user_id,feed_info_id);`,
 	{
 		ID:   110,
 		Name: "Add error response",
-		Up:   `ALTER TABLE "feed_info" ADD COLUMN last_error_response text;`,
+		Up:   `ALTER TABLE "feed_info" ADD COLUMN last_error_response text NOT NULL DEFAULT '';`,
 	},
 	{
 		ID:   120,
 		Name: "Add Feed Site link",
-		Up:   `ALTER TABLE "feed_info" ADD COLUMN site_url text;`,
+		Up:   `ALTER TABLE "feed_info" ADD COLUMN site_url text NOT NULL DEFAULT '';`,
 	},
 	{
 		ID:   130,
