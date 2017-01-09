@@ -49,7 +49,7 @@ func (dc *daemonCommand) run(c *kingpin.ParseContext) error {
 	}
 	d.CreateAndStartFeedWatchers(allFeeds)
 
-	logrus.Infof("Got %d feeds to watch.\n", len(allFeeds))
+	logrus.Infof("Got %d feeds to watch.", len(allFeeds))
 
 	go d.feedDbUpdateLoop()
 
@@ -104,7 +104,7 @@ func NewDaemon(cfg *config.Config) *Daemon {
 // Watch the db config and update feeds based on removal or addition of feeds
 func (d *Daemon) feedDbUpdateLoop() {
 	ival := time.Duration(d.Config.DB.WatchInterval) * time.Second
-	logrus.Infof("Watching the db for changed feeds every %v\n", ival)
+	logrus.Infof("Watching the db for changed feeds every %v", ival)
 	for {
 		time.Sleep(ival)
 		d.feedDbUpdate()
@@ -114,7 +114,7 @@ func (d *Daemon) feedDbUpdateLoop() {
 func (d *Daemon) feedDbUpdate() {
 	dbFeeds, err := d.DBH.GetAllFeedsWithUsers()
 	if err != nil {
-		logrus.Errorf("Error getting feeds from db: %s\n", err.Error())
+		logrus.Errorf("Error getting feeds from db: %s", err.Error())
 		return
 	}
 	allFeeds := make(map[string]*db.FeedInfo)
@@ -123,7 +123,7 @@ func (d *Daemon) feedDbUpdate() {
 	}
 	for k, v := range d.Feeds {
 		if _, ok := allFeeds[k]; !ok {
-			logrus.Infof("Feed %s removed from db. Stopping poll.\n", k)
+			logrus.Infof("Feed %s removed from db. Stopping poll.", k)
 			v.StopPoll()
 			delete(d.Feeds, k)
 		}
@@ -132,11 +132,11 @@ func (d *Daemon) feedDbUpdate() {
 	for k, v := range allFeeds {
 		if _, ok := d.Feeds[k]; !ok {
 			feedsToStart = append(feedsToStart, v)
-			logrus.Infof("Feed %s added to db. Adding to queue to start.\n", k)
+			logrus.Infof("Feed %s added to db. Adding to queue to start.", k)
 		}
 	}
 	if len(feedsToStart) > 0 {
-		logrus.Infof("Adding %d feeds to watch.\n", len(feedsToStart))
+		logrus.Infof("Adding %d feeds to watch.", len(feedsToStart))
 		d.startPollers(feedsToStart)
 	}
 }
