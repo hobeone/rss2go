@@ -4,6 +4,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
+	"github.com/hobeone/rss2go/log"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -41,12 +42,17 @@ func RegisterCommands() {
 }
 
 func commonInit() (*config.Config, *db.Handle) {
-	if *debug || *debugdb {
+	if *debug {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
 	cfg := loadConfig(*configfile)
+	logger := logrus.New()
+	log.SetupLogger(logger)
+	if *debugdb {
+		logger.Level = logrus.DebugLevel
+	}
 
-	dbh := db.NewDBHandle(cfg.DB.Path, cfg.DB.Verbose, logrus.StandardLogger())
+	dbh := db.NewDBHandle(cfg.DB.Path, logger)
 
 	return cfg, dbh
 }

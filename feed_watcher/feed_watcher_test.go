@@ -51,7 +51,7 @@ func SetupTest(t *testing.T, feedPath string) (*FeedWatcher, []byte, *mail.Dispa
 	crawlChan := make(chan *FeedCrawlRequest)
 	responseChan := make(chan *FeedCrawlResponse)
 	mailDispatcher := mail.CreateAndStartStubMailer()
-	d := db.NewMemoryDBHandle(false, NullLogger(), true)
+	d := db.NewMemoryDBHandle(NullLogger(), true)
 	feeds, err := d.GetAllFeeds()
 	if err != nil {
 		t.Fatalf("Error getting feeds: %v", err)

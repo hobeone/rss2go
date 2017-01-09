@@ -53,7 +53,7 @@ func TestInvalidCharacter(t *testing.T) {
 }
 
 func TestFeedWithBadEntity(t *testing.T) {
-	d := db.NewMemoryDBHandle(false, NullLogger(), true)
+	d := db.NewMemoryDBHandle(NullLogger(), true)
 	feeds, err := d.GetAllFeeds()
 	if err != nil {
 		t.Fatalf("Error getting all feeds: %v", err)

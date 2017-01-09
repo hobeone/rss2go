@@ -106,7 +106,7 @@ func (p *queryLogger) Exec(query string, args ...interface{}) (sql.Result, error
 	return res, err
 }
 
-func openDB(dbType string, dbArgs string, verbose bool, logger logrus.FieldLogger) *sqlx.DB {
+func openDB(dbType string, dbArgs string, logger logrus.FieldLogger) *sqlx.DB {
 	logger.Infof("db: opening database %s:%s", dbType, dbArgs)
 	// Error only returns from this if it is an unknown driver.
 	d, err := sqlx.Connect(dbType, dbArgs)
@@ -148,9 +148,9 @@ func newQueryLogger(db *sqlx.DB, logger logrus.FieldLogger) *queryLogger {
 // NewDBHandle creates a new DBHandle
 //	dbPath: the path to the database to use.
 //	verbose: when true database accesses are logged to stdout
-func NewDBHandle(dbPath string, verbose bool, logger logrus.FieldLogger) *Handle {
+func NewDBHandle(dbPath string, logger logrus.FieldLogger) *Handle {
 	constructedPath := fmt.Sprintf("file:%s?cache=shared&mode=rwc", dbPath)
-	db := openDB("sqlite3", constructedPath, verbose, logger)
+	db := openDB("sqlite3", constructedPath, logger)
 	err := setupDB(db)
 	if err != nil {
 		panic(err.Error())
@@ -165,8 +165,8 @@ func NewDBHandle(dbPath string, verbose bool, logger logrus.FieldLogger) *Handle
 // NewMemoryDBHandle creates a new in memory database.  Only used for testing.
 // The name of the database is a random string so multiple tests can run in
 // parallel with their own database.
-func NewMemoryDBHandle(verbose bool, logger logrus.FieldLogger, loadFixtures bool) *Handle {
-	db := openDB("sqlite3", ":memory:", verbose, logger)
+func NewMemoryDBHandle(logger logrus.FieldLogger, loadFixtures bool) *Handle {
+	db := openDB("sqlite3", ":memory:", logger)
 
 	err := setupDB(db)
 	if err != nil {

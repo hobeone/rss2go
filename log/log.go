@@ -8,12 +8,12 @@ import (
 	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 )
 
-func SetupLogger() {
+func SetupLogger(logger *logrus.Logger) {
 	fmter := &prefixed.TextFormatter{}
-	logrus.SetFormatter(fmter)
-	logrus.SetOutput(os.Stdout)
+	logger.Formatter = fmter
+	logger.Out = os.Stdout
 	// Only log the info severity or above.
-	logrus.SetLevel(logrus.InfoLevel)
+	logger.Level = logrus.InfoLevel
 }
 
 // SetNullOutput sets the looger to send everything to /dev/null.

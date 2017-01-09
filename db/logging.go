@@ -24,7 +24,7 @@ func (l logrusAdapter) Print(values ...interface{}) {
 		messages := []interface{}{}
 
 		// duration
-		messages = append(messages, fmt.Sprintf(" \033[36;1m[%.2fms]\033[0m ", float64(values[0].(time.Duration).Nanoseconds()/1e4)/100.0))
+		messages = append(messages, fmt.Sprintf("db: \033[36;1m[%.2fms]\033[0m ", float64(values[0].(time.Duration).Nanoseconds()/1e4)/100.0))
 		// sql
 		var sql string
 		var formattedValues []string
@@ -64,7 +64,7 @@ func (l logrusAdapter) Print(values ...interface{}) {
 		}
 
 		messages = append(messages, sql)
-		l.logger.Infoln(messages...)
+		l.logger.Debugln(messages...)
 	}
 }
 func isPrintable(s string) bool {

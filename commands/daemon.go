@@ -8,6 +8,7 @@ import (
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed_watcher"
+	"github.com/hobeone/rss2go/log"
 	"github.com/hobeone/rss2go/mail"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
@@ -32,7 +33,7 @@ func (dc *daemonCommand) configure(app *kingpin.Application) {
 }
 
 func (dc *daemonCommand) run(c *kingpin.ParseContext) error {
-	if *debug || *debugdb {
+	if *debug {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
 	dc.Config = loadConfig(*configfile)
@@ -74,11 +75,15 @@ type Daemon struct {
 // NewDaemon returns a pointer to a new Daemon struct with defaults set.
 func NewDaemon(cfg *config.Config) *Daemon {
 	var dbh *db.Handle
-	logger := logrus.StandardLogger()
+	logger := logrus.New()
+	log.SetupLogger(logger)
+	if *debugdb {
+		logger.Level = logrus.DebugLevel
+	}
 	if cfg.DB.Type == "memory" {
-		dbh = db.NewMemoryDBHandle(cfg.DB.Verbose, logger, false)
+		dbh = db.NewMemoryDBHandle(logger, false)
 	} else {
-		dbh = db.NewDBHandle(cfg.DB.Path, cfg.DB.Verbose, logger)
+		dbh = db.NewDBHandle(cfg.DB.Path, logger)
 	}
 	cc := make(chan *feedwatcher.FeedCrawlRequest, 1)
 	rc := make(chan *feedwatcher.FeedCrawlResponse)
@@ -99,7 +104,7 @@ func NewDaemon(cfg *config.Config) *Daemon {
 // Watch the db config and update feeds based on removal or addition of feeds
 func (d *Daemon) feedDbUpdateLoop() {
 	ival := time.Duration(d.Config.DB.WatchInterval) * time.Second
-	logrus.Errorf("Watching the db for changed feeds every %v\n", ival)
+	logrus.Infof("Watching the db for changed feeds every %v\n", ival)
 	for {
 		time.Sleep(ival)
 		d.feedDbUpdate()

@@ -31,12 +31,12 @@ func TestConnectionError(t *testing.T) {
 		}
 	}()
 
-	openDB("testdb", "", false, NullLogger())
+	openDB("testdb", "", NullLogger())
 }
 
 func TestGettingFeedWithTestDB(t *testing.T) {
 	t.Parallel()
-	d := NewMemoryDBHandle(false, NullLogger(), true)
+	d := NewMemoryDBHandle(NullLogger(), true)
 
 	feeds, err := d.GetAllFeeds()
 	if err != nil {
@@ -49,7 +49,7 @@ func TestGettingFeedWithTestDB(t *testing.T) {
 
 func TestGetFeedByID(t *testing.T) {
 	t.Parallel()
-	d := NewMemoryDBHandle(false, NullLogger(), true)
+	d := NewMemoryDBHandle(NullLogger(), true)
 	_, err := d.GetFeedByID(-1)
 	if err == nil {
 		t.Fatalf("Expected error on negative id, got nil")
@@ -63,7 +63,7 @@ func TestGetFeedByID(t *testing.T) {
 
 func TestGetAllFeedsWithUsers(t *testing.T) {
 	t.Parallel()
-	d := NewMemoryDBHandle(false, NullLogger(), true)
+	d := NewMemoryDBHandle(NullLogger(), true)
 
 	feeds, err := d.GetAllFeedsWithUsers()
 	if err != nil {
@@ -76,7 +76,7 @@ func TestGetAllFeedsWithUsers(t *testing.T) {
 
 func TestGettingFeedsWithError(t *testing.T) {
 	t.Parallel()
-	d := NewMemoryDBHandle(false, NullLogger(), true)
+	d := NewMemoryDBHandle(NullLogger(), true)
 
 	allFeeds, err := d.GetAllFeeds()
 	if err != nil {
@@ -109,7 +109,7 @@ func TestGettingFeedsWithError(t *testing.T) {
 
 func TestGettingUsers(t *testing.T) {
 	t.Parallel()
-	d := NewMemoryDBHandle(false, NullLogger(), true)
+	d := NewMemoryDBHandle(NullLogger(), true)
 
 	dbusers, err := d.GetAllUsers()
 	if err != nil {
@@ -139,7 +139,7 @@ func TestGettingUsers(t *testing.T) {
 
 func TestRecordGUIDDoesntAddDuplicates(t *testing.T) {
 	t.Parallel()
-	d := NewMemoryDBHandle(false, NullLogger(), true)
+	d := NewMemoryDBHandle(NullLogger(), true)
 
 	ids := []string{"one", "one", "two", "one", "three", "one"}
 	for _, i := range ids {
@@ -161,7 +161,7 @@ func TestRecordGUIDDoesntAddDuplicates(t *testing.T) {
 
 func TestGetMostRecentGuidsForFeed(t *testing.T) {
 	t.Parallel()
-	d := NewMemoryDBHandle(false, NullLogger(), true)
+	d := NewMemoryDBHandle(NullLogger(), true)
 
 	ids := []string{"123", "1234", "12345"}
 	for _, i := range ids {
@@ -195,7 +195,7 @@ func TestGetMostRecentGuidsForFeed(t *testing.T) {
 func TestGetMostRecentGuidsForFeedWithNoRecords(t *testing.T) {
 	t.Parallel()
 
-	d := NewMemoryDBHandle(false, NullLogger(), true)
+	d := NewMemoryDBHandle(NullLogger(), true)
 
 	guids, err := d.GetMostRecentGUIDsForFeed(1, -1)
 	if err != nil {
@@ -208,7 +208,7 @@ func TestGetMostRecentGuidsForFeedWithNoRecords(t *testing.T) {
 
 func TestAddFeedValidation(t *testing.T) {
 	t.Parallel()
-	d := NewMemoryDBHandle(false, NullLogger(), true)
+	d := NewMemoryDBHandle(NullLogger(), true)
 	inputs := [][]string{
 		{"good name", "bad url"},
 		{"good name", "http://"},
@@ -225,7 +225,7 @@ func TestAddFeedValidation(t *testing.T) {
 }
 func TestFeedValidation(t *testing.T) {
 	t.Parallel()
-	d := NewMemoryDBHandle(false, NullLogger(), true)
+	d := NewMemoryDBHandle(NullLogger(), true)
 	inputs := []FeedInfo{
 		{
 			Name: "",
@@ -248,7 +248,7 @@ func TestFeedValidation(t *testing.T) {
 
 func TestAddAndDeleteFeed(t *testing.T) {
 	t.Parallel()
-	d := NewMemoryDBHandle(false, NullLogger(), true)
+	d := NewMemoryDBHandle(NullLogger(), true)
 	u, err := d.GetUserByID(1)
 	if err != nil {
 		t.Fatalf("Error getting user: %v", err)
@@ -329,7 +329,7 @@ func TestAddAndDeleteFeed(t *testing.T) {
 
 func TestGetFeedItemByGuid(t *testing.T) {
 	t.Parallel()
-	d := NewMemoryDBHandle(false, NullLogger(), true)
+	d := NewMemoryDBHandle(NullLogger(), true)
 	err := d.RecordGUID(1, "feed0GUID")
 	if err != nil {
 		t.Fatalf("Error recording GUID: %v", err)
@@ -353,7 +353,7 @@ func TestGetFeedItemByGuid(t *testing.T) {
 
 func TestRemoveUserByEmail(t *testing.T) {
 	t.Parallel()
-	d := NewMemoryDBHandle(false, NullLogger(), true)
+	d := NewMemoryDBHandle(NullLogger(), true)
 	err := d.RemoveUserByEmail("test1@example.com")
 	if err != nil {
 		t.Fatalf("Error removing users %v", err)
@@ -363,7 +363,7 @@ func TestRemoveUserByEmail(t *testing.T) {
 
 func TestGetStaleFeeds(t *testing.T) {
 	t.Parallel()
-	d := NewMemoryDBHandle(false, NullLogger(), true)
+	d := NewMemoryDBHandle(NullLogger(), true)
 	d.RecordGUID(1, "foobar")
 	d.RecordGUID(2, "foobaz")
 	d.RecordGUID(3, "foobaz")
@@ -386,7 +386,7 @@ func TestGetStaleFeeds(t *testing.T) {
 
 func TestAddUserValidation(t *testing.T) {
 	t.Parallel()
-	d := NewMemoryDBHandle(false, NullLogger(), true)
+	d := NewMemoryDBHandle(NullLogger(), true)
 
 	inputs := [][]string{
 		{"test", ".bad@address"},
@@ -415,7 +415,7 @@ func TestAddUserValidation(t *testing.T) {
 
 func TestAddRemoveUser(t *testing.T) {
 	t.Parallel()
-	d := NewMemoryDBHandle(false, NullLogger(), true)
+	d := NewMemoryDBHandle(NullLogger(), true)
 
 	feeds, err := d.GetAllFeeds()
 	if err != nil {
@@ -475,7 +475,7 @@ func TestAddRemoveUser(t *testing.T) {
 
 func TestAddRemoveFeedsFromUser(t *testing.T) {
 	t.Parallel()
-	d := NewMemoryDBHandle(false, NullLogger(), true)
+	d := NewMemoryDBHandle(NullLogger(), true)
 	users, err := d.GetAllUsers()
 	if err != nil {
 		t.Fatalf("Error getting users: %v", err)
@@ -540,7 +540,7 @@ func TestAddRemoveFeedsFromUser(t *testing.T) {
 
 func TestGetUsersFeeds(t *testing.T) {
 	t.Parallel()
-	d := NewMemoryDBHandle(false, NullLogger(), true)
+	d := NewMemoryDBHandle(NullLogger(), true)
 	users, err := d.GetAllUsers()
 	if err != nil {
 		t.Fatalf("Error getting users: %v", err)
@@ -561,7 +561,7 @@ func TestGetUsersFeeds(t *testing.T) {
 
 func TestGetFeedUsers(t *testing.T) {
 	t.Parallel()
-	d := NewMemoryDBHandle(false, NullLogger(), true)
+	d := NewMemoryDBHandle(NullLogger(), true)
 	users, err := d.GetAllUsers()
 	if err != nil {
 		t.Fatalf("Error getting users: %v", err)
@@ -589,7 +589,7 @@ func TestGetFeedUsers(t *testing.T) {
 
 func TestUpdateUsersFeeds(t *testing.T) {
 	t.Parallel()
-	d := NewMemoryDBHandle(false, NullLogger(), true)
+	d := NewMemoryDBHandle(NullLogger(), true)
 	users, err := d.GetAllUsers()
 	if err != nil {
 		t.Fatalf("Error getting users: %v", err)

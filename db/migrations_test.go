@@ -8,7 +8,7 @@ import (
 
 func TestMigrations(t *testing.T) {
 	logger := NullLogger()
-	dbh := NewMemoryDBHandle(false, logger, true)
+	dbh := NewMemoryDBHandle(logger, true)
 	migrator, err := gomigrate.NewMigratorWithMigrations(dbh.db.DB, gomigrate.Sqlite3{}, SchemaMigrations())
 	if err != nil {
 		t.Fatal(err)

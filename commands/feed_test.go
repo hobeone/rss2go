@@ -20,7 +20,7 @@ func TestAddFeed(t *testing.T) {
 
 	fcmd := feedCommand{
 		Config: cfg,
-		DBH:    db.NewMemoryDBHandle(false, NullLogger(), true),
+		DBH:    db.NewMemoryDBHandle(NullLogger(), true),
 	}
 
 	testFeedURL := "http://testfeedurl"
@@ -44,7 +44,7 @@ func TestAddFeedWithUsers(t *testing.T) {
 
 	fcmd := feedCommand{
 		Config: cfg,
-		DBH:    db.NewMemoryDBHandle(false, NullLogger(), true),
+		DBH:    db.NewMemoryDBHandle(NullLogger(), true),
 	}
 
 	testFeedURL := "http://testfeedurl"

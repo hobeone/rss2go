@@ -25,7 +25,7 @@ func (sc *serverCommand) configure(app *kingpin.Application) {
 
 func (sc *serverCommand) run(c *kingpin.ParseContext) error {
 	sc.init()
-	if *debug || *debugdb {
+	if *debug {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
 	sc.Config = loadConfig(*configfile)

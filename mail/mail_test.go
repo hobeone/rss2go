@@ -42,7 +42,7 @@ func TestSendToUsersWithNoMailSender(t *testing.T) {
 }
 
 func TestSendToUsers(t *testing.T) {
-	dbh := db.NewMemoryDBHandle(false, NullLogger(), true)
+	dbh := db.NewMemoryDBHandle(NullLogger(), true)
 	users, err := dbh.GetAllUsers()
 	if err != nil {
 		t.Fatalf("Error getting users: %v", err)

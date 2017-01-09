@@ -11,7 +11,7 @@ func TestCreateDBCommand(t *testing.T) {
 	cfg := config.NewTestConfig()
 	cdbcmd := createDBCommand{
 		Config: cfg,
-		DBH:    db.NewMemoryDBHandle(false, NullLogger(), true),
+		DBH:    db.NewMemoryDBHandle(NullLogger(), true),
 	}
 
 	err := cdbcmd.migrate()

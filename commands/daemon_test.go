@@ -13,7 +13,7 @@ func TestConfigUpdater(t *testing.T) {
 
 	d := NewDaemon(cfg)
 	d.Logger = NullLogger()
-	d.DBH = db.NewMemoryDBHandle(false, NullLogger(), true) // Load Fixtures
+	d.DBH = db.NewMemoryDBHandle(NullLogger(), true) // Load Fixtures
 
 	f, err := d.DBH.GetFeedByURL("http://localhost/feed1.atom")
 	if err != nil {
