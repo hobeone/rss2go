@@ -424,7 +424,8 @@ func (d *Handle) RecordGUID(feedID int64, guid string) error {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 
-	_, err := d.queryer.Exec("insert or replace INTO feed_item (id, feed_info_id, guid, added_on) VALUES ((select id from feed_item WHERE guid = ?), ?, ?, ?)", guid, feedID, guid, time.Now())
+	_, err := d.queryer.Exec(`INSERT OR REPLACE INTO feed_item (id, feed_info_id, guid, added_on)
+	VALUES ((SELECT id FROM feed_item WHERE feed_info_id = ? AND guid = ?), ?, ?, ?)`, guid, feedID, feedID, guid, time.Now())
 	return err
 }
 

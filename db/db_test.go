@@ -14,6 +14,7 @@ import (
 
 func NullLogger() logrus.FieldLogger {
 	l := logrus.New()
+	l.Level = logrus.DebugLevel
 	l.Out = ioutil.Discard
 	return l
 }
@@ -339,6 +340,12 @@ func TestGetFeedItemByGuid(t *testing.T) {
 		t.Fatalf("Error recording GUID: %v", err)
 	}
 
+	// Same GUID as another feed
+	err = d.RecordGUID(2, "feed0GUID")
+	if err != nil {
+		t.Fatalf("Error recording GUID: %v", err)
+	}
+
 	guid, err := d.GetFeedItemByGUID(1, "feed0GUID")
 	if err != nil {
 		t.Fatalf("Error getting item by GUID: %v", err)
@@ -348,6 +355,23 @@ func TestGetFeedItemByGuid(t *testing.T) {
 	}
 	if guid.GUID != "feed0GUID" {
 		t.Fatalf("expected GUID of feed0GUID, got %s", guid.GUID)
+	}
+
+	guid, err = d.GetFeedItemByGUID(2, "feed0GUID")
+	if err != nil {
+		t.Fatalf("Error getting item by GUID: %v", err)
+	}
+	if guid.FeedInfoID != 2 {
+		t.Fatalf("Expected feed id of 1 got %d", guid.FeedInfoID)
+	}
+	if guid.GUID != "feed0GUID" {
+		t.Fatalf("expected GUID of feed0GUID, got %s", guid.GUID)
+	}
+
+	// Should return error on no guid
+	guid, err = d.GetFeedItemByGUID(-1, "feed0GUID")
+	if err == nil {
+		t.Fatalf("Expected error getting item by GUID, got nothing")
 	}
 }
 
