@@ -54,6 +54,11 @@ func TestGetFeedByID(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Expected error on negative id, got nil")
 	}
+
+	_, err = d.GetFeedByID(1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }
 
 func TestGetAllFeedsWithUsers(t *testing.T) {
@@ -275,6 +280,24 @@ func TestAddAndDeleteFeed(t *testing.T) {
 	}
 	if len(feeds) < 1 {
 		t.Fatalf("Got no feeds from GetUsersFeedsByName")
+	}
+
+	err = d.SaveFeed(f)
+	if err != nil {
+		t.Fatalf("Error saving feed: %v", err)
+	}
+	zone, _ := f.LastPollTime.Zone()
+	if zone != "UTC" {
+		t.Fatalf("Timezone should be UTC, got %s", zone)
+	}
+
+	f, err = d.GetFeedByID(f.ID)
+	if err != nil {
+		t.Fatalf("Error saving feed: %v", err)
+	}
+	zone, _ = f.LastPollTime.Zone()
+	if zone != "UTC" {
+		t.Fatalf("Timezone should be UTC, got %s", zone)
 	}
 
 	err = d.RemoveFeed(f.URL)

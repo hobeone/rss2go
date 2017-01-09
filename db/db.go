@@ -1,16 +1,13 @@
 package db
 
 import (
-	"database/sql/driver"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/mail"
 	"net/url"
-	"reflect"
-	"regexp"
 	"sync"
 	"time"
-	"unicode"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/gomigrate"
@@ -70,79 +67,43 @@ type Handle struct {
 	db        *sqlx.DB
 	logger    logrus.FieldLogger
 	syncMutex sync.Mutex
+	queryer   *queryLogger
 }
 
-type logrusAdapter struct {
-	logger logrus.FieldLogger
+type queryLogger struct {
+	queryer sqlx.Ext
+	logger  logrusAdapter
 }
 
-var (
-	sqlRegexp = regexp.MustCompile(`(\$\d+)|\?`)
-)
-
-func (l logrusAdapter) Print(values ...interface{}) {
-	if len(values) > 1 {
-		level := values[0]
-		source := fmt.Sprintf("\033[35m(%v)\033[0m", values[1])
-		messages := []interface{}{source}
-
-		if level == "sql" {
-			// duration
-			messages = append(messages, fmt.Sprintf(" \033[36;1m[%.2fms]\033[0m ", float64(values[2].(time.Duration).Nanoseconds()/1e4)/100.0))
-			// sql
-			var sql string
-			var formattedValues []string
-
-			for _, value := range values[4].([]interface{}) {
-				indirectValue := reflect.Indirect(reflect.ValueOf(value))
-				if indirectValue.IsValid() {
-					value = indirectValue.Interface()
-					if t, ok := value.(time.Time); ok {
-						formattedValues = append(formattedValues, fmt.Sprintf("'%v'", t.Format(time.RFC3339)))
-					} else if b, ok := value.([]byte); ok {
-						if str := string(b); isPrintable(str) {
-							formattedValues = append(formattedValues, fmt.Sprintf("'%v'", str))
-						} else {
-							formattedValues = append(formattedValues, "'<binary>'")
-						}
-					} else if r, ok := value.(driver.Valuer); ok {
-						if value, err := r.Value(); err == nil && value != nil {
-							formattedValues = append(formattedValues, fmt.Sprintf("'%v'", value))
-						} else {
-							formattedValues = append(formattedValues, "NULL")
-						}
-					} else {
-						formattedValues = append(formattedValues, fmt.Sprintf("'%v'", value))
-					}
-				} else {
-					formattedValues = append(formattedValues, fmt.Sprintf("'%v'", value))
-				}
-			}
-
-			var formattedValuesLength = len(formattedValues)
-			for index, value := range sqlRegexp.Split(values[3].(string), -1) {
-				sql += value
-				if index < formattedValuesLength {
-					sql += formattedValues[index]
-				}
-			}
-
-			messages = append(messages, sql)
-		} else {
-			messages = append(messages, "\033[31;1m")
-			messages = append(messages, values[2:]...)
-			messages = append(messages, "\033[0m")
-		}
-		l.logger.Debugln(messages...)
-	}
+// Query implements the Queryer interface
+func (p *queryLogger) Query(query string, args ...interface{}) (*sql.Rows, error) {
+	t := time.Now()
+	rows, err := p.queryer.Query(query, args...)
+	p.logger.Print(time.Since(t), query, args)
+	return rows, err
 }
-func isPrintable(s string) bool {
-	for _, r := range s {
-		if !unicode.IsPrint(r) {
-			return false
-		}
-	}
-	return true
+
+// Queryx implements the Queryer interface
+func (p *queryLogger) Queryx(query string, args ...interface{}) (*sqlx.Rows, error) {
+	t := time.Now()
+	rows, err := p.queryer.Queryx(query, args...)
+	p.logger.Print(time.Since(t), query, args)
+	return rows, err
+}
+
+// QueryRowx implements
+func (p *queryLogger) QueryRowx(query string, args ...interface{}) *sqlx.Row {
+	t := time.Now()
+	row := p.queryer.QueryRowx(query, args...)
+	p.logger.Print(time.Since(t), query, args)
+	return row
+}
+
+func (p *queryLogger) Exec(query string, args ...interface{}) (sql.Result, error) {
+	t := time.Now()
+	res, err := p.queryer.Exec(query, args...)
+	p.logger.Print(time.Since(t), query, args)
+	return res, err
 }
 
 func openDB(dbType string, dbArgs string, verbose bool, logger logrus.FieldLogger) *sqlx.DB {
@@ -177,6 +138,13 @@ func setupDB(db *sqlx.DB) error {
 	return nil
 }
 
+func newQueryLogger(db *sqlx.DB, logger logrus.FieldLogger) *queryLogger {
+	return &queryLogger{
+		queryer: db,
+		logger:  logrusAdapter{logger},
+	}
+}
+
 // NewDBHandle creates a new DBHandle
 //	dbPath: the path to the database to use.
 //	verbose: when true database accesses are logged to stdout
@@ -188,8 +156,9 @@ func NewDBHandle(dbPath string, verbose bool, logger logrus.FieldLogger) *Handle
 		panic(err.Error())
 	}
 	return &Handle{
-		db:     db,
-		logger: logger,
+		db:      db,
+		logger:  logger,
+		queryer: newQueryLogger(db, logger),
 	}
 }
 
@@ -205,10 +174,10 @@ func NewMemoryDBHandle(verbose bool, logger logrus.FieldLogger, loadFixtures boo
 	}
 
 	d := &Handle{
-		db:     db,
-		logger: logger,
+		db:      db,
+		logger:  logger,
+		queryer: newQueryLogger(db, logger),
 	}
-
 	err = d.Migrate(SchemaMigrations())
 	if err != nil {
 		panic(err)
@@ -255,6 +224,8 @@ func validateFeed(f *FeedInfo) error {
 	}
 
 	f.URL = u.String()
+	// Ensures that time in DB is always stored as UTC
+	f.LastPollTime = f.LastPollTime.UTC()
 	return nil
 }
 
@@ -272,7 +243,7 @@ func (d *Handle) AddFeed(name string, feedURL string) (*FeedInfo, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 
-	res, err := d.db.Exec(`INSERT INTO feed_info (name, url, site_url, last_poll_time, last_poll_error, last_error_response) VALUES(?,?,?,?,?,?);`,
+	res, err := d.queryer.Exec(`INSERT INTO feed_info (name, url, site_url, last_poll_time, last_poll_error, last_error_response) VALUES(?,?,?,?,?,?);`,
 		f.Name, f.URL, "", time.Time{}, "", "")
 	if err != nil {
 		return nil, err
@@ -284,7 +255,7 @@ func (d *Handle) AddFeed(name string, feedURL string) (*FeedInfo, error) {
 	return f, nil
 }
 
-//SaveFeed creates or updates the given FeedInfo in the database.
+//SaveFeed updates the given FeedInfo in the database.
 func (d *Handle) SaveFeed(f *FeedInfo) error {
 	err := validateFeed(f)
 	if err != nil {
@@ -295,8 +266,7 @@ func (d *Handle) SaveFeed(f *FeedInfo) error {
 	}
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
-	_, err = d.db.Exec(
-		`UPDATE feed_info SET name = ?, url = ?, site_url = ?, last_poll_time = ?, last_poll_error = ?, last_error_response = ? WHERE id = ?`,
+	_, err = d.queryer.Exec(`UPDATE feed_info SET name = ?, url = ?, site_url = ?, last_poll_time = ?, last_poll_error = ?, last_error_response = ? WHERE id = ?`,
 		f.Name, f.URL, f.SiteURL, f.LastPollTime, f.LastPollError, f.LastErrorResponse, f.ID,
 	)
 	return err
@@ -337,7 +307,7 @@ func (d *Handle) GetAllFeeds() ([]*FeedInfo, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	feeds := []*FeedInfo{}
-	err := d.db.Select(&feeds, "SELECT * FROM feed_info")
+	err := sqlx.Select(d.queryer, &feeds, "SELECT * FROM feed_info")
 	return feeds, err
 }
 
@@ -348,7 +318,7 @@ func (d *Handle) GetAllFeedsWithUsers() ([]*FeedInfo, error) {
 	defer d.syncMutex.Unlock()
 
 	var feeds []*FeedInfo
-	err := d.db.Select(&feeds, `SELECT feed_info.* FROM feed_info
+	err := sqlx.Select(d.queryer, &feeds, `SELECT feed_info.* FROM feed_info
 	LEFT JOIN user_feeds ON feed_info.id = user_feeds.feed_info_id
 	GROUP BY user_feeds.feed_info_id
 	HAVING COUNT(user_feeds.feed_info_id) > 0`)
@@ -362,7 +332,7 @@ func (d *Handle) GetFeedsByName(name string) ([]*FeedInfo, error) {
 	defer d.syncMutex.Unlock()
 	var feeds []*FeedInfo
 
-	err := d.db.Select(&feeds, `SELECT feed_info.* FROM feed_info
+	err := sqlx.Select(d.queryer, &feeds, `SELECT feed_info.* FROM feed_info
 	INNER JOIN user_feeds ON feed_info.id = user_feeds.feed_info_id
 	INNER JOIN user ON user_feeds.user_id = user.id
 	WHERE feed_info.name LIKE ?
@@ -378,7 +348,7 @@ func (d *Handle) GetUsersFeedsByName(user *User, name string) ([]*FeedInfo, erro
 	defer d.syncMutex.Unlock()
 	var feeds []*FeedInfo
 
-	err := d.db.Select(&feeds, `SELECT feed_info.* FROM feed_info
+	err := sqlx.Select(d.queryer, &feeds, `SELECT feed_info.* FROM feed_info
 	INNER JOIN user_feeds ON feed_info.id = user_feeds.feed_info_id
 	INNER JOIN user ON user_feeds.user_id = user.id
 	WHERE user.id = ?
@@ -395,7 +365,7 @@ func (d *Handle) GetFeedsWithErrors() ([]*FeedInfo, error) {
 	defer d.syncMutex.Unlock()
 
 	var feeds []*FeedInfo
-	err := d.db.Select(&feeds, "SELECT * from feed_info WHERE last_poll_error IS NOT NULL and last_poll_error <> ''")
+	err := sqlx.Select(d.queryer, &feeds, "SELECT * from feed_info WHERE last_poll_error IS NOT NULL and last_poll_error <> ''")
 	return feeds, err
 }
 
@@ -406,7 +376,7 @@ func (d *Handle) GetStaleFeeds() ([]*FeedInfo, error) {
 	defer d.syncMutex.Unlock()
 
 	var res []*FeedInfo
-	err := d.db.Select(&res, `SELECT feed_info.id, feed_info.name, feed_info.url, feed_info.last_poll_error FROM (SELECT feed_info_id, MAX(added_on) as MaxTime FROM feed_item GROUP BY feed_info_id) r, feed_info INNER JOIN feed_item f ON f.feed_info_id = r.feed_info_id AND f.added_on = r.MaxTime AND r.MaxTime < datetime('now','-14 days') AND f.feed_info_id = feed_info.id group by f.feed_info_id;`)
+	err := sqlx.Select(d.queryer, &res, `SELECT feed_info.id, feed_info.name, feed_info.url, feed_info.last_poll_error FROM (SELECT feed_info_id, MAX(added_on) as MaxTime FROM feed_item GROUP BY feed_info_id) r, feed_info INNER JOIN feed_item f ON f.feed_info_id = r.feed_info_id AND f.added_on = r.MaxTime AND r.MaxTime < datetime('now','-14 days') AND f.feed_info_id = feed_info.id group by f.feed_info_id;`)
 	return res, err
 }
 
@@ -415,7 +385,8 @@ func (d *Handle) GetFeedByID(id int64) (*FeedInfo, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	var f FeedInfo
-	err := d.db.Get(&f, "SELECT * from feed_info WHERE id = ? LIMIT 1", id)
+	//	err := sqlx.Get(d.queryer, &f, "SELECT * from feed_info WHERE id = ? LIMIT 1", id)
+	err := sqlx.Get(d.queryer, &f, "SELECT * from feed_info WHERE id = ? LIMIT 1", id)
 	return &f, err
 }
 
@@ -428,7 +399,7 @@ func (d *Handle) GetFeedByURL(url string) (*FeedInfo, error) {
 
 func (d *Handle) unsafeGetFeedByURL(url string) (*FeedInfo, error) {
 	feed := &FeedInfo{}
-	err := d.db.Get(feed, `SELECT * FROM feed_info WHERE url = ? LIMIT 1`, url)
+	err := sqlx.Get(d.queryer, feed, `SELECT * FROM feed_info WHERE url = ? LIMIT 1`, url)
 	return feed, err
 }
 
@@ -443,7 +414,7 @@ func (d *Handle) GetFeedItemByGUID(feedID int64, guid string) (*FeedItem, error)
 	fi := FeedItem{}
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
-	err := d.db.Get(&fi, "SELECT * FROM feed_item WHERE feed_info_id = ? AND guid = ?", feedID, guid)
+	err := sqlx.Get(d.queryer, &fi, "SELECT * FROM feed_item WHERE feed_info_id = ? AND guid = ?", feedID, guid)
 	return &fi, err
 }
 
@@ -453,7 +424,7 @@ func (d *Handle) RecordGUID(feedID int64, guid string) error {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 
-	_, err := d.db.Exec("insert or replace INTO feed_item (id, feed_info_id, guid, added_on) VALUES ((select id from feed_item WHERE guid = ?), ?, ?, ?)", guid, feedID, guid, time.Now())
+	_, err := d.queryer.Exec("insert or replace INTO feed_item (id, feed_info_id, guid, added_on) VALUES ((select id from feed_item WHERE guid = ?), ?, ?, ?)", guid, feedID, guid, time.Now())
 	return err
 }
 
@@ -464,7 +435,7 @@ func (d *Handle) GetMostRecentGUIDsForFeed(feedID int64, max int) ([]string, err
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 
-	err := d.db.Select(&items, "SELECT guid FROM feed_item WHERE feed_info_id = ? ORDER BY added_on DESC LIMIT ?", feedID, max)
+	err := sqlx.Select(d.queryer, &items, "SELECT guid FROM feed_item WHERE feed_info_id = ? ORDER BY added_on DESC LIMIT ?", feedID, max)
 	d.logger.Infof("Got last %d guids for feed_id: %d.", len(items), feedID)
 	knownGuids := make([]string, len(items))
 	for i, v := range items {
@@ -512,7 +483,7 @@ func (d *Handle) AddUser(name string, email string, pass string) (*User, error) 
 
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
-	res, err := d.db.Exec("INSERT INTO user (name, email, password, enabled) VALUES(?,?,?,?)", u.Name, u.Email, u.Password, u.Enabled)
+	res, err := d.queryer.Exec("INSERT INTO user (name, email, password, enabled) VALUES(?,?,?,?)", u.Name, u.Email, u.Password, u.Enabled)
 	if err != nil {
 		return nil, err
 	}
@@ -532,7 +503,7 @@ func (d *Handle) SaveUser(u *User) error {
 	}
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
-	_, err = d.db.Exec("UPDATE user SET name = ?, email = ?, password = ?, enabled = ? WHERE id = ?", u.Name, u.Email, u.Password, u.Enabled, u.ID)
+	_, err = d.queryer.Exec("UPDATE user SET name = ?, email = ?, password = ?, enabled = ? WHERE id = ?", u.Name, u.Email, u.Password, u.Enabled, u.ID)
 	return err
 }
 
@@ -542,7 +513,7 @@ func (d *Handle) GetAllUsers() ([]User, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 
-	err := d.db.Select(&all, "SELECT * FROM user")
+	err := sqlx.Select(d.queryer, &all, "SELECT * FROM user")
 	return all, err
 }
 
@@ -551,7 +522,7 @@ func (d *Handle) GetUser(name string) (*User, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	u := &User{}
-	err := d.db.Get(u, "SELECT * FROM user WHERE name = ?", name)
+	err := sqlx.Get(d.queryer, u, "SELECT * FROM user WHERE name = ?", name)
 	return u, err
 }
 
@@ -560,7 +531,7 @@ func (d *Handle) GetUserByID(id int64) (*User, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	u := &User{}
-	err := d.db.Get(u, "SELECT * FROM user WHERE id = ?", id)
+	err := sqlx.Get(d.queryer, u, "SELECT * FROM user WHERE id = ?", id)
 	return u, err
 }
 
@@ -573,7 +544,7 @@ func (d *Handle) GetUserByEmail(email string) (*User, error) {
 
 func (d *Handle) unsafeGetUserByEmail(email string) (*User, error) {
 	u := &User{}
-	err := d.db.Get(u, "SELECT * FROM user WHERE email = ?", email)
+	err := sqlx.Get(d.queryer, u, "SELECT * FROM user WHERE email = ?", email)
 	return u, err
 }
 
@@ -623,7 +594,7 @@ func (d *Handle) AddFeedsToUser(u *User, feeds []*FeedInfo) error {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	for _, f := range feeds {
-		_, err := d.db.Exec(`INSERT OR REPLACE INTO user_feeds (id, user_id, feed_info_id)
+		_, err := d.queryer.Exec(`INSERT OR REPLACE INTO user_feeds (id, user_id, feed_info_id)
 		VALUES((select id from user_feeds WHERE user_id = ? AND feed_info_id = ?), ?, ?)`,
 			u.ID, f.ID, u.ID, f.ID)
 		if err != nil {
@@ -648,7 +619,7 @@ func (d *Handle) RemoveFeedsFromUser(u *User, feeds []*FeedInfo) error {
 	if err != nil {
 		return err
 	}
-	_, err = d.db.Exec(q, args...)
+	_, err = d.queryer.Exec(q, args...)
 	if err != nil {
 		return err
 	}
@@ -720,7 +691,7 @@ func (d *Handle) GetFeedUsers(feedURL string) ([]User, error) {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 	var all []User
-	err := d.db.Select(&all, `SELECT user.* FROM user
+	err := sqlx.Select(d.queryer, &all, `SELECT user.* FROM user
 	INNER JOIN user_feeds ON user.id = user_feeds.user_id
 	INNER JOIN feed_info ON user_feeds.feed_info_id = feed_info.id
 	WHERE feed_info.url = ?`, feedURL)
