@@ -122,3 +122,18 @@ func TestRadavistImageSizer(t *testing.T) {
 		t.Fatalf("Couldn't find %v in %v", expected, s[0].Content)
 	}
 }
+func TestFeedBurnerSocialFlareRemover(t *testing.T) {
+	feedResp, err := ioutil.ReadFile("../testdata/seriouseatsfeaturesvideos.atom")
+	if err != nil {
+		t.Fatal("Error reading test feed.")
+	}
+	_, s, _ := ParseFeed("http://localhost/feed.rss", feedResp)
+
+	if len(s) != 1 {
+		t.Fatalf("Expected 1 story from feed, got %d", len(s))
+	}
+	notexpected := `div class="feedflare"`
+	if strings.Contains(s[0].Content, notexpected) {
+		t.Fatalf("Found %v in %v", notexpected, s[0].Content)
+	}
+}

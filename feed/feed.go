@@ -459,6 +459,9 @@ func cleanFeedContent(htmlFrag string) (string, error) {
 			s.Remove()
 		}
 	})
+	doc.Find(".feedflare").Each(func(i int, s *goquery.Selection) {
+		s.Remove()
+	})
 	r, err := doc.Html()
 	if err != nil {
 		return htmlFrag, err
