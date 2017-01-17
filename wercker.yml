@@ -26,16 +26,15 @@ build:
     # at the right place in the workspace tree
     - setup-go-workspace
 
+    - script:
+        name: echo go information
+        code: echo "$(go version)"
+
     # Gets the dependencies
     - script:
         name: go get
         code: |
           go get -t ./...
-
-    - script:
-        name: echo go information
-        code: |
-          echo "$(go version)"
 
     # Build the project
     - script:
