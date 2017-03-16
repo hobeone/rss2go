@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 
+	"github.com/bgentry/speakeasy"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -31,6 +32,54 @@ func (uc *userCommand) configure(app *kingpin.Application) {
 	addCmd.Arg("email", "Email address of user").Required().StringVar(&uc.Email)
 	addCmd.Arg("password", "Password of user").Required().StringVar(&uc.Pass)
 	addCmd.Arg("feeds", "URLs of feeds to subscribe to (optional)").StringsVar(&uc.Feeds)
+
+	passwdCmd := userCmd.Command("passwd", "Change a users password").Action(uc.passwdCmd)
+	passwdCmd.Arg("email", "Email address of the user").Required().StringVar(&uc.Email)
+
+	subCmd := userCmd.Command("subscribe", "Subscribe a user to a feed(s)").Action(uc.subscribeCmd)
+	subCmd.Arg("urls", "URLs of feed to subscribe to").Required().StringsVar(&uc.Feeds)
+
+	unsubCmd := userCmd.Command("unsubscribe", "Unsubscribe a user to a feed(s)").Action(uc.subscribeCmd)
+	unsubCmd.Arg("urls", "URLs of feed to subscribe to").Required().StringsVar(&uc.Feeds)
+
+}
+
+func (uc *userCommand) passwdCmd(c *kingpin.ParseContext) error {
+	uc.init()
+	return uc.passwd()
+}
+
+func (uc *userCommand) passwd() error {
+	u, err := uc.DBH.GetUserByEmail(uc.Email)
+	if err != nil {
+		return fmt.Errorf("Error getting user: %s", err)
+	}
+
+	fmt.Printf("Reseting password for '%s'\n", u.Email)
+	passwordFirst, err := speakeasy.Ask("Please enter a password: ")
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	passwordSecond, err := speakeasy.Ask("Please enter password again: ")
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	if passwordFirst != passwordSecond {
+		return fmt.Errorf("Passwords didn't match, aborting.")
+	}
+
+	err = u.SetPassword(passwordFirst)
+	if err != nil {
+		return err
+	}
+	err = uc.DBH.SaveUser(u)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (uc *userCommand) listCmd(c *kingpin.ParseContext) error {
