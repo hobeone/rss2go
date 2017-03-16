@@ -1,11 +1,12 @@
 package db
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
+	"math/rand"
 	"net/mail"
 	"net/url"
+	"strconv"
 	"sync"
 	"time"
 
@@ -50,6 +51,17 @@ type User struct {
 	Feeds    []FeedInfo `jsonapi:"relation,feeds"`
 }
 
+// SetPassword takes a plain text password, crypts it and sets the Password
+// field to that.
+func (u *User) SetPassword(pass string) error {
+	bcryptPassword, err := bcrypt.GenerateFromPassword([]byte(pass), 10)
+	if err != nil {
+		return err
+	}
+	u.Password = string(bcryptPassword)
+	return nil
+}
+
 // Service defines the interface that the RSS2Go database provides.
 // Useful for mocking out the databse layer in tests.
 type Service interface {
@@ -68,42 +80,6 @@ type Handle struct {
 	logger    logrus.FieldLogger
 	syncMutex sync.Mutex
 	queryer   *queryLogger
-}
-
-type queryLogger struct {
-	queryer sqlx.Ext
-	logger  logrusAdapter
-}
-
-// Query implements the Queryer interface
-func (p *queryLogger) Query(query string, args ...interface{}) (*sql.Rows, error) {
-	t := time.Now()
-	rows, err := p.queryer.Query(query, args...)
-	p.logger.Print(time.Since(t), query, args)
-	return rows, err
-}
-
-// Queryx implements the Queryer interface
-func (p *queryLogger) Queryx(query string, args ...interface{}) (*sqlx.Rows, error) {
-	t := time.Now()
-	rows, err := p.queryer.Queryx(query, args...)
-	p.logger.Print(time.Since(t), query, args)
-	return rows, err
-}
-
-// QueryRowx implements
-func (p *queryLogger) QueryRowx(query string, args ...interface{}) *sqlx.Row {
-	t := time.Now()
-	row := p.queryer.QueryRowx(query, args...)
-	p.logger.Print(time.Since(t), query, args)
-	return row
-}
-
-func (p *queryLogger) Exec(query string, args ...interface{}) (sql.Result, error) {
-	t := time.Now()
-	res, err := p.queryer.Exec(query, args...)
-	p.logger.Print(time.Since(t), query, args)
-	return res, err
 }
 
 func openDB(dbType string, dbArgs string, logger logrus.FieldLogger) *sqlx.DB {
@@ -465,6 +441,9 @@ func validateUser(u *User) error {
 
 // AddUser creates a User record in the database.
 func (d *Handle) AddUser(name string, email string, pass string) (*User, error) {
+	if pass == "" {
+		pass = strconv.FormatInt(rand.Int63(), 16) // Just want to set it to something relatively random
+	}
 	u := &User{
 		Name:     name,
 		Email:    email,
@@ -476,11 +455,10 @@ func (d *Handle) AddUser(name string, email string, pass string) (*User, error) 
 		return u, err
 	}
 
-	bcryptPassword, err := bcrypt.GenerateFromPassword([]byte(pass), 10)
+	err = u.SetPassword(pass)
 	if err != nil {
 		return u, err
 	}
-	u.Password = string(bcryptPassword)
 
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()

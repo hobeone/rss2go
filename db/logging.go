@@ -1,6 +1,7 @@
 package db
 
 import (
+	"database/sql"
 	"database/sql/driver"
 	"fmt"
 	"reflect"
@@ -9,7 +10,44 @@ import (
 	"unicode"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/jmoiron/sqlx"
 )
+
+type queryLogger struct {
+	queryer sqlx.Ext
+	logger  logrusAdapter
+}
+
+// Query implements the Queryer interface
+func (p *queryLogger) Query(query string, args ...interface{}) (*sql.Rows, error) {
+	t := time.Now()
+	rows, err := p.queryer.Query(query, args...)
+	p.logger.Print(time.Since(t), query, args)
+	return rows, err
+}
+
+// Queryx implements the Queryer interface
+func (p *queryLogger) Queryx(query string, args ...interface{}) (*sqlx.Rows, error) {
+	t := time.Now()
+	rows, err := p.queryer.Queryx(query, args...)
+	p.logger.Print(time.Since(t), query, args)
+	return rows, err
+}
+
+// QueryRowx implements
+func (p *queryLogger) QueryRowx(query string, args ...interface{}) *sqlx.Row {
+	t := time.Now()
+	row := p.queryer.QueryRowx(query, args...)
+	p.logger.Print(time.Since(t), query, args)
+	return row
+}
+
+func (p *queryLogger) Exec(query string, args ...interface{}) (sql.Result, error) {
+	t := time.Now()
+	res, err := p.queryer.Exec(query, args...)
+	p.logger.Print(time.Since(t), query, args)
+	return res, err
+}
 
 type logrusAdapter struct {
 	logger logrus.FieldLogger
