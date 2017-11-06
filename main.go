@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/hobeone/rss2go/commands"
 	"github.com/hobeone/rss2go/log"
 	"gopkg.in/alecthomas/kingpin.v2"

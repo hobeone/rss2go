@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/hobeone/rss2go/commands"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"

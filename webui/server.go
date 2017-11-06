@@ -100,7 +100,7 @@ func (s *APIServer) subFeed(c echo.Context) error {
 
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSONCharsetUTF8)
 	c.Response().WriteHeader(http.StatusOK)
-	return jsonapi.MarshalOnePayload(c.Response(), feed)
+	return jsonapi.MarshalPayload(c.Response(), feed)
 }
 
 func (s *APIServer) unsubFeed(c echo.Context) error {
@@ -123,7 +123,7 @@ func (s *APIServer) unsubFeed(c echo.Context) error {
 
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSONCharsetUTF8)
 	c.Response().WriteHeader(http.StatusOK)
-	return jsonapi.MarshalOnePayload(c.Response(), feed)
+	return jsonapi.MarshalPayload(c.Response(), feed)
 }
 
 func (s *APIServer) updateFeed(c echo.Context) error {
@@ -171,7 +171,7 @@ func (s *APIServer) getFeeds(c echo.Context) error {
 
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSONCharsetUTF8)
 	c.Response().WriteHeader(http.StatusOK)
-	return jsonapi.MarshalManyPayload(c.Response(), feedInterface)
+	return jsonapi.MarshalPayload(c.Response(), feedInterface)
 }
 
 func (s *APIServer) getFeed(c echo.Context) error {
@@ -187,7 +187,7 @@ func (s *APIServer) getFeed(c echo.Context) error {
 
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSONCharsetUTF8)
 	c.Response().WriteHeader(http.StatusOK)
-	return jsonapi.MarshalOnePayload(c.Response(), feed)
+	return jsonapi.MarshalPayload(c.Response(), feed)
 }
 
 func (s *APIServer) addFeed(c echo.Context) error {
@@ -221,7 +221,7 @@ func (s *APIServer) addFeed(c echo.Context) error {
 		}
 		c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSONCharsetUTF8)
 		c.Response().WriteHeader(http.StatusOK)
-		return jsonapi.MarshalOnePayload(c.Response(), dbfeed)
+		return jsonapi.MarshalPayload(c.Response(), dbfeed)
 	}
 
 	err = s.DBH.SaveFeed(feed)
@@ -234,5 +234,5 @@ func (s *APIServer) addFeed(c echo.Context) error {
 	}
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSONCharsetUTF8)
 	c.Response().WriteHeader(http.StatusOK)
-	return jsonapi.MarshalOnePayload(c.Response(), dbfeed)
+	return jsonapi.MarshalPayload(c.Response(), dbfeed)
 }

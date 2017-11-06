@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/httpclient"
 )

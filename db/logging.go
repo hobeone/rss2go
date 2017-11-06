@@ -9,7 +9,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/jmoiron/sqlx"
 )
 

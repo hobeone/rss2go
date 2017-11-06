@@ -17,7 +17,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/microcosm-cc/bluemonday"
 
 	"golang.org/x/net/html"
