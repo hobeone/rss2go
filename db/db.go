@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/hobeone/gomigrate"
 	"github.com/jmoiron/sqlx"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 
 	// Import sqlite3 driver
@@ -352,7 +352,7 @@ func (d *Handle) GetStaleFeeds() ([]*FeedInfo, error) {
 	defer d.syncMutex.Unlock()
 
 	var res []*FeedInfo
-	err := sqlx.Select(d.queryer, &res, `SELECT feed_info.id, feed_info.name, feed_info.url, feed_info.last_poll_error FROM (SELECT feed_info_id, MAX(added_on) as MaxTime FROM feed_item GROUP BY feed_info_id) r, feed_info INNER JOIN feed_item f ON f.feed_info_id = r.feed_info_id AND f.added_on = r.MaxTime AND r.MaxTime < datetime('now','-14 days') AND f.feed_info_id = feed_info.id group by f.feed_info_id;`)
+	err := sqlx.Select(d.queryer, &res, `SELECT feed_info.id, feed_info.name, feed_info.url, feed_info.last_poll_error, f.added_on as last_poll_time FROM (SELECT feed_info_id, MAX(added_on) as MaxTime FROM feed_item GROUP BY feed_info_id) r, feed_info INNER JOIN feed_item f ON f.feed_info_id = r.feed_info_id AND f.added_on = r.MaxTime AND r.MaxTime < datetime('now','-14 days') AND f.feed_info_id = feed_info.id group by f.feed_info_id ORDER BY MaxTime desc;`)
 	return res, err
 }
 

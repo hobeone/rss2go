@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	testdb "github.com/erikstmartin/go-testdb"
+	"github.com/sirupsen/logrus"
 )
 
 func NullLogger() logrus.FieldLogger {
@@ -395,7 +395,11 @@ func TestGetStaleFeeds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Got unexpected error from db: %s", err)
 	}
-	_, err = d.db.Exec("UPDATE feed_item SET added_on = ? WHERE id = ?", *new(time.Time), guid.ID)
+
+	now := time.Now()
+	oneMonthAgo := time.Unix(now.Unix()-(60*60*24*30), 0)
+
+	_, err = d.db.Exec("UPDATE feed_item SET added_on = ? WHERE id = ?", oneMonthAgo, guid.ID)
 	if err != nil {
 		t.Fatalf("Error saving item: %v", err)
 	}
@@ -405,6 +409,9 @@ func TestGetStaleFeeds(t *testing.T) {
 	}
 	if f[0].ID != 1 {
 		t.Fatalf("Expected ID to be 1 got %d", f[0].ID)
+	}
+	if f[0].LastPollTime.IsZero() {
+		t.Fatalf("Expected non zero time, got %s", f[0].LastPollTime)
 	}
 }
 
