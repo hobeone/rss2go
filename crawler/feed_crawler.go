@@ -5,11 +5,12 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/http/httputil"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/httpclient"
+	"github.com/sirupsen/logrus"
 )
 
 // GetFeed gets a URL and returns a http.Response.
@@ -31,7 +32,14 @@ func GetFeed(url string, client *http.Client) (*http.Response, error) {
 		logrus.Errorf("Error creating request: %v", err)
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.103 Safari/537.36")
+	req.Header.Set("Accept", "application/rss+xml, application/rdf+xml;q=0.8, application/atom+xml;q=0.6, application/xml;q=0.4, text/xml;q=0.4")
+
+	requestDump, err := httputil.DumpRequest(req, true)
+	if err != nil {
+		logrus.Errorf("Couldn't dump request: %s", err)
+	} else {
+		logrus.Debugln(string(requestDump))
+	}
 
 	r, err := client.Do(req)
 

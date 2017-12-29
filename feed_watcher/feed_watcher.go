@@ -25,10 +25,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed"
 	"github.com/hobeone/rss2go/mail"
+	"github.com/sirupsen/logrus"
 )
 
 // Cache this many times of the most recent GUIDs for each feed.
@@ -176,7 +176,7 @@ func (fw *FeedWatcher) UpdateFeed(resp *FeedCrawlResponse) error {
 
 	if resp.HTTPResponseStatusCode != http.StatusOK || resp.Error != nil {
 		if resp.HTTPResponseStatusCode != http.StatusOK {
-			fw.FeedInfo.LastPollError = fmt.Sprintf("Non 200 HTTP Status Code: %d", resp.HTTPResponseStatusCode)
+			fw.FeedInfo.LastPollError = fmt.Sprintf("Non 200 HTTP Status Code: %d, %v", resp.HTTPResponseStatusCode, resp.Error)
 		}
 		bod, err := ioutil.ReadAll(bytes.NewReader(resp.Body))
 		if err != nil {

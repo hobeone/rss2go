@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	netmail "net/mail"
+	"net/http/httputil"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hobeone/rss2go/config"
@@ -18,6 +18,8 @@ import (
 	"github.com/hobeone/rss2go/mail"
 
 	"gopkg.in/alecthomas/kingpin.v2"
+
+	netmail "net/mail"
 )
 
 type feedCommand struct {
@@ -215,12 +217,18 @@ func (fc *feedCommand) test(c *kingpin.ParseContext) error {
 	if err != nil {
 		return err
 	}
+	fmt.Println("HTTP Response (First 500 characters): ")
+	dump, err := httputil.DumpResponse(resp, true)
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(dump[0:500]))
+
 	body, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
 		return err
 	}
-
 	feed, stories, err := feed.ParseFeed(url, body)
 	if err != nil {
 		return err
@@ -249,5 +257,6 @@ func (fc *feedCommand) test(c *kingpin.ParseContext) error {
 		spew.Dump(b)
 		fmt.Println("****** ++++++++++++ *******")
 	}
+
 	return nil
 }
