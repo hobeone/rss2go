@@ -12,7 +12,7 @@ import (
 	"html"
 	"time"
 
-	"github.com/mjibson/goread/sanitizer"
+	"github.com/microcosm-cc/bluemonday"
 )
 
 type Feed struct {
@@ -62,7 +62,8 @@ func (t *Text) ToString() string {
 	case "text":
 		return html.UnescapeString(t.Body)
 	case "html":
-		return html.UnescapeString(sanitizer.StripTags(t.Body))
+		p := bluemonday.UGCPolicy()
+		return html.UnescapeString(p.Sanitize(t.Body))
 	}
 	return t.Body
 }
