@@ -17,8 +17,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/sirupsen/logrus"
 	"github.com/microcosm-cc/bluemonday"
+	"github.com/sirupsen/logrus"
 
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
@@ -447,7 +447,7 @@ func cleanFeedContent(htmlFrag string) (string, error) {
 		if exists && val != "" {
 			escLinkSrc, err := url.QueryUnescape(val)
 			if err != nil {
-				logrus.Info("feed: error unescaping iframe URL. Error: %s, URL: %#v", err, val)
+				logrus.Infof("feed: error unescaping iframe URL. Error: %s, URL: %#v", err, val)
 				return
 			}
 			s.ReplaceWithHtml(fmt.Sprintf(`<a href="%s">%s</a>`, escLinkSrc, escLinkSrc))

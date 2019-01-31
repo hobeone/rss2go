@@ -17,11 +17,11 @@ import (
 	"os/exec"
 	"time"
 
-	"gopkg.in/gomail.v2"
+	gomail "gopkg.in/gomail.v2"
 
-	"github.com/sirupsen/logrus"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/feed"
+	"github.com/sirupsen/logrus"
 )
 
 // MTABINARY sets the default MTA binary to exec when sending mail locally.
@@ -54,7 +54,7 @@ func (r SendmailRunner) Run(from string, to []string, msg []byte) error {
 	logrus.Infof("mail: running command %#v", cmd.Args)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		logrus.Info("mail: error running command %#v, output %s", cmd.Args, output)
+		logrus.Infof("mail: error running command %#v, output %s", cmd.Args, output)
 	}
 	return err
 }
