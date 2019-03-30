@@ -8,7 +8,7 @@ import (
 	"net/http/httputil"
 	"time"
 
-	"github.com/hobeone/rss2go/feed_watcher"
+	feedwatcher "github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/httpclient"
 	"github.com/sirupsen/logrus"
 )
@@ -33,8 +33,9 @@ func GetFeed(url string, client *http.Client) (*http.Response, error) {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/rss+xml, application/rdf+xml;q=0.8, application/atom+xml;q=0.6, application/xml;q=0.4, text/xml;q=0.4")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36")
 
-	requestDump, err := httputil.DumpRequest(req, true)
+	requestDump, err := httputil.DumpRequestOut(req, true)
 	if err != nil {
 		logrus.Errorf("Couldn't dump request: %s", err)
 	} else {

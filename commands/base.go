@@ -1,10 +1,10 @@
 package commands
 
 import (
-	"github.com/sirupsen/logrus"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/log"
+	"github.com/sirupsen/logrus"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -30,9 +30,6 @@ func RegisterCommands() {
 
 	daemonCmd := &daemonCommand{}
 	daemonCmd.configure(App)
-
-	serverCmd := &serverCommand{}
-	serverCmd.configure(App)
 
 	createDBCmd := &createDBCommand{}
 	createDBCmd.configure(App)

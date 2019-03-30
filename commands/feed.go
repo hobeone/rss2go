@@ -14,7 +14,7 @@ import (
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed"
-	"github.com/hobeone/rss2go/feed_watcher"
+	feedwatcher "github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/mail"
 
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -217,12 +217,18 @@ func (fc *feedCommand) test(c *kingpin.ParseContext) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("HTTP Response (First 500 characters): ")
+
+	fmt.Println("HTTP Response (First 1000 characters): ")
 	dump, err := httputil.DumpResponse(resp, true)
 	if err != nil {
 		return err
 	}
-	fmt.Println(string(dump[0:500]))
+	s := len(dump)
+	maxDump := 1000
+	if s < 1000 {
+		maxDump = s
+	}
+	fmt.Println(string(dump[0:maxDump]))
 
 	body, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()

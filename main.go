@@ -3,9 +3,9 @@ package main
 import (
 	"os"
 
-	"github.com/sirupsen/logrus"
 	"github.com/hobeone/rss2go/commands"
 	"github.com/hobeone/rss2go/log"
+	"github.com/sirupsen/logrus"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
