@@ -89,6 +89,7 @@ func openDB(dbType string, dbArgs string, logger logrus.FieldLogger) *sqlx.DB {
 	if err != nil {
 		panic(fmt.Sprintf("Error connecting to %s database %s: %v", dbType, dbArgs, err))
 	}
+	d.SetMaxOpenConns(1)
 	// Actually test that we have a working connection
 	err = d.Ping()
 	if err != nil {
@@ -98,15 +99,16 @@ func openDB(dbType string, dbArgs string, logger logrus.FieldLogger) *sqlx.DB {
 }
 
 func setupDB(db *sqlx.DB) error {
-	_, err := db.Exec("PRAGMA journal_mode=WAL;")
-	if err != nil {
-		return err
-	}
-	_, err = db.Exec("PRAGMA synchronous = NORMAL;")
-	if err != nil {
-		return err
-	}
-	_, err = db.Exec(`PRAGMA encoding = "UTF-8";`)
+	/*	_, err := db.Exec("PRAGMA journal_mode=WAL;")
+		if err != nil {
+			return err
+		}
+		_, err = db.Exec("PRAGMA synchronous = NORMAL;")
+		if err != nil {
+			return err
+		}
+	*/
+	_, err := db.Exec(`PRAGMA encoding = "UTF-8";`)
 	if err != nil {
 		return err
 	}
@@ -125,7 +127,7 @@ func newQueryLogger(db *sqlx.DB, logger logrus.FieldLogger) *queryLogger {
 //	dbPath: the path to the database to use.
 //	verbose: when true database accesses are logged to stdout
 func NewDBHandle(dbPath string, logger logrus.FieldLogger) *Handle {
-	constructedPath := fmt.Sprintf("file:%s?cache=shared&mode=rwc", dbPath)
+	constructedPath := fmt.Sprintf("file:%s?cache=shared&mode=rwc&_busy_timeout=5000", dbPath)
 	db := openDB("sqlite3", constructedPath, logger)
 	err := setupDB(db)
 	if err != nil {
