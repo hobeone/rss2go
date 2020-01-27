@@ -3,13 +3,13 @@ package commands
 import (
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/db"
-	"github.com/hobeone/rss2go/feed_watcher"
+	feedwatcher "github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/log"
 	"github.com/hobeone/rss2go/mail"
+	"github.com/sirupsen/logrus"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -35,6 +35,9 @@ func (dc *daemonCommand) configure(app *kingpin.Application) {
 func (dc *daemonCommand) run(c *kingpin.ParseContext) error {
 	if *debug {
 		logrus.SetLevel(logrus.DebugLevel)
+	}
+	if *quiet {
+		logrus.SetLevel(logrus.ErrorLevel)
 	}
 	dc.Config = loadConfig(*configfile)
 	dc.Config.Mail.SendMail = dc.SendMail
@@ -79,6 +82,9 @@ func NewDaemon(cfg *config.Config) *Daemon {
 	log.SetupLogger(logger)
 	if *debugdb {
 		logger.Level = logrus.DebugLevel
+	}
+	if *quiet {
+		logger.Level = logrus.ErrorLevel
 	}
 	if cfg.DB.Type == "memory" {
 		dbh = db.NewMemoryDBHandle(logger, false)

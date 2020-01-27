@@ -14,6 +14,7 @@ var (
 	App        = kingpin.New("rss2go", "A rss watcher and mailer")
 	debug      = App.Flag("debug", "Enable Debug mode.").Bool()
 	debugdb    = App.Flag("debugdb", "Log Database queries (noisy).").Default("false").Bool()
+	quiet      = App.Flag("quiet", "Only log error or higher.").Default("false").Bool()
 	configfile = App.Flag("config", "Config file to use").Default(defaultConfig).String()
 )
 
