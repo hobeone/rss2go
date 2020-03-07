@@ -20,7 +20,7 @@ import (
 	gomail "gopkg.in/gomail.v2"
 
 	"github.com/hobeone/rss2go/config"
-	"github.com/hobeone/rss2go/feed"
+	"github.com/mmcdole/gofeed"
 	"github.com/sirupsen/logrus"
 )
 
@@ -28,9 +28,9 @@ import (
 // sendmail is supported by sendmail and postfix
 const MTABINARY = "sendmail"
 
-// Request defines a request for a Feed Story to be mailed to a list of email addresses
+// Request defines a request for a Feed Item to be mailed to a list of email addresses
 type Request struct {
-	Item       *feed.Story
+	Item       *gofeed.Item
 	Addresses  []mail.Address
 	ResultChan chan error
 }
@@ -294,22 +294,22 @@ func (d *Dispatcher) handleMailRequest(m *Request) error {
 	return nil
 }
 
-// CreateMailFromItem returns a Message containing the given story.
-func CreateMailFromItem(from string, to mail.Address, item *feed.Story) *gomail.Message {
+// CreateMailFromItem returns a Message containing the given item.
+func CreateMailFromItem(from string, to mail.Address, item *gofeed.Item) *gomail.Message {
 	content := FormatMessageBody(item)
 	gmsg := gomail.NewMessage()
 	gmsg.SetHeader("From", from)
 	gmsg.SetHeader("To", to.String())
 	gmsg.SetHeader("Subject", item.Title)
 	gmsg.SetBody("text/html", content)
-	if !item.Published.IsZero() {
-		gmsg.SetHeader("Date", item.Published.UTC().Format(time.RFC822))
+	if item.PublishedParsed != nil && !item.PublishedParsed.IsZero() {
+		gmsg.SetHeader("Date", item.PublishedParsed.UTC().Format(time.RFC822))
 	}
 	return gmsg
 }
 
 // FormatMessageBody formats the Story for better reading in a mail client.
-func FormatMessageBody(story *feed.Story) string {
+func FormatMessageBody(story *gofeed.Item) string {
 	origLink := fmt.Sprintf(`
 <div class="original_link">
 <a href="%s">%s</a>

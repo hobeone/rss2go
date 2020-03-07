@@ -8,11 +8,11 @@ import (
 
 	"gopkg.in/gomail.v2"
 
-	"github.com/sirupsen/logrus"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed"
 	"github.com/hobeone/rss2go/log"
 	"github.com/hobeone/rss2go/mail"
+	"github.com/sirupsen/logrus"
 )
 
 func NullLogger() logrus.FieldLogger {
@@ -49,7 +49,6 @@ func OverrideAfter(fw *FeedWatcher) {
 func SetupTest(t *testing.T, feedPath string) (*FeedWatcher, []byte, *mail.Dispatcher) {
 	log.SetNullOutput()
 	crawlChan := make(chan *FeedCrawlRequest)
-	responseChan := make(chan *FeedCrawlResponse)
 	mailDispatcher := mail.CreateAndStartStubMailer()
 	d := db.NewMemoryDBHandle(NullLogger(), true)
 	feeds, err := d.GetAllFeeds()
@@ -65,7 +64,9 @@ func SetupTest(t *testing.T, feedPath string) (*FeedWatcher, []byte, *mail.Dispa
 		t.Fatal("Error reading test feed.")
 	}
 
-	return NewFeedWatcher(*feeds[0], crawlChan, responseChan, mailDispatcher.OutgoingMail, d, []string{}, 30, 100), feedResp, mailDispatcher
+	fw := NewFeedWatcher(*feeds[0], crawlChan, mailDispatcher.OutgoingMail, d, []string{}, 30, 100)
+	fw.saveResponse = true
+	return fw, feedResp, mailDispatcher
 }
 
 func TestNewFeedWatcher(t *testing.T) {
@@ -103,7 +104,8 @@ func TestPollFeedWithDBErrors(t *testing.T) {
 		HTTPResponseStatus:     "200 OK",
 		HTTPResponseStatusCode: 200,
 	}
-	resp := <-n.responseChan
+	n.StopPoll()
+	resp := n.LastCrawlResponse
 	if resp.Error == nil {
 		t.Fatal("Should have gotten an error got nothing")
 	}
@@ -137,7 +139,8 @@ func TestFeedWatcherPolling(t *testing.T) {
 		HTTPResponseStatus:     "200 OK",
 		HTTPResponseStatusCode: 200,
 	}
-	resp := <-n.responseChan
+	n.StopPoll()
+	resp := n.LastCrawlResponse
 	if resp.Error != nil {
 		t.Fatalf("Should not have gotten an error. got: %s", resp.Error)
 	}
@@ -145,6 +148,7 @@ func TestFeedWatcherPolling(t *testing.T) {
 		t.Fatalf("Expected 25 items from the feed. Got %d", len(resp.Items))
 	}
 
+	go n.PollFeed()
 	// Second Poll, should not have new items
 	req = <-n.crawlChan
 	req.ResponseChan <- &FeedCrawlResponse{
@@ -154,8 +158,8 @@ func TestFeedWatcherPolling(t *testing.T) {
 		HTTPResponseStatus:     "200 OK",
 		HTTPResponseStatusCode: 200,
 	}
-	go n.StopPoll()
-	resp = <-n.responseChan
+	n.StopPoll()
+	resp = n.LastCrawlResponse
 	if len(resp.Items) != 0 {
 		t.Fatalf("Expected 0 items from the feed. Got %d", len(resp.Items))
 	}
@@ -200,7 +204,8 @@ func TestFeedWatcherWithEmailErrors(t *testing.T) {
 		HTTPResponseStatus:     "200 OK",
 		HTTPResponseStatusCode: 200,
 	}
-	resp := <-n.responseChan
+	n.StopPoll()
+	resp := n.LastCrawlResponse
 
 	if resp.Error == nil {
 		t.Fatalf("Should have gotten an error.")
@@ -230,11 +235,13 @@ func TestFeedWatcherPollingRssWithNoItemDates(t *testing.T) {
 		HTTPResponseStatus:     "200 OK",
 		HTTPResponseStatusCode: 200,
 	}
-	resp := <-n.responseChan
+	n.StopPoll()
+	resp := n.LastCrawlResponse
 	if len(resp.Items) != 20 {
 		t.Fatalf("Expected 20 items from the feed. Got %d", len(resp.Items))
 	}
 	// Second Poll, should not have new items
+	go n.PollFeed()
 	req = <-n.crawlChan
 	req.ResponseChan <- &FeedCrawlResponse{
 		URI:                    n.FeedInfo.URL,
@@ -243,8 +250,8 @@ func TestFeedWatcherPollingRssWithNoItemDates(t *testing.T) {
 		HTTPResponseStatus:     "200 OK",
 		HTTPResponseStatusCode: 200,
 	}
-	go n.StopPoll()
-	resp = <-n.responseChan
+	n.StopPoll()
+	resp = n.LastCrawlResponse
 	if resp.Error != nil {
 		t.Fatalf("Should not have gotten an error. got: %s", resp.Error)
 	}
@@ -266,11 +273,11 @@ func TestFeedWatcherWithMalformedFeed(t *testing.T) {
 		Body:                   []byte("Testing"),
 		HTTPResponseStatus:     "200 OK",
 		HTTPResponseStatusCode: 200,
-		Error: nil,
+		Error:                  nil,
 	}
-	go n.StopPoll()
-	response := <-n.responseChan
-	if response.Error == nil {
+	n.StopPoll()
+	resp := n.LastCrawlResponse
+	if resp.Error == nil {
 		t.Error("Expected error parsing invalid feed.")
 	}
 
@@ -288,10 +295,10 @@ func TestFeedWatcherWithGuidsSet(t *testing.T) {
 	n, feedResp, _ := SetupTest(t, "../testdata/ars.rss")
 	OverrideAfter(n)
 
-	_, stories, _ := feed.ParseFeed(n.FeedInfo.URL, feedResp)
+	feed, _ := feed.ParseFeed(n.FeedInfo.URL, feedResp)
 	guids := make(map[string]bool, 25)
-	for _, i := range stories {
-		guids[i.ID] = true
+	for _, i := range feed.Items {
+		guids[i.GUID] = true
 	}
 	n.GUIDCache = guids
 	go n.PollFeed()
@@ -304,12 +311,14 @@ func TestFeedWatcherWithGuidsSet(t *testing.T) {
 		HTTPResponseStatus:     "200 OK",
 		HTTPResponseStatusCode: 200,
 	}
-	resp := <-n.responseChan
+	n.StopPoll()
+	resp := n.LastCrawlResponse
 	if len(resp.Items) != 0 {
 		t.Fatalf("Expected 0 items from the feed but got %d.", len(resp.Items))
 	}
 	// Second poll with an new items.
 	n.GUIDCache = map[string]bool{}
+	go n.PollFeed()
 	req = <-n.crawlChan
 
 	req.ResponseChan <- &FeedCrawlResponse{
@@ -319,7 +328,8 @@ func TestFeedWatcherWithGuidsSet(t *testing.T) {
 		HTTPResponseStatus:     "200 OK",
 		HTTPResponseStatusCode: 200,
 	}
-	resp = <-n.responseChan
+	n.StopPoll()
+	resp = n.LastCrawlResponse
 	if len(resp.Items) != 25 {
 		t.Fatalf("Expected 25 items from the feed but got %d.", len(resp.Items))
 	}
@@ -349,7 +359,7 @@ func TestFeedWatcherWithTooRecentLastPoll(t *testing.T) {
 		HTTPResponseStatus:     "200 OK",
 		HTTPResponseStatusCode: 200,
 	}
-	_ = <-n.responseChan
+	n.StopPoll()
 
 	if afterCalls != 2 {
 		t.Fatalf("Expecting after to be called twice, called %d times", afterCalls)
@@ -374,7 +384,8 @@ func TestWithEmptyFeed(t *testing.T) {
 		HTTPResponseStatus:     "200 OK",
 		HTTPResponseStatusCode: 200,
 	}
-	resp := <-n.responseChan
+	n.StopPoll()
+	resp := n.LastCrawlResponse
 	if resp.Error == nil {
 		t.Fatalf("Expected and error on an empty feed. Got %d items", len(resp.Items))
 	}
@@ -394,11 +405,13 @@ func TestWithErrorOnCrawl(t *testing.T) {
 		HTTPResponseStatus:     "403 Forbidden",
 		HTTPResponseStatusCode: 403,
 	}
-	resp := <-n.responseChan
+	n.StopPoll()
+	resp := n.LastCrawlResponse
 	if resp.Error == nil {
 		t.Fatalf("Expected and error on an empty feed. Got %d items", len(resp.Items))
 	}
 
+	go n.PollFeed()
 	req = <-n.crawlChan
 	// No error on crawl, but got 403
 	req.ResponseChan <- &FeedCrawlResponse{
@@ -407,7 +420,8 @@ func TestWithErrorOnCrawl(t *testing.T) {
 		HTTPResponseStatus:     "403 Forbidden",
 		HTTPResponseStatusCode: 403,
 	}
-	resp = <-n.responseChan
+	n.StopPoll()
+	resp = n.LastCrawlResponse
 	if resp.Error == nil {
 		t.Fatalf("Expected and error on an empty feed.")
 	}
@@ -418,24 +432,15 @@ func TestWithErrorOnCrawl(t *testing.T) {
 
 func TestWithDoublePollFeed(t *testing.T) {
 	t.Parallel()
-	n, feedResp, _ := SetupTest(t, "../testdata/empty.rss")
-	OverrideAfter(n)
+	n, _, _ := SetupTest(t, "../testdata/empty.rss")
+	//OverrideAfter(n)
 	go n.PollFeed()
-
-	req := <-n.crawlChan
-
-	req.ResponseChan <- &FeedCrawlResponse{
-		URI:                    n.FeedInfo.URL,
-		Body:                   feedResp,
-		Error:                  nil,
-		HTTPResponseStatus:     "200 OK",
-		HTTPResponseStatusCode: 200,
-	}
-	resp := <-n.responseChan
-	if len(resp.Items) != 0 {
-		t.Fatalf("Expected 0 items from the feed but got %d.", len(resp.Items))
-	}
+	// Seems to be a problem where the lock isn't created fast enough if you call
+	// these back to back.
+	// FIXME: actually use goroutines the right way
+	time.Sleep(100 * time.Millisecond)
 	r := n.PollFeed()
+	n.StopPoll()
 	if r {
 		t.Fatal("Calling PollFeed twice should return false")
 	}

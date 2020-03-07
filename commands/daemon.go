@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/hobeone/rss2go/config"
@@ -11,14 +13,20 @@ import (
 	"github.com/hobeone/rss2go/mail"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/alecthomas/kingpin.v2"
+
+	"net/http"
+	// Enable pprof monitoring
+	_ "net/http/pprof"
 )
 
 type daemonCommand struct {
-	Config    *config.Config
-	DBH       *db.Handle
-	SendMail  bool
-	UpdateDB  bool
-	PollFeeds bool
+	Config      *config.Config
+	DBH         *db.Handle
+	SendMail    bool
+	UpdateDB    bool
+	PollFeeds   bool
+	ShowMem     bool
+	EnablePprof bool
 }
 
 func (dc *daemonCommand) init() {
@@ -30,6 +38,8 @@ func (dc *daemonCommand) configure(app *kingpin.Application) {
 	daemonCmd.Flag("send_mail", "Send mail on new items").Default("true").BoolVar(&dc.SendMail)
 	daemonCmd.Flag("db_updates", "Controls if the database is updated with new items").Default("true").BoolVar(&dc.UpdateDB)
 	daemonCmd.Flag("poll_feeds", "Poll the feeds (Disable for testing)").Default("true").BoolVar(&dc.PollFeeds)
+	daemonCmd.Flag("show_memory", "Print memory usage ever minute").Default("false").BoolVar(&dc.ShowMem)
+	daemonCmd.Flag("pprof", "Enable pprof http server").Default("false").BoolVar(&dc.EnablePprof)
 }
 
 func (dc *daemonCommand) run(c *kingpin.ParseContext) error {
@@ -45,6 +55,7 @@ func (dc *daemonCommand) run(c *kingpin.ParseContext) error {
 
 	d := NewDaemon(dc.Config)
 	d.PollFeeds = dc.PollFeeds
+	d.ShowMem = dc.ShowMem
 
 	allFeeds, err := d.DBH.GetAllFeedsWithUsers()
 	if err != nil {
@@ -55,11 +66,9 @@ func (dc *daemonCommand) run(c *kingpin.ParseContext) error {
 	logrus.Infof("Got %d feeds to watch.", len(allFeeds))
 
 	go d.feedDbUpdateLoop()
-
-	for {
-		_ = <-d.RespChan
+	if dc.EnablePprof {
+		logrus.Println(http.ListenAndServe("localhost:6060", nil))
 	}
-
 	return nil
 }
 
@@ -67,12 +76,12 @@ func (dc *daemonCommand) run(c *kingpin.ParseContext) error {
 type Daemon struct {
 	Config    *config.Config
 	CrawlChan chan *feedwatcher.FeedCrawlRequest
-	RespChan  chan *feedwatcher.FeedCrawlResponse
 	MailChan  chan *mail.Request
 	Feeds     map[string]*feedwatcher.FeedWatcher
 	DBH       *db.Handle
 	PollFeeds bool
 	Logger    logrus.FieldLogger
+	ShowMem   bool
 }
 
 // NewDaemon returns a pointer to a new Daemon struct with defaults set.
@@ -92,18 +101,17 @@ func NewDaemon(cfg *config.Config) *Daemon {
 		dbh = db.NewDBHandle(cfg.DB.Path, logger)
 	}
 	cc := make(chan *feedwatcher.FeedCrawlRequest, 1)
-	rc := make(chan *feedwatcher.FeedCrawlResponse)
 	mc := mail.CreateAndStartMailer(cfg).OutgoingMail
 
 	return &Daemon{
 		Config:    cfg,
 		CrawlChan: cc,
-		RespChan:  rc,
 		MailChan:  mc,
 		DBH:       dbh,
 		Feeds:     make(map[string]*feedwatcher.FeedWatcher),
 		PollFeeds: true,
 		Logger:    logger,
+		ShowMem:   false,
 	}
 }
 
@@ -114,9 +122,28 @@ func (d *Daemon) feedDbUpdateLoop() {
 	for {
 		time.Sleep(ival)
 		d.feedDbUpdate()
+		runtime.GC()
+		if d.ShowMem {
+			PrintMemUsage()
+		}
 	}
 }
 
+func bToMb(b uint64) uint64 {
+	return b / 1024 / 1024
+}
+
+// PrintMemUsage outputs the current, total and OS memory being used. As well as the number
+// of garage collection cycles completed.
+func PrintMemUsage() {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	// For info on each, see: https://golang.org/pkg/runtime/#MemStats
+	fmt.Printf("Alloc = %v MiB", bToMb(m.Alloc))
+	fmt.Printf("\tTotalAlloc = %v MiB", bToMb(m.TotalAlloc))
+	fmt.Printf("\tSys = %v MiB", bToMb(m.Sys))
+	fmt.Printf("\tNumGC = %v\n", m.NumGC)
+}
 func (d *Daemon) feedDbUpdate() {
 	dbFeeds, err := d.DBH.GetAllFeedsWithUsers()
 	if err != nil {
@@ -158,7 +185,6 @@ func (d *Daemon) startPollers(newFeeds []*db.FeedInfo) {
 		d.Feeds[f.URL] = feedwatcher.NewFeedWatcher(
 			*f,
 			d.CrawlChan,
-			d.RespChan,
 			d.MailChan,
 			d.DBH,
 			[]string{},

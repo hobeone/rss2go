@@ -71,7 +71,6 @@ func (fc *feedCommand) runone(c *kingpin.ParseContext) error {
 	}
 
 	httpCrawlChannel := make(chan *feedwatcher.FeedCrawlRequest, 1)
-	responseChannel := make(chan *feedwatcher.FeedCrawlResponse)
 
 	// start crawler pool
 	crawler.StartCrawlerPool(1, httpCrawlChannel)
@@ -79,7 +78,6 @@ func (fc *feedCommand) runone(c *kingpin.ParseContext) error {
 	fw := feedwatcher.NewFeedWatcher(
 		*feed,
 		httpCrawlChannel,
-		responseChannel,
 		mailer.OutgoingMail,
 		fc.DBH,
 		[]string{},
@@ -235,18 +233,17 @@ func (fc *feedCommand) test(c *kingpin.ParseContext) error {
 	if err != nil {
 		return err
 	}
-	feed, stories, err := feed.ParseFeed(url, body)
+	feed, err := feed.ParseFeed(url, body)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("Found %d items in feed:\n", len(stories))
-	fmt.Printf("  Url: %s\n", feed.URL)
+	fmt.Printf("Found %d items in feed:\n", len(feed.Items))
+	fmt.Printf("  Url: %s\n", feed.Link)
 	fmt.Printf("  Title: %s\n", feed.Title)
 	fmt.Printf("  Updated: %s\n", feed.Updated)
-	fmt.Printf("  NextUpdate: %s\n", feed.NextUpdate)
 	fmt.Printf("  Url: %s\n", feed.Link)
-	for i, s := range stories {
+	for i, s := range feed.Items {
 		fmt.Printf("%d)  %s\n", i, s.Title)
 		fmt.Printf("  Published  %s\n", s.Published)
 		fmt.Printf("  Updated  %s\n", s.Updated)

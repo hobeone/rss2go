@@ -5,7 +5,7 @@ import (
 
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
-	"github.com/hobeone/rss2go/feed_watcher"
+	feedwatcher "github.com/hobeone/rss2go/feed_watcher"
 )
 
 func TestConfigUpdater(t *testing.T) {
@@ -21,7 +21,7 @@ func TestConfigUpdater(t *testing.T) {
 	}
 
 	d.Feeds["http://test/url"] = feedwatcher.NewFeedWatcher(
-		*f, d.CrawlChan, d.RespChan, d.MailChan, d.DBH, []string{}, 300, 600,
+		*f, d.CrawlChan, d.MailChan, d.DBH, []string{}, 300, 600,
 	)
 
 	d.feedDbUpdate()

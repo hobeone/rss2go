@@ -11,9 +11,9 @@ import (
 
 	"gopkg.in/gomail.v2"
 
-	"github.com/sirupsen/logrus"
 	"github.com/hobeone/rss2go/db"
-	"github.com/hobeone/rss2go/feed"
+	"github.com/mmcdole/gofeed"
+	"github.com/sirupsen/logrus"
 )
 
 func NullLogger() logrus.FieldLogger {
@@ -47,10 +47,6 @@ func TestSendToUsers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error getting users: %v", err)
 	}
-	feeds, err := dbh.GetAllFeeds()
-	if err != nil {
-		t.Fatalf("Error getting feeds: %v", err)
-	}
 
 	mm := &MockedMailer{}
 	md := NewDispatcher(
@@ -58,12 +54,7 @@ func TestSendToUsers(t *testing.T) {
 		mm,
 	)
 
-	f := &feed.Feed{
-		URL: feeds[0].URL,
-	}
-	s := &feed.Story{
-		Feed: f,
-	}
+	s := &gofeed.Item{}
 	mr := Request{
 		Item: s,
 		Addresses: []mail.Address{

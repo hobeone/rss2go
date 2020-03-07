@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"net/http"
@@ -28,6 +27,7 @@ import (
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed"
 	"github.com/hobeone/rss2go/mail"
+	"github.com/mmcdole/gofeed"
 	"github.com/sirupsen/logrus"
 )
 
@@ -68,8 +68,8 @@ type FeedCrawlRequest struct {
 type FeedCrawlResponse struct {
 	URI                    string
 	Body                   []byte
-	Feed                   *feed.Feed
-	Items                  []*feed.Story
+	Feed                   *gofeed.Feed
+	Items                  []*gofeed.Item
 	HTTPResponseStatus     string
 	HTTPResponseStatusCode int
 	Error                  error
@@ -81,7 +81,6 @@ type FeedWatcher struct {
 	FeedInfo          db.FeedInfo
 	exitChan          chan int
 	crawlChan         chan *FeedCrawlRequest
-	responseChan      chan *FeedCrawlResponse
 	mailerChan        chan *mail.Request
 	pollWG            sync.WaitGroup
 	polling           bool // make sure only one PollFeed at a time
@@ -93,13 +92,13 @@ type FeedWatcher struct {
 	LastCrawlResponse *FeedCrawlResponse
 	After             func(d time.Duration) <-chan time.Time // Allow for mocking out in test.
 	Logger            logrus.FieldLogger
+	saveResponse      bool // hack for testing, need to figure out a better way for this.
 }
 
 // NewFeedWatcher returns a new FeedWatcher instance.
 func NewFeedWatcher(
 	feedInfo db.FeedInfo,
 	crawlChan chan *FeedCrawlRequest,
-	responseChan chan *FeedCrawlResponse,
 	mailChan chan *mail.Request,
 	dbh db.Service,
 	GUIDCache []string,
@@ -114,7 +113,6 @@ func NewFeedWatcher(
 		FeedInfo:          feedInfo,
 		exitChan:          make(chan int),
 		crawlChan:         crawlChan,
-		responseChan:      responseChan,
 		mailerChan:        mailChan,
 		polling:           false,
 		crawling:          false,
@@ -178,11 +176,14 @@ func (fw *FeedWatcher) UpdateFeed(resp *FeedCrawlResponse) error {
 		if resp.HTTPResponseStatusCode != http.StatusOK {
 			fw.FeedInfo.LastPollError = fmt.Sprintf("Non 200 HTTP Status Code: %d, %v", resp.HTTPResponseStatusCode, resp.Error)
 		}
-		bod, err := ioutil.ReadAll(bytes.NewReader(resp.Body))
+		// Limit to 1024 bytes as this will stay in memory.
+		respErr := make([]byte, 1024)
+		bodyReader := bytes.NewReader(resp.Body)
+		_, err := bodyReader.Read(respErr)
 		if err != nil {
 			fw.FeedInfo.LastErrorResponse = fmt.Sprintf("rss2go: Couldn't read response: %v", err)
 		} else {
-			fw.FeedInfo.LastErrorResponse = string(bod)
+			fw.FeedInfo.LastErrorResponse = string(respErr)
 		}
 	} else {
 		fw.updateFeed(resp)
@@ -190,11 +191,14 @@ func (fw *FeedWatcher) UpdateFeed(resp *FeedCrawlResponse) error {
 		// Update DB Record
 		if resp.Error != nil {
 			fw.FeedInfo.LastPollError = resp.Error.Error()
-			bod, err := ioutil.ReadAll(bytes.NewReader(resp.Body))
+			respErr := make([]byte, 1024)
+			bodyReader := bytes.NewReader(resp.Body)
+			_, err := bodyReader.Read(respErr)
+
 			if err != nil {
 				fw.FeedInfo.LastErrorResponse = fmt.Sprintf("rss2go: Couldn't read response: %v", err)
 			} else {
-				fw.FeedInfo.LastErrorResponse = string(bod)
+				fw.FeedInfo.LastErrorResponse = string(respErr)
 			}
 		} else {
 			if fw.FeedInfo.SiteURL == "" {
@@ -224,9 +228,9 @@ func (fw *FeedWatcher) UpdateFeed(resp *FeedCrawlResponse) error {
 // - Items with the items in the feed
 // - Error any errors encountered in parsing or handling the feed
 func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
-	feed, stories, err := feed.ParseFeed(resp.URI, resp.Body)
+	feed, err := feed.ParseFeed(resp.URI, resp.Body)
 
-	if feed == nil || stories == nil || len(stories) == 0 {
+	if feed == nil || len(feed.Items) == 0 {
 		if err != nil {
 			resp.Error = fmt.Errorf("Error parsing response from %s: %#v", resp.URI, err)
 			fw.Logger.Error(resp.Error)
@@ -251,9 +255,9 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 	// they exist in the DB.  That should be the maximum we should need to
 	// load into memory.
 
-	guidsToLoad := int(math.Ceil(float64(len(stories)) * guidCacheSize))
+	guidsToLoad := int(math.Ceil(float64(len(feed.Items)) * guidCacheSize))
 
-	fw.Logger.Infof("Got %d stories from feed %s.", len(stories), fw.FeedInfo.URL)
+	fw.Logger.Infof("Got %d stories from feed %s.", len(feed.Items), fw.FeedInfo.URL)
 
 	// On first pass or no stories ever seen
 	if len(fw.GUIDCache) == 0 {
@@ -266,7 +270,7 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 		fw.Logger.Infof("Loaded %d known guids for Feed %s.", len(fw.GUIDCache), fw.FeedInfo.URL)
 	}
 
-	resp.Items = fw.filterNewItems(stories)
+	resp.Items = fw.filterNewItems(feed.Items)
 	fw.Logger.Infof("Feed %s has %d new items", feed.Title, len(resp.Items))
 
 	handledItems := 0
@@ -281,13 +285,13 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 			// a bit. So skip the rest of the items.
 			break
 		} else {
-			err := fw.recordGUID(item.ID)
+			err := fw.recordGUID(item.GUID)
 			if err != nil {
 				e := fmt.Errorf("error writing guid to db: %s", err)
 				resp.Error = e
 				fw.Logger.Info(e)
 			} else {
-				fw.Logger.Infof("Added guid %s for feed %s", item.ID, fw.FeedInfo.URL)
+				fw.Logger.Infof("Added guid %s for feed %s", item.GUID, fw.FeedInfo.URL)
 			}
 		}
 		handledItems++
@@ -309,8 +313,8 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 // PollFeed is designed to be called as a Goroutine.  Use UpdateFeed to just update once.
 func (fw *FeedWatcher) PollFeed() bool {
 	if !fw.lockPoll() {
-		fw.Logger.Infof("Called PollLoop on %v when already polling. ignoring.\n",
-			fw.FeedInfo.URL)
+		//fw.Logger.Infof("Called PollFeed on %v when already polling. ignoring.\n",
+		//	fw.FeedInfo.URL)
 		return false
 	}
 	defer fw.unlockPoll()
@@ -335,18 +339,19 @@ func (fw *FeedWatcher) PollFeed() bool {
 			resp := fw.CrawlFeed()
 			if resp.Error == ErrCrawlerNotAvailable {
 				toSleep = fw.minSleepTime
-				fw.Logger.Infof("No crawler available, sleeping.")
+				//fw.Logger.Infof("No crawler available, sleeping.")
 				break
 			}
-			fw.LastCrawlResponse = resp
 			err := fw.UpdateFeed(resp)
 			if err != nil {
 				fw.Logger.Errorf("Error updating feed information: %s", err)
 			}
-			fw.responseChan <- fw.LastCrawlResponse
+			if fw.saveResponse {
+				fw.LastCrawlResponse = resp
+			}
 			toSleep = fw.minSleepTime
-			if fw.LastCrawlResponse.Error != nil {
-				switch fw.LastCrawlResponse.Error.(type) {
+			if resp.Error != nil {
+				switch resp.Error.(type) {
 				case *ErrMailDeliveryFailed:
 					toSleep = fw.minSleepTime
 					fw.Logger.Infof("Feed %s had mail delivery error. Sleeping for %v ", fw.FeedInfo.URL, toSleep)
@@ -355,6 +360,7 @@ func (fw *FeedWatcher) PollFeed() bool {
 					fw.Logger.Infof("Feed %s had error. Waiting maxium allowed time before next poll.", fw.FeedInfo.URL)
 				}
 			}
+			fw.Logger.Infof("Feed %s sleeping for: %v", fw.FeedInfo.URL, toSleep)
 		}
 	}
 }
@@ -385,16 +391,16 @@ func (fw *FeedWatcher) recordGUID(guid string) error {
 	return fw.dbh.RecordGUID(fw.FeedInfo.ID, guid)
 }
 
-func (fw *FeedWatcher) filterNewItems(stories []*feed.Story) []*feed.Story {
+func (fw *FeedWatcher) filterNewItems(stories []*gofeed.Item) []*gofeed.Item {
 	fw.Logger.Infof("Filtering stories we already know about.")
-	newStories := []*feed.Story{}
+	newStories := []*gofeed.Item{}
 	for _, story := range stories {
-		if _, found := fw.GUIDCache[story.ID]; !found {
-			_, err := fw.dbh.GetFeedItemByGUID(fw.FeedInfo.ID, story.ID)
+		if _, found := fw.GUIDCache[story.GUID]; !found {
+			_, err := fw.dbh.GetFeedItemByGUID(fw.FeedInfo.ID, story.GUID)
 			if err == nil {
-				fw.Logger.Errorf("Got story with known ID that wasn't in GUIDCache, skipping and adding to cache. Feed: %s (%d) - GUID: '%s'", fw.FeedInfo.URL, fw.FeedInfo.ID, story.ID)
-				fw.dbh.RecordGUID(fw.FeedInfo.ID, story.ID)
-				fw.GUIDCache[story.ID] = true
+				fw.Logger.Errorf("Got story with known ID that wasn't in GUIDCache, skipping and adding to cache. Feed: %s (%d) - GUID: '%s'", fw.FeedInfo.URL, fw.FeedInfo.ID, story.GUID)
+				fw.dbh.RecordGUID(fw.FeedInfo.ID, story.GUID)
+				fw.GUIDCache[story.GUID] = true
 				continue
 			}
 			newStories = append(newStories, story)
@@ -403,7 +409,7 @@ func (fw *FeedWatcher) filterNewItems(stories []*feed.Story) []*feed.Story {
 	return newStories
 }
 
-func (fw *FeedWatcher) sendMail(item *feed.Story) error {
+func (fw *FeedWatcher) sendMail(item *gofeed.Item) error {
 	users, err := fw.dbh.GetFeedUsers(fw.FeedInfo.URL)
 	if err != nil {
 		return err
@@ -456,7 +462,8 @@ func (fw *FeedWatcher) CrawlFeed() (r *FeedCrawlResponse) {
 // StopPoll will cause the PollFeed loop to exit.
 func (fw *FeedWatcher) StopPoll() {
 	if fw.Polling() {
-		close(fw.exitChan)
+		fw.exitChan <- 1
+		//close(fw.exitChan)
 	}
 	fw.pollWG.Wait()
 }

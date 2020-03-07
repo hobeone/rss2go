@@ -7,7 +7,7 @@
 
 <pubDate>Sun, 13 Oct 2013 00:05:10 GMT</pubDate>
 
-<item><title>Bad entity: &</title>
+<item><title>Bad entity: Test & Test &amp; Test</title>
 <description>testing</description>
 <link>http://test/test</link>
 <pubDate>Wed, 10 Jul 2013 11:20:44 GMT</pubDate>
