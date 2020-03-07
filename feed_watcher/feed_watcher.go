@@ -93,6 +93,7 @@ type FeedWatcher struct {
 	After             func(d time.Duration) <-chan time.Time // Allow for mocking out in test.
 	Logger            logrus.FieldLogger
 	saveResponse      bool // hack for testing, need to figure out a better way for this.
+	pSync             sync.Mutex
 }
 
 // NewFeedWatcher returns a new FeedWatcher instance.
@@ -127,6 +128,8 @@ func NewFeedWatcher(
 }
 
 func (fw *FeedWatcher) lockPoll() bool {
+	fw.pSync.Lock()
+	defer fw.pSync.Unlock()
 	if fw.polling {
 		return false
 	}
@@ -136,6 +139,9 @@ func (fw *FeedWatcher) lockPoll() bool {
 }
 
 func (fw *FeedWatcher) unlockPoll() bool {
+	fw.pSync.Lock()
+	defer fw.pSync.Unlock()
+
 	fw.polling = false
 	fw.pollWG.Done()
 	return true
