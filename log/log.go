@@ -9,7 +9,10 @@ import (
 )
 
 func SetupLogger(logger *logrus.Logger) {
-	fmter := &prefixed.TextFormatter{}
+	fmter := &prefixed.TextFormatter{
+		FullTimestamp: true,
+	}
+
 	logger.Formatter = fmter
 	logger.Out = os.Stdout
 	// Only log the info severity or above.
