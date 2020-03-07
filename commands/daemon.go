@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/hobeone/rss2go/config"
@@ -82,6 +83,7 @@ type Daemon struct {
 	PollFeeds bool
 	Logger    logrus.FieldLogger
 	ShowMem   bool
+	pollWG    sync.WaitGroup
 }
 
 // NewDaemon returns a pointer to a new Daemon struct with defaults set.
@@ -112,6 +114,7 @@ func NewDaemon(cfg *config.Config) *Daemon {
 		PollFeeds: true,
 		Logger:    logger,
 		ShowMem:   false,
+		pollWG:    sync.WaitGroup{},
 	}
 }
 
@@ -144,6 +147,7 @@ func PrintMemUsage() {
 	fmt.Printf("\tSys = %v MiB", bToMb(m.Sys))
 	fmt.Printf("\tNumGC = %v\n", m.NumGC)
 }
+
 func (d *Daemon) feedDbUpdate() {
 	dbFeeds, err := d.DBH.GetAllFeedsWithUsers()
 	if err != nil {
@@ -192,6 +196,7 @@ func (d *Daemon) startPollers(newFeeds []*db.FeedInfo) {
 			d.Config.Crawl.MaxInterval,
 		)
 		if d.PollFeeds {
+			d.pollWG.Add(1)
 			go d.Feeds[f.URL].PollFeed()
 		}
 	}
@@ -204,4 +209,5 @@ func (d *Daemon) CreateAndStartFeedWatchers(feeds []*db.FeedInfo) {
 
 	// Start Polling
 	d.startPollers(feeds)
+	d.pollWG.Wait()
 }
