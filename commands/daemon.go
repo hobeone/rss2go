@@ -57,7 +57,6 @@ func (dc *daemonCommand) run(c *kingpin.ParseContext) error {
 	d := NewDaemon(dc.Config)
 	d.PollFeeds = dc.PollFeeds
 	d.ShowMem = dc.ShowMem
-
 	allFeeds, err := d.DBH.GetAllFeedsWithUsers()
 	if err != nil {
 		logrus.Fatal(err.Error())
@@ -70,6 +69,7 @@ func (dc *daemonCommand) run(c *kingpin.ParseContext) error {
 	if dc.EnablePprof {
 		logrus.Println(http.ListenAndServe("localhost:6060", nil))
 	}
+	d.pollWG.Wait()
 	return nil
 }
 
@@ -209,5 +209,4 @@ func (d *Daemon) CreateAndStartFeedWatchers(feeds []*db.FeedInfo) {
 
 	// Start Polling
 	d.startPollers(feeds)
-	d.pollWG.Wait()
 }
