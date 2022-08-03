@@ -1,17 +1,19 @@
 package crawler
 
 import (
+	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httputil"
 	"time"
 
 	feedwatcher "github.com/hobeone/rss2go/feed_watcher"
-	"github.com/hobeone/rss2go/httpclient"
 	"github.com/sirupsen/logrus"
 )
+
+const Accept = "application/rss+xml, application/rdf+xml;q=0.8, application/atom+xml;q=0.6, application/xml;q=0.4, text/xml;q=0.4"
+const UserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36"
 
 // GetFeed gets a URL and returns a http.Response.
 // Sets a reasonable timeout on the connection and read from the server.
@@ -19,21 +21,18 @@ import (
 func GetFeed(url string, client *http.Client) (*http.Response, error) {
 	logrus.Infof("Crawling %v", url)
 
-	// Defaults to 1 second for connect and read
-	connectTimeout := (5 * time.Second)
-	readWriteTimeout := (15 * time.Second)
-
 	if client == nil {
-		client = httpclient.NewTimeoutClient(connectTimeout, readWriteTimeout)
+		client = &http.Client{}
 	}
 
-	req, err := http.NewRequest("GET", url, nil)
+	ctx, _ := context.WithTimeout(context.Background(), 20*time.Second)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		logrus.Errorf("Error creating request: %v", err)
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/rss+xml, application/rdf+xml;q=0.8, application/atom+xml;q=0.6, application/xml;q=0.4, text/xml;q=0.4")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36")
+	req.Header.Set("Accept", Accept)
+	req.Header.Set("User-Agent", UserAgent)
 
 	requestDump, err := httputil.DumpRequestOut(req, true)
 	if err != nil {
@@ -83,11 +82,12 @@ func GetFeedAndMakeResponse(url string, client *http.Client) *feedwatcher.FeedCr
 		}
 		resp.Body = b
 	} else {
-		resp.Body, resp.Error = ioutil.ReadAll(r.Body)
+		resp.Body, err = io.ReadAll(r.Body)
 		if err != nil {
 			resp.Error = fmt.Errorf("error reading response for %s: %s", url, err)
 		}
 	}
+
 	return resp
 }
 

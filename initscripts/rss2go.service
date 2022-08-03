@@ -1,0 +1,12 @@
+[Unit]
+Description=RSS2GO Daemon
+
+[Service]
+User=YOURUSER
+Group=YOURUSER
+LimitMEMLOCK=2048000
+Type=simple
+ExecStart=/usr/bin/rss2go daemon --quiet --config /home/YOURUSER/.config/rss2go/config.json
+
+[Install]
+WantedBy=multi-user.target

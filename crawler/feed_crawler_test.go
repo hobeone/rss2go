@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
+	feedwatcher "github.com/hobeone/rss2go/feed_watcher"
 	"github.com/sirupsen/logrus"
-	"github.com/hobeone/rss2go/feed_watcher"
 )
 
 func TestFeedCrawler(t *testing.T) {
@@ -78,6 +78,7 @@ func TestGetFeed(t *testing.T) {
 
 func TestGetFeedAndMakeResponse(t *testing.T) {
 	t.Parallel()
+
 	dialErrorClient := &http.Client{
 		Transport: &http.Transport{
 			Dial: func(netw, addr string) (net.Conn, error) {
