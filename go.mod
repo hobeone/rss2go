@@ -6,7 +6,6 @@ toolchain go1.21.0
 
 require (
 	github.com/PuerkitoBio/goquery v1.8.1
-	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 // indirect
 	github.com/alecthomas/units v0.0.0-20231202071711-9a357b53e9c9 // indirect
 	github.com/bgentry/speakeasy v0.1.0
 	github.com/davecgh/go-spew v1.1.1
@@ -30,11 +29,12 @@ require (
 	golang.org/x/sys v0.15.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
-	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
+
+require github.com/alecthomas/kingpin/v2 v2.4.0
 
 require (
 	github.com/andybalholm/cascadia v1.3.2 // indirect
@@ -42,5 +42,6 @@ require (
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
+	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
 	golang.org/x/term v0.15.0 // indirect
 )

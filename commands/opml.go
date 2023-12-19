@@ -8,12 +8,12 @@ import (
 
 	"golang.org/x/net/html/charset"
 
-	"github.com/sirupsen/logrus"
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/opml"
 	"github.com/mattn/go-sqlite3"
-	"gopkg.in/alecthomas/kingpin.v2"
+	"github.com/sirupsen/logrus"
 )
 
 type opmlCommand struct {

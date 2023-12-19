@@ -1,10 +1,10 @@
 package commands
 
 import (
-	"github.com/sirupsen/logrus"
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
-	"gopkg.in/alecthomas/kingpin.v2"
+	"github.com/sirupsen/logrus"
 )
 
 type createDBCommand struct {

@@ -1,9 +1,9 @@
 package commands
 
 import (
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hobeone/rss2go/config"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 type showconfigCommand struct {

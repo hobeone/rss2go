@@ -1,11 +1,11 @@
 package commands
 
 import (
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/log"
 	"github.com/sirupsen/logrus"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 const defaultConfig = "~/.config/rss2go/config.json"

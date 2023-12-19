@@ -3,10 +3,10 @@ package commands
 import (
 	"fmt"
 
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/bgentry/speakeasy"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 type userCommand struct {

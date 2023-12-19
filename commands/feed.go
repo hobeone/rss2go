@@ -17,7 +17,7 @@ import (
 	feedwatcher "github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/mail"
 
-	"gopkg.in/alecthomas/kingpin.v2"
+	"github.com/alecthomas/kingpin/v2"
 
 	netmail "net/mail"
 )

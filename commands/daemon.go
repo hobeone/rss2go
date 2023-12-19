@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/db"
@@ -13,7 +14,6 @@ import (
 	"github.com/hobeone/rss2go/log"
 	"github.com/hobeone/rss2go/mail"
 	"github.com/sirupsen/logrus"
-	"gopkg.in/alecthomas/kingpin.v2"
 
 	"net/http"
 	// Enable pprof monitoring
