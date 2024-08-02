@@ -138,11 +138,6 @@ func (uc *userCommand) add() error {
 	return nil
 }
 
-func (uc *userCommand) deleteCmd(c *kingpin.ParseContext) error {
-	uc.init()
-	return uc.delete()
-}
-
 func (uc *userCommand) delete() error {
 	err := uc.DBH.RemoveUserByEmail(uc.Email)
 	if err != nil {
@@ -177,11 +172,6 @@ func (uc *userCommand) subscribe() error {
 
 	fmt.Printf("Subscribed user %s to %d feed.\n", uc.Email, len(uc.Feeds))
 	return nil
-}
-
-func (uc *userCommand) unsubscribeCmd(c *kingpin.ParseContext) error {
-	uc.init()
-	return uc.unsubscribe()
 }
 
 func (uc *userCommand) unsubscribe() error {

@@ -64,7 +64,6 @@ type FeedCrawlRequest struct {
 //
 // Body, Feed, Items and HTTPResponseStatus are only guaranteed to be non zero
 // value if Error is non nil.
-//
 type FeedCrawlResponse struct {
 	URI                    string
 	Body                   []byte
@@ -177,7 +176,7 @@ func (fw *FeedWatcher) UpdateFeed(resp *FeedCrawlResponse) error {
 	fw.FeedInfo.LastPollTime = time.Now()
 	fw.FeedInfo.LastPollError = ""
 	fw.FeedInfo.LastErrorResponse = ""
-
+	fw.Logger.Infof("updating feed")
 	if resp.HTTPResponseStatusCode != http.StatusOK || resp.Error != nil {
 		if resp.HTTPResponseStatusCode != http.StatusOK {
 			fw.FeedInfo.LastPollError = fmt.Sprintf("Non 200 HTTP Status Code: %d, %v", resp.HTTPResponseStatusCode, resp.Error)
@@ -192,7 +191,9 @@ func (fw *FeedWatcher) UpdateFeed(resp *FeedCrawlResponse) error {
 			fw.FeedInfo.LastErrorResponse = string(respErr)
 		}
 	} else {
-		fw.updateFeed(resp)
+		if updateErr := fw.updateFeed(resp); updateErr != nil {
+			fw.Logger.Errorf("Feed error: %s", updateErr)
+		}
 
 		// Update DB Record
 		if resp.Error != nil {
@@ -345,11 +346,12 @@ func (fw *FeedWatcher) PollFeed() bool {
 			resp := fw.CrawlFeed()
 			if resp.Error == ErrCrawlerNotAvailable {
 				toSleep = fw.minSleepTime
-				//fw.Logger.Infof("No crawler available, sleeping.")
+				fw.Logger.Infof("No crawler available, sleeping.")
 				break
 			}
 			err := fw.UpdateFeed(resp)
 			if err != nil {
+				fmt.Println(err)
 				fw.Logger.Errorf("Error updating feed information: %s", err)
 			}
 			if fw.saveResponse {
@@ -405,7 +407,9 @@ func (fw *FeedWatcher) filterNewItems(stories []*gofeed.Item) []*gofeed.Item {
 			_, err := fw.dbh.GetFeedItemByGUID(fw.FeedInfo.ID, story.GUID)
 			if err == nil {
 				fw.Logger.Errorf("Got story with known ID that wasn't in GUIDCache, skipping and adding to cache. Feed: %s (%d) - GUID: '%s'", fw.FeedInfo.URL, fw.FeedInfo.ID, story.GUID)
-				fw.dbh.RecordGUID(fw.FeedInfo.ID, story.GUID)
+				if guidErr := fw.dbh.RecordGUID(fw.FeedInfo.ID, story.GUID); guidErr != nil {
+					logrus.Errorf("Error updating GUID: %s", guidErr)
+				}
 				fw.GUIDCache[story.GUID] = true
 				continue
 			}

@@ -2,10 +2,10 @@ package crawler
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -70,7 +70,7 @@ func TestGetFeed(t *testing.T) {
 		},
 	}
 
-	resp, err = GetFeed(fmt.Sprintf("%s/%s", ts.URL, "timeout"), dialErrorClient)
+	_, err = GetFeed(fmt.Sprintf("%s/%s", ts.URL, "timeout"), dialErrorClient)
 	if err == nil {
 		t.Fatalf("Should have gotten timeout")
 	}
@@ -118,13 +118,13 @@ var fakeServerHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Req
 	w.Header().Set("Content-Type", "text/html")
 	switch {
 	case strings.HasSuffix(r.URL.Path, "ars.rss"):
-		feedResp, err := ioutil.ReadFile("../testdata/ars.rss")
+		feedResp, err := os.ReadFile("../testdata/ars.rss")
 		if err != nil {
 			logrus.Fatalf("Error reading test feed: %s", err.Error())
 		}
 		content = feedResp
 	case strings.HasSuffix(r.URL.Path, "ars_with_content_length.rss"):
-		feedResp, err := ioutil.ReadFile("../testdata/ars.rss")
+		feedResp, err := os.ReadFile("../testdata/ars.rss")
 		if err != nil {
 			logrus.Fatalf("Error reading test feed: %s", err.Error())
 		}
@@ -139,5 +139,5 @@ var fakeServerHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Req
 	case true:
 		content = []byte("456")
 	}
-	w.Write([]byte(content))
+	_, _ = w.Write([]byte(content))
 })

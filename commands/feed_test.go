@@ -1,17 +1,17 @@
 package commands
 
 import (
-	"io/ioutil"
+	"io"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
+	"github.com/sirupsen/logrus"
 )
 
 func NullLogger() logrus.FieldLogger {
 	l := logrus.New()
-	l.Out = ioutil.Discard
+	l.Out = io.Discard
 	return l
 }
 
@@ -64,6 +64,9 @@ func TestAddFeedWithUsers(t *testing.T) {
 	}
 
 	users, err := fcmd.DBH.GetFeedUsers(testFeedURL)
+	if err != nil {
+		t.Errorf("Error getting feed users: %s", err)
+	}
 	for _, user := range users {
 		if user.Email == testUserEmail {
 			return

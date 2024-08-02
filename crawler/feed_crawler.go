@@ -26,6 +26,7 @@ func GetFeed(url string, client *http.Client) (*http.Response, error) {
 	}
 
 	ctx, _ := context.WithTimeout(context.Background(), 20*time.Second)
+	//defer cancelFunc()
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		logrus.Errorf("Error creating request: %v", err)
@@ -96,10 +97,8 @@ func GetFeedAndMakeResponse(url string, client *http.Client) *feedwatcher.FeedCr
 func FeedCrawler(crawlRequests chan *feedwatcher.FeedCrawlRequest) {
 	for {
 		logrus.Info("Waiting on request")
-		select {
-		case req := <-crawlRequests:
-			req.ResponseChan <- GetFeedAndMakeResponse(req.URI, nil)
-		}
+		req := <-crawlRequests
+		req.ResponseChan <- GetFeedAndMakeResponse(req.URI, nil)
 	}
 }
 

@@ -369,7 +369,7 @@ func TestGetFeedItemByGuid(t *testing.T) {
 	}
 
 	// Should return error on no guid
-	guid, err = d.GetFeedItemByGUID(-1, "feed0GUID")
+	_, err = d.GetFeedItemByGUID(-1, "feed0GUID")
 	if err == nil {
 		t.Fatalf("Expected error getting item by GUID, got nothing")
 	}
@@ -388,9 +388,19 @@ func TestRemoveUserByEmail(t *testing.T) {
 func TestGetStaleFeeds(t *testing.T) {
 	t.Parallel()
 	d := NewMemoryDBHandle(NullLogger(), true)
-	d.RecordGUID(1, "foobar")
-	d.RecordGUID(2, "foobaz")
-	d.RecordGUID(3, "foobaz")
+	var guidData = []struct {
+		id   int64
+		guid string
+	}{
+		{1, "foobar"},
+		{2, "foobaz"},
+		{3, "foobaz"},
+	}
+	for _, tdata := range guidData {
+		if writeErr := d.RecordGUID(tdata.id, tdata.guid); writeErr != nil {
+			t.Fatalf("Error writing test data: %s", writeErr)
+		}
+	}
 	guid, err := d.GetFeedItemByGUID(1, "foobar")
 	if err != nil {
 		t.Fatalf("Got unexpected error from db: %s", err)
@@ -418,9 +428,19 @@ func TestGetStaleFeeds(t *testing.T) {
 func TestGetUserStaleFeeds(t *testing.T) {
 	t.Parallel()
 	d := NewMemoryDBHandle(NullLogger(), true)
-	d.RecordGUID(1, "foobar")
-	d.RecordGUID(2, "foobaz")
-	d.RecordGUID(3, "foobaz")
+	var guidData = []struct {
+		id   int64
+		guid string
+	}{
+		{1, "foobar"},
+		{2, "foobaz"},
+		{3, "foobaz"},
+	}
+	for _, tdata := range guidData {
+		if writeErr := d.RecordGUID(tdata.id, tdata.guid); writeErr != nil {
+			t.Fatalf("Error writing test data: %s", writeErr)
+		}
+	}
 	guid, err := d.GetFeedItemByGUID(1, "foobar")
 	if err != nil {
 		t.Fatalf("Got unexpected error from db: %s", err)
@@ -507,7 +527,7 @@ func TestAddRemoveUser(t *testing.T) {
 		t.Fatalf("Expected nil user return, got %v", dupUser)
 	}
 
-	dupUser, err = d.AddUser("extra"+userName, userEmail, "pass")
+	_, err = d.AddUser("extra"+userName, userEmail, "pass")
 	if err == nil {
 		t.Fatalf("Expected error, got none")
 	}
@@ -683,13 +703,17 @@ func TestUpdateUsersFeeds(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(newFeeds) != 0 {
+	if len(newFeeds) != 3 {
+		t.Fatalf("Expected 0 feeds, got %d", len(newFeeds))
 	}
 	feedIDs := make([]int64, len(feeds))
 	for i := range feeds {
 		feedIDs[i] = feeds[i].ID
 	}
-	d.UpdateUsersFeeds(&users[0], feedIDs)
+	err = d.UpdateUsersFeeds(&users[0], feedIDs)
+	if err != nil {
+		t.Fatalf("Error update feeds %s", err)
+	}
 
 	newFeeds, err = d.GetUsersFeeds(&users[0])
 	if err != nil {

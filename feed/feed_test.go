@@ -1,7 +1,8 @@
 package feed
 
 import (
-	"io/ioutil"
+	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -11,12 +12,12 @@ import (
 
 func NullLogger() logrus.FieldLogger {
 	l := logrus.New()
-	l.Out = ioutil.Discard
+	l.Out = io.Discard
 	return l
 }
 
 func TestParseFeed(t *testing.T) {
-	feedResp, err := ioutil.ReadFile("../testdata/ars.rss")
+	feedResp, err := os.ReadFile("../testdata/ars.rss")
 	if err != nil {
 		t.Fatal("Error reading test feed.")
 	}
@@ -28,7 +29,7 @@ func TestParseFeed(t *testing.T) {
 }
 
 func TestParseFeedInvalidUTF(t *testing.T) {
-	feedResp, err := ioutil.ReadFile("../testdata/rapha_all.xml")
+	feedResp, err := os.ReadFile("../testdata/rapha_all.xml")
 	if err != nil {
 		t.Fatal("Error reading test feed.")
 	}
@@ -43,7 +44,7 @@ func TestParseFeedInvalidUTF(t *testing.T) {
 }
 
 func TestFeedWithBadEntity(t *testing.T) {
-	feedResp, err := ioutil.ReadFile("../testdata/bad_entity.rss")
+	feedResp, err := os.ReadFile("../testdata/bad_entity.rss")
 	if err != nil {
 		t.Fatal("Error reading test feed.")
 	}
@@ -55,7 +56,7 @@ func TestFeedWithBadEntity(t *testing.T) {
 }
 
 func TestFeedIframeExtraction(t *testing.T) {
-	feedResp, err := ioutil.ReadFile("../testdata/milanofixed.rss")
+	feedResp, err := os.ReadFile("../testdata/milanofixed.rss")
 	if err != nil {
 		t.Fatal("Error reading test feed.")
 	}
@@ -71,7 +72,7 @@ func TestFeedIframeExtraction(t *testing.T) {
 }
 
 func TestBoingBoingFeedIframeExtraction(t *testing.T) {
-	feedResp, err := ioutil.ReadFile("../testdata/boingboing.rss")
+	feedResp, err := os.ReadFile("../testdata/boingboing.rss")
 	if err != nil {
 		t.Fatal("Error reading test feed.")
 	}
@@ -90,7 +91,7 @@ func TestBoingBoingFeedIframeExtraction(t *testing.T) {
 }
 
 func TestRadavistImageSizer(t *testing.T) {
-	feedResp, err := ioutil.ReadFile("../testdata/radavist.rss")
+	feedResp, err := os.ReadFile("../testdata/radavist.rss")
 	if err != nil {
 		t.Fatal("Error reading test feed.")
 	}
@@ -105,7 +106,7 @@ func TestRadavistImageSizer(t *testing.T) {
 	}
 }
 func TestFeedBurnerSocialFlareRemover(t *testing.T) {
-	feedResp, err := ioutil.ReadFile("../testdata/seriouseatsfeaturesvideos.atom")
+	feedResp, err := os.ReadFile("../testdata/seriouseatsfeaturesvideos.atom")
 	if err != nil {
 		t.Fatal("Error reading test feed.")
 	}

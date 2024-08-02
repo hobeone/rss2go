@@ -277,16 +277,22 @@ func (d *Handle) RemoveFeed(url string) error {
 	if err == nil {
 		_, err = tx.Exec("DELETE FROM feed_item WHERE feed_info_id = ?", f.ID)
 		if err != nil {
-			tx.Rollback()
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				return rollbackErr
+			}
 			return err
 		}
 		_, err = tx.Exec("DELETE FROM user_feeds WHERE feed_info_id = ?", f.ID)
 		if err != nil {
-			tx.Rollback()
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				return rollbackErr
+			}
 			return err
 		}
 	}
-	tx.Commit()
+	if commitErr := tx.Commit(); commitErr != nil {
+		return commitErr
+	}
 	return nil
 }
 
@@ -590,15 +596,21 @@ func (d *Handle) unsafeRemoveUser(user *User) error {
 	}
 	_, err = tx.Exec("DELETE FROM user_feeds WHERE user_id = ?", user.ID)
 	if err != nil {
-		tx.Rollback()
+		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			return rollbackErr
+		}
 		return err
 	}
 	_, err = tx.Exec("DELETE FROM user WHERE id = ?", user.ID)
 	if err != nil {
-		tx.Rollback()
+		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			return rollbackErr
+		}
 		return err
 	}
-	tx.Commit()
+	if commitErr := tx.Commit(); commitErr != nil {
+		return commitErr
+	}
 	return nil
 }
 
@@ -626,7 +638,7 @@ func (d *Handle) AddFeedsToUser(u *User, feeds []*FeedInfo) error {
 		VALUES((select id from user_feeds WHERE user_id = ? AND feed_info_id = ?), ?, ?)`,
 			u.ID, f.ID, u.ID, f.ID)
 		if err != nil {
-			return err
+			return fmt.Errorf("AddFeedsToUser Error: %s", err)
 		}
 	}
 	return nil
@@ -645,11 +657,11 @@ func (d *Handle) RemoveFeedsFromUser(u *User, feeds []*FeedInfo) error {
 	q := `DELETE FROM user_feeds WHERE user_id = ? AND feed_info_id IN (?)`
 	q, args, err := sqlx.In(q, u.ID, feedIDs)
 	if err != nil {
-		return err
+		return fmt.Errorf("RemoveFeedsFromUser: %s", err)
 	}
 	_, err = d.queryer.Exec(q, args...)
 	if err != nil {
-		return err
+		return fmt.Errorf("RemoveFeedsFromUser: %s", err)
 	}
 	return nil
 }
@@ -729,13 +741,15 @@ func (d *Handle) UpdateUsersFeeds(u *User, feedIDs []int64) error {
 		}
 	}
 
-	err = d.AddFeedsToUser(u, toAdd)
-	if err != nil {
-		return err
+	if len(toAdd) > 0 {
+		if addErr := d.AddFeedsToUser(u, toAdd); addErr != nil {
+			return err
+		}
 	}
-	err = d.RemoveFeedsFromUser(u, toDelete)
-	if err != nil {
-		return err
+	if len(toDelete) > 0 {
+		if removeErr := d.RemoveFeedsFromUser(u, toDelete); removeErr != nil {
+			return err
+		}
 	}
 
 	return nil

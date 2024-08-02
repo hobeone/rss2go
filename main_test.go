@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -21,7 +21,7 @@ var fakeServerHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Req
 	switch {
 	case strings.HasSuffix(r.URL.Path, "feed1.atom"):
 		fmt.Println("SERVING feed1.atim")
-		feedResp, err := ioutil.ReadFile("testdata/ars.rss")
+		feedResp, err := os.ReadFile("testdata/ars.rss")
 		if err != nil {
 			logrus.Fatalf("Error reading test feed: %s", err.Error())
 		}
@@ -30,7 +30,7 @@ var fakeServerHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Req
 		content = []byte("456")
 	}
 	w.Header().Set("Content-Type", "text/plain")
-	w.Write([]byte(content))
+	_, _ = w.Write([]byte(content))
 })
 
 func TestEndToEndIntegration(t *testing.T) {

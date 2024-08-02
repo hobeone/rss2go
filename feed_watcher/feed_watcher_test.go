@@ -2,7 +2,8 @@ package feedwatcher
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
+	"os"
 	"testing"
 	"time"
 
@@ -17,7 +18,7 @@ import (
 
 func NullLogger() logrus.FieldLogger {
 	l := logrus.New()
-	l.Out = ioutil.Discard
+	l.Out = io.Discard
 	return l
 }
 
@@ -59,7 +60,7 @@ func SetupTest(t *testing.T, feedPath string) (*FeedWatcher, []byte, *mail.Dispa
 		t.Fatalf("Error: no feeds returned from database")
 	}
 
-	feedResp, err := ioutil.ReadFile(feedPath)
+	feedResp, err := os.ReadFile(feedPath)
 	if err != nil {
 		t.Fatal("Error reading test feed.")
 	}
@@ -263,25 +264,25 @@ func TestFeedWatcherPollingRssWithNoItemDates(t *testing.T) {
 
 func TestFeedWatcherWithMalformedFeed(t *testing.T) {
 	t.Parallel()
-	n, _, _ := SetupTest(t, "../testdata/ars.rss")
-	OverrideAfter(n)
-	go n.PollFeed()
+	feedWatcher, _, _ := SetupTest(t, "../testdata/ars.rss")
+	OverrideAfter(feedWatcher)
+	go feedWatcher.PollFeed()
 
-	req := <-n.crawlChan
+	req := <-feedWatcher.crawlChan
 	req.ResponseChan <- &FeedCrawlResponse{
-		URI:                    n.FeedInfo.URL,
-		Body:                   []byte("Testing"),
+		URI:                    feedWatcher.FeedInfo.URL,
+		Body:                   []byte("Testing"), // invalid feed content
 		HTTPResponseStatus:     "200 OK",
 		HTTPResponseStatusCode: 200,
 		Error:                  nil,
 	}
-	n.StopPoll()
-	resp := n.LastCrawlResponse
+	feedWatcher.StopPoll()
+	resp := feedWatcher.LastCrawlResponse
 	if resp.Error == nil {
 		t.Error("Expected error parsing invalid feed.")
 	}
 
-	dbFeed, err := n.dbh.GetFeedByURL(n.FeedInfo.URL)
+	dbFeed, err := feedWatcher.dbh.GetFeedByURL(feedWatcher.FeedInfo.URL)
 	if err != nil {
 		t.Error(err.Error())
 	}

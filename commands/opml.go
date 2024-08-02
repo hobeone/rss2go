@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
-	"io/ioutil"
+	"os"
 
 	"golang.org/x/net/html/charset"
 
@@ -74,7 +74,7 @@ func (oc *opmlCommand) export(c *kingpin.ParseContext) error {
 	fmt.Printf("Found %d feeds.\n", len(feeds))
 	fmt.Printf("Writing opml to %s\n", oc.File)
 
-	err = ioutil.WriteFile(oc.File, b, 0644)
+	err = os.WriteFile(oc.File, b, 0644)
 	if err != nil {
 		return err
 	}
@@ -84,7 +84,7 @@ func (oc *opmlCommand) export(c *kingpin.ParseContext) error {
 func (oc *opmlCommand) importOpml(c *kingpin.ParseContext) error {
 	oc.init()
 
-	fr, err := ioutil.ReadFile(oc.File)
+	fr, err := os.ReadFile(oc.File)
 	if err != nil {
 		logrus.Fatalf("Error reading OPML file: %s", err.Error())
 	}
@@ -109,9 +109,8 @@ func (oc *opmlCommand) importOpml(c *kingpin.ParseContext) error {
 	}
 	proc(o.Outline)
 
-	newFeeds := []*db.FeedInfo{}
 	for k, v := range feeds {
-		feed, err := oc.DBH.AddFeed(v, k)
+		_, err := oc.DBH.AddFeed(v, k)
 		if err != nil {
 			fmt.Println(err)
 			if err == sqlite3.ErrConstraint {
@@ -121,7 +120,6 @@ func (oc *opmlCommand) importOpml(c *kingpin.ParseContext) error {
 				return err
 			}
 		}
-		newFeeds = append(newFeeds, feed)
 		fmt.Printf("Added feed \"%s\" at url \"%s\"\n", v, k)
 	}
 	return nil

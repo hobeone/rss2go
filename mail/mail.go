@@ -75,7 +75,9 @@ type LocalMTASender struct {
 func (sender *LocalMTASender) SendMail(msg *gomail.Message) error {
 	s := gomail.SendFunc(func(from string, to []string, msg io.WriterTo) error {
 		b := bytes.NewBuffer([]byte{})
-		msg.WriteTo(b)
+		if _, writeErr := msg.WriteTo(b); writeErr != nil {
+			return writeErr
+		}
 		return sender.Runner.Run(from, to, b.Bytes())
 	})
 
@@ -243,7 +245,7 @@ func CreateAndStartMailer(config *config.Config) *Dispatcher {
 		logrus.Infof("mail: using SMTP Server: %s:%d", config.Mail.Hostname, config.Mail.Port)
 		sender = NewSMTPSender(config.Mail.Hostname, config.Mail.Port, config.Mail.Username, config.Mail.Password)
 	} else {
-		panic(fmt.Sprint("mail: no mail sending capability defined in config."))
+		panic(fmt.Sprintln("mail: no mail sending capability defined in config."))
 	}
 
 	// Start Mailer

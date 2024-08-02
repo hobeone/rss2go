@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -51,9 +50,6 @@ type crawlConfig struct {
 	MaxCrawlers int
 	MinInterval int64 // Seconds
 	MaxInterval int64 // Seconds
-}
-type feedsConfig struct {
-	Urls []string
 }
 
 // NewConfig returns a Config struct with reasonable defaults set.
@@ -115,12 +111,15 @@ func (c *Config) ReadConfig(configPath string) error {
 	}
 	defer f.Close()
 
-	filecont, err := ioutil.ReadAll(f)
+	filecont, err := io.ReadAll(f)
+	if err != nil {
+		return fmt.Errorf("Failed reading config: %s", err)
+	}
 
 	if err = json.Unmarshal(filecont, c); err != nil {
 		extra := ""
 		if serr, ok := err.(*json.SyntaxError); ok {
-			if _, serr := f.Seek(0, os.SEEK_SET); serr != nil {
+			if _, serr := f.Seek(0, io.SeekEnd); serr != nil {
 				fmt.Printf("seek error: %v\n", serr)
 			}
 			line, col, highlight := highlightBytePosition(f, serr.Offset)

@@ -16,6 +16,7 @@ import (
 	"github.com/hobeone/rss2go/feed"
 	feedwatcher "github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/mail"
+	"github.com/sirupsen/logrus"
 
 	"github.com/alecthomas/kingpin/v2"
 
@@ -256,7 +257,9 @@ func (fc *feedCommand) test(c *kingpin.ParseContext) error {
 		m := mail.CreateMailFromItem("From@Address", netmail.Address{Address: "To@Address"}, s)
 		fmt.Println("****** Mail Message *******")
 		b := bytes.NewBuffer([]byte{})
-		m.WriteTo(b)
+		if _, writeErr := m.WriteTo(b); writeErr != nil {
+			logrus.Fatalf("Error writing: %s", err)
+		}
 		spew.Dump(b)
 		fmt.Println("****** ++++++++++++ *******")
 	}

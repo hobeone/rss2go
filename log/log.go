@@ -1,7 +1,7 @@
 package log
 
 import (
-	"io/ioutil"
+	"io"
 	"os"
 
 	"github.com/sirupsen/logrus"
@@ -22,5 +22,5 @@ func SetupLogger(logger *logrus.Logger) {
 // SetNullOutput sets the looger to send everything to /dev/null.
 // useful when running unittests.
 func SetNullOutput() {
-	logrus.SetOutput(ioutil.Discard)
+	logrus.SetOutput(io.Discard)
 }

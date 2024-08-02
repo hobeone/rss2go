@@ -3,7 +3,6 @@ package mail
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/mail"
 	"os"
 	"os/exec"
@@ -18,7 +17,7 @@ import (
 
 func NullLogger() logrus.FieldLogger {
 	l := logrus.New()
-	l.Out = ioutil.Discard
+	l.Out = io.Discard
 	return l
 }
 
@@ -77,7 +76,6 @@ type TestCommandRunner struct {
 
 func (r TestCommandRunner) Run(from string, to []string, msg []byte) error {
 	cs := []string{fmt.Sprintf("-test.run=%s", r.TestToRun), "--"}
-	cs = append(cs)
 	cmd := exec.Command(os.Args[0], cs...)
 	cmd.Env = []string{"GO_WANT_HELPER_PROCESS=1"}
 	_, err := cmd.CombinedOutput()
