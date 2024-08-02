@@ -3,7 +3,7 @@ package commands
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"strings"
 	"time"
 
@@ -228,7 +228,7 @@ func (fc *feedCommand) test(c *kingpin.ParseContext) error {
 	}
 	fmt.Println(string(dump[0:maxDump]))
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
 		return err

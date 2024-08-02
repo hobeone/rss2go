@@ -13,12 +13,13 @@ import (
 	"strings"
 )
 
-//Config is the base struct for Rss2Go configuration information.
+// Config is the base struct for Rss2Go configuration information.
 type Config struct {
-	Mail      mailConfig
-	Crawl     crawlConfig
-	DB        dbConfig
-	WebServer webConfig
+	Mail           mailConfig
+	Crawl          crawlConfig
+	DB             dbConfig
+	WebServer      webConfig
+	ReportInterval int64
 }
 
 type webConfig struct {
@@ -79,15 +80,17 @@ func NewConfig() *Config {
 			WatchInterval: 60,
 			Type:          "file",
 		},
+		ReportInterval: 60 * 60 * 24 * 7, // 7 days
 	}
 }
 
-//NewTestConfig returns a Config instance suitable for use in testing.
+// NewTestConfig returns a Config instance suitable for use in testing.
 func NewTestConfig() *Config {
 	c := NewConfig()
 	c.Mail.UseSendmail = false
 	c.Mail.UseSMTP = false
 	c.Mail.SendMail = false
+	c.Mail.FromAddress = "rss2go@example.com"
 	c.DB.Type = "memory"
 	c.DB.Verbose = false
 	return c

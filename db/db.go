@@ -1,6 +1,7 @@
 package db
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -49,6 +50,14 @@ type User struct {
 	Enabled  bool       ``
 	Password string     ``
 	Feeds    []FeedInfo `jsonapi:"relation,feeds"`
+}
+
+// UserReport represents the last time we sent a report of stale or errored out
+// feeds.  Used to ensure that we don't spam users with them over restarts.
+type UserReport struct {
+	ID         int64
+	UserID     int64     `db:"user_id"`
+	LastReport time.Time `db:"last_report"`
 }
 
 // SetPassword takes a plain text password, crypts it and sets the Password
@@ -124,6 +133,7 @@ func newQueryLogger(db *sqlx.DB, logger logrus.FieldLogger) *queryLogger {
 }
 
 // NewDBHandle creates a new DBHandle
+//
 //	dbPath: the path to the database to use.
 //	verbose: when true database accesses are logged to stdout
 func NewDBHandle(dbPath string, logger logrus.FieldLogger) *Handle {
@@ -233,7 +243,7 @@ func (d *Handle) AddFeed(name string, feedURL string) (*FeedInfo, error) {
 	return f, nil
 }
 
-//SaveFeed updates the given FeedInfo in the database.
+// SaveFeed updates the given FeedInfo in the database.
 func (d *Handle) SaveFeed(f *FeedInfo) error {
 	err := validateFeed(f)
 	if err != nil {
@@ -347,6 +357,23 @@ func (d *Handle) GetFeedsWithErrors() ([]*FeedInfo, error) {
 	return feeds, err
 }
 
+// GetUserFeedsWithErrors returns all feeds that had an error on their last
+// check that a given user is subscribed to.
+func (d *Handle) GetUserFeedsWithErrors(user *User) ([]*FeedInfo, error) {
+	d.syncMutex.Lock()
+	defer d.syncMutex.Unlock()
+
+	var feeds []*FeedInfo
+	err := sqlx.Select(d.queryer, &feeds, `SELECT feed_info.* FROM feed_info
+	INNER JOIN user_feeds ON feed_info.id = user_feeds.feed_info_id
+	INNER JOIN user ON user_feeds.user_id = user.id
+	WHERE user.id = ?
+	AND last_poll_error IS NOT NULL
+	AND last_poll_error <> ''
+	ORDER BY feed_info.name`, user.ID)
+	return feeds, err
+}
+
 // GetStaleFeeds returns all feeds that haven't gotten new content in more
 // than 14 days.
 func (d *Handle) GetStaleFeeds() ([]*FeedInfo, error) {
@@ -355,6 +382,17 @@ func (d *Handle) GetStaleFeeds() ([]*FeedInfo, error) {
 
 	var res []*FeedInfo
 	err := sqlx.Select(d.queryer, &res, `SELECT feed_info.id, feed_info.name, feed_info.url, feed_info.last_poll_error, f.added_on as last_poll_time FROM (SELECT feed_info_id, MAX(added_on) as MaxTime FROM feed_item GROUP BY feed_info_id) r, feed_info INNER JOIN feed_item f ON f.feed_info_id = r.feed_info_id AND f.added_on = r.MaxTime AND r.MaxTime < datetime('now','-14 days') AND f.feed_info_id = feed_info.id group by f.feed_info_id ORDER BY MaxTime desc;`)
+	return res, err
+}
+
+// GetUserStaleFeeds returns all feeds that haven't gotten new content in more
+// than 14 days.
+func (d *Handle) GetUserStaleFeeds(user *User) ([]*FeedInfo, error) {
+	d.syncMutex.Lock()
+	defer d.syncMutex.Unlock()
+
+	var res []*FeedInfo
+	err := sqlx.Select(d.queryer, &res, `SELECT feed_info.id, feed_info.name, feed_info.url, feed_info.last_poll_error, f.added_on as last_poll_time FROM (SELECT feed_info_id, MAX(added_on) as MaxTime FROM feed_item GROUP BY feed_info_id) r, feed_info INNER JOIN feed_item f ON f.feed_info_id = r.feed_info_id AND f.added_on = r.MaxTime AND r.MaxTime < datetime('now','-14 days') AND f.feed_info_id = feed_info.id INNER JOIN user_feeds ON feed_info.id = user_feeds.feed_info_id INNER JOIN user ON user_feeds.user_id = user.id WHERE user.id = ? GROUP BY f.feed_info_id ORDER BY MaxTime desc;`, user.ID)
 	return res, err
 }
 
@@ -423,6 +461,15 @@ func (d *Handle) GetMostRecentGUIDsForFeed(feedID int64, max int) ([]string, err
 	return knownGuids, err
 }
 
+// SaveFeedItem updates the information for a given FeedItem
+func (d *Handle) SaveFeedItem(f *FeedItem) error {
+	d.syncMutex.Lock()
+	defer d.syncMutex.Unlock()
+
+	_, err := d.queryer.Exec("UPDATE feed_item SET feed_info_id = ?, guid = ?, added_on = ? WHERE id = ?", f.FeedInfoID, f.GUID, f.AddedOn, f.ID)
+	return err
+}
+
 /*
 *
 * User related functions
@@ -476,7 +523,7 @@ func (d *Handle) AddUser(name string, email string, pass string) (*User, error) 
 	return u, err
 }
 
-//SaveUser creates or updates the given User in the database.
+// SaveUser creates or updates the given User in the database.
 func (d *Handle) SaveUser(u *User) error {
 	err := validateUser(u)
 	if err != nil {
@@ -614,6 +661,33 @@ func (d *Handle) GetUsersFeeds(u *User) ([]*FeedInfo, error) {
 		err = nil
 	}
 	return feeds, err
+}
+
+func (d *Handle) GetUserReport(u *User) (*UserReport, error) {
+	d.syncMutex.Lock()
+	defer d.syncMutex.Unlock()
+	ur := &UserReport{}
+	err := sqlx.Get(d.queryer, ur, "SELECT * FROM user_report WHERE user_id = ?", u.ID)
+	if err == sql.ErrNoRows {
+		return ur, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return ur, nil
+}
+
+func (d *Handle) SetUserReport(u *User) error {
+	d.syncMutex.Lock()
+	defer d.syncMutex.Unlock()
+	_, err := d.queryer.Exec(`INSERT OR REPLACE INTO user_report (id, user_id, last_report)
+		VALUES((select id from user_report WHERE user_id = ?), ?, ?)`,
+		u.ID, u.ID, time.Now())
+	if err != nil {
+		return err
+	}
+	return nil
+
 }
 
 // UpdateUsersFeeds replaces a users subscribed feeds with the given

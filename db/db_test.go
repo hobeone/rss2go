@@ -3,7 +3,7 @@ package db
 import (
 	"database/sql/driver"
 	"errors"
-	"io/ioutil"
+	"io"
 	"reflect"
 	"testing"
 	"time"
@@ -15,7 +15,7 @@ import (
 func NullLogger() logrus.FieldLogger {
 	l := logrus.New()
 	l.Level = logrus.DebugLevel
-	l.Out = ioutil.Discard
+	l.Out = io.Discard
 	return l
 }
 
@@ -415,6 +415,42 @@ func TestGetStaleFeeds(t *testing.T) {
 	}
 }
 
+func TestGetUserStaleFeeds(t *testing.T) {
+	t.Parallel()
+	d := NewMemoryDBHandle(NullLogger(), true)
+	d.RecordGUID(1, "foobar")
+	d.RecordGUID(2, "foobaz")
+	d.RecordGUID(3, "foobaz")
+	guid, err := d.GetFeedItemByGUID(1, "foobar")
+	if err != nil {
+		t.Fatalf("Got unexpected error from db: %s", err)
+	}
+
+	now := time.Now()
+	oneMonthAgo := time.Unix(now.Unix()-(60*60*24*30), 0)
+
+	_, err = d.db.Exec("UPDATE feed_item SET added_on = ? WHERE id = ?", oneMonthAgo, guid.ID)
+	if err != nil {
+		t.Fatalf("Error saving item: %v", err)
+	}
+
+	u, err := d.GetUserByEmail("test1@example.com")
+	if err != nil {
+		t.Fatalf("Got error getting user %s", err)
+	}
+
+	f, err := d.GetUserStaleFeeds(u)
+	if err != nil {
+		t.Fatalf("Got unexpected error from db: %s", err)
+	}
+	if f[0].ID != 1 {
+		t.Fatalf("Expected ID to be 1 got %d", f[0].ID)
+	}
+	if f[0].LastPollTime.IsZero() {
+		t.Fatalf("Expected non zero time, got %s", f[0].LastPollTime)
+	}
+}
+
 func TestAddUserValidation(t *testing.T) {
 	t.Parallel()
 	d := NewMemoryDBHandle(NullLogger(), true)
@@ -661,6 +697,35 @@ func TestUpdateUsersFeeds(t *testing.T) {
 	}
 
 	if len(newFeeds) != 3 {
-		t.Fatalf("Expected3 feeds, got %d", len(newFeeds))
+		t.Fatalf("Expected 3 feeds, got %d", len(newFeeds))
 	}
+}
+
+func TestGetUserReport(t *testing.T) {
+	t.Parallel()
+	d := NewMemoryDBHandle(NullLogger(), true)
+	users, err := d.GetAllUsers()
+	if err != nil {
+		t.Fatalf("Error getting users: %v", err)
+	}
+
+	ur, err := d.GetUserReport(&users[0])
+	if err != nil {
+		t.Fatalf("Error getting UserReport: %s", err)
+	}
+	if !ur.LastReport.IsZero() {
+		t.Fatalf("Expected unset LastReport time, got: %s", ur.LastReport)
+	}
+	err = d.SetUserReport(&users[0])
+	if err != nil {
+		t.Fatalf("Error setting user report time: %s", err)
+	}
+	ur, err = d.GetUserReport(&users[0])
+	if err != nil {
+		t.Fatalf("Error getting UserReport: %s", err)
+	}
+	if ur.LastReport.IsZero() {
+		t.Fatalf("Expected LastReport to be set, got: %s", ur.LastReport)
+	}
+
 }

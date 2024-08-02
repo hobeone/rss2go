@@ -76,6 +76,16 @@ CREATE UNIQUE INDEX user_feed_idx ON user_feeds (user_id,feed_info_id);`,
 		Name: "Add Unique constraint to feed_item",
 		Up:   `CREATE UNIQUE INDEX guid_feed_unique_index ON feed_item (feed_info_id,guid);`,
 	},
+	{
+		ID:   140,
+		Name: "Add user_report table",
+		Up: `CREATE TABLE "user_report" (
+			"id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+			"user_id" bigint NOT NULL,
+			"last_report" datetime NOT NULL
+		);
+		CREATE UNIQUE INDEX user_report_idx ON user_report (id, user_id);`,
+	},
 }
 
 // TestFixtures contains the base fixture data for testing with a db.
