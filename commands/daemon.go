@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/alecthomas/kingpin/v2"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/db"
@@ -271,7 +270,6 @@ func (d *Daemon) feedStateSummary() {
 					Addresses:  sendTo,
 					ResultChan: make(chan error),
 				}
-				spew.Dump(req)
 				d.MailChan <- req
 				resp := <-req.ResultChan
 				if resp != nil {
