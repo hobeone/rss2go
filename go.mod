@@ -1,11 +1,10 @@
 module github.com/hobeone/rss2go
 
 go 1.21
-
-toolchain go1.21.0
+toolchain go1.23.1
 
 require (
-	github.com/PuerkitoBio/goquery v1.9.2
+	github.com/PuerkitoBio/goquery v1.10.0
 	github.com/alecthomas/units v0.0.0-20240626203959-61d1e3462e30 // indirect
 	github.com/bgentry/speakeasy v0.2.0
 	github.com/davecgh/go-spew v1.1.1
