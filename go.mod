@@ -5,7 +5,7 @@ toolchain go1.23.1
 go 1.23.0
 
 require (
-	github.com/PuerkitoBio/goquery v1.10.0
+	github.com/PuerkitoBio/goquery v1.10.1
 	github.com/alecthomas/units v0.0.0-20240927000941-0f3dac36c52b // indirect
 	github.com/bgentry/speakeasy v0.2.0
 	github.com/davecgh/go-spew v1.1.1
@@ -37,7 +37,7 @@ require (
 require github.com/alecthomas/kingpin/v2 v2.4.0
 
 require (
-	github.com/andybalholm/cascadia v1.3.2 // indirect
+	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
