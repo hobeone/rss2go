@@ -5,7 +5,7 @@ toolchain go1.23.1
 go 1.23.0
 
 require (
-	github.com/PuerkitoBio/goquery v1.10.1
+	github.com/PuerkitoBio/goquery v1.10.2
 	github.com/alecthomas/units v0.0.0-20240927000941-0f3dac36c52b // indirect
 	github.com/bgentry/speakeasy v0.2.0
 	github.com/davecgh/go-spew v1.1.1
