@@ -5,7 +5,7 @@ toolchain go1.23.1
 go 1.23.0
 
 require (
-	github.com/PuerkitoBio/goquery v1.10.2
+	github.com/PuerkitoBio/goquery v1.10.3
 	github.com/alecthomas/units v0.0.0-20240927000941-0f3dac36c52b // indirect
 	github.com/bgentry/speakeasy v0.2.0
 	github.com/davecgh/go-spew v1.1.1
@@ -25,7 +25,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/x-cray/logrus-prefixed-formatter v0.5.2
 	golang.org/x/crypto v0.37.0
-	golang.org/x/net v0.38.0
+	golang.org/x/net v0.39.0
 	golang.org/x/sys v0.32.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
