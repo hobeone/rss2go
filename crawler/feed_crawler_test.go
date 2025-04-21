@@ -21,7 +21,7 @@ func TestFeedCrawler(t *testing.T) {
 
 	ch := make(chan *feedwatcher.FeedCrawlRequest)
 	rchan := make(chan *feedwatcher.FeedCrawlResponse)
-	go FeedCrawler(ch)
+	go FeedCrawler(ch, NewHTTPClient(defaultTimeout))
 
 	req := &feedwatcher.FeedCrawlRequest{
 		URI:          fmt.Sprintf("%s/%s", ts.URL, "ars.rss"),
@@ -62,10 +62,12 @@ func TestGetFeed(t *testing.T) {
 		t.Fatal("GetFeed should return an error when status != 200\n.")
 	}
 
-	dialErrorClient := &http.Client{
-		Transport: &http.Transport{
-			Dial: func(netw, addr string) (net.Conn, error) {
-				return nil, fmt.Errorf("error connecting to host")
+	dialErrorClient := &HTTPClient{
+		http.Client{
+			Transport: &http.Transport{
+				Dial: func(netw, addr string) (net.Conn, error) {
+					return nil, fmt.Errorf("error connecting to host")
+				},
 			},
 		},
 	}
@@ -79,22 +81,46 @@ func TestGetFeed(t *testing.T) {
 func TestGetFeedAndMakeResponse(t *testing.T) {
 	t.Parallel()
 
-	dialErrorClient := &http.Client{
-		Transport: &http.Transport{
-			Dial: func(netw, addr string) (net.Conn, error) {
-				return nil, fmt.Errorf("error connecting to host")
+	ts := httptest.NewServer(fakeServerHandler)
+	defer ts.Close()
+
+	resp := GetFeedAndMakeResponse(fmt.Sprintf("%s/%s", ts.URL, "ars.rss"), nil)
+	if resp.Error != nil {
+		t.Fatalf("Error getting feed: %s\n", resp.Error.Error())
+	}
+	if resp.HTTPResponseStatusCode != http.StatusOK {
+		t.Fatal("GetFeed should return an error when status != 200\n.")
+	}
+
+	resp = GetFeedAndMakeResponse(fmt.Sprintf("%s/%s", ts.URL, "error.rss"), nil)
+
+	if resp.Error == nil {
+		t.Fatalf("Should have gotten error for feed: %s\n", "error.rss")
+	}
+	if resp.HTTPResponseStatusCode != http.StatusInternalServerError {
+		t.Fatalf("GetFeed should return an error when status != 200\n %v.", resp.HTTPResponseStatusCode)
+	}
+
+	dialErrorClient := &HTTPClient{
+		http.Client{
+			Transport: &http.Transport{
+				Dial: func(netw, addr string) (net.Conn, error) {
+					return nil, fmt.Errorf("error connecting to host")
+				},
 			},
 		},
 	}
 
-	resp := GetFeedAndMakeResponse("http://testfeed", dialErrorClient)
+	resp = GetFeedAndMakeResponse(fmt.Sprintf("%s/%s", ts.URL, "timeout"), dialErrorClient)
+	if resp.Error == nil {
+		t.Fatalf("Should have gotten timeout")
+	}
+
+	resp = GetFeedAndMakeResponse("http://testfeed", dialErrorClient)
 
 	if resp.Error == nil {
 		t.Fatalf("Should have returned an error on connect timeout")
 	}
-
-	ts := httptest.NewServer(fakeServerHandler)
-	defer ts.Close()
 
 	resp = GetFeedAndMakeResponse(fmt.Sprintf("%s/%s", ts.URL, "ars.rss"), nil)
 	if resp.Error != nil {
