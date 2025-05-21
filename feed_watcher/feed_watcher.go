@@ -95,6 +95,11 @@ type FeedWatcher struct {
 	pSync             sync.Mutex
 }
 
+// SetSaveResponse enables or disables saving the last crawl response for testing.
+func (fw *FeedWatcher) SetSaveResponse(save bool) {
+	fw.saveResponse = save
+}
+
 // NewFeedWatcher returns a new FeedWatcher instance.
 func NewFeedWatcher(
 	feedInfo db.FeedInfo,
