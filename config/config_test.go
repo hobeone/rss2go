@@ -5,7 +5,7 @@ import (
 	"os"  // Added for os.CreateTemp
 	"os/user"
 	"strings" // Added for strings.NewReader and strings.ReplaceAll
-	//	"github.com/davecgh/go-spew/spew"
+
 	"testing"
 )
 
@@ -95,46 +95,46 @@ func TestReplaceTildeInPath(t *testing.T) {
 
 func TestHighlightBytePosition(t *testing.T) {
 	tests := []struct {
-		name           string
-		input          string
-		pos            int64
-		expectedLine   int
-		expectedCol    int
+		name              string
+		input             string
+		pos               int64
+		expectedLine      int
+		expectedCol       int
 		expectedHighlight string
 	}{
 		{
-			name:           "Error at line 1, col 1",
-			input:          `{"key": "error here"}`,
-			pos:            8, // 'e' in "error here"
-			expectedLine:   1,
-			expectedCol:    9,
+			name:         "Error at line 1, col 1",
+			input:        `{"key": "error here"}`,
+			pos:          8, // 'e' in "error here"
+			expectedLine: 1,
+			expectedCol:  9,
 			expectedHighlight: "    1: {\"key\": \"error here\"}\n" +
 				strings.Repeat(" ", (9-1)+7) + "^\n",
 		},
 		{
-			name:           "Error in middle of line 1",
-			input:          `{"key": "some error here"}`,
-			pos:            13, // 'e' in "error"
-			expectedLine:   1,
-			expectedCol:    14,
+			name:         "Error in middle of line 1",
+			input:        `{"key": "some error here"}`,
+			pos:          13, // 'e' in "error"
+			expectedLine: 1,
+			expectedCol:  14,
 			expectedHighlight: "    1: {\"key\": \"some error here\"}\n" +
 				strings.Repeat(" ", (14-1)+7) + "^\n",
 		},
 		{
-			name:           "Error at end of line 1",
-			input:          `{"key": "some error"}`,
-			pos:            19, // Closing }
-			expectedLine:   1,
-			expectedCol:    20,
+			name:         "Error at end of line 1",
+			input:        `{"key": "some error"}`,
+			pos:          19, // Closing }
+			expectedLine: 1,
+			expectedCol:  20,
 			expectedHighlight: "    1: {\"key\": \"some error\"}\n" +
 				strings.Repeat(" ", (20-1)+7) + "^\n",
 		},
 		{
-			name:           "Error on line 2",
-			input:          "{\n\"key\": \"error on line2\"}", // pos points to 'e'
-			pos:            10, // 'e' in "error on line2"
-			expectedLine:   2,
-			expectedCol:    9, // "key": "e -> 0-indexed 8 on line, so 1-based 9
+			name:         "Error on line 2",
+			input:        "{\n\"key\": \"error on line2\"}", // pos points to 'e'
+			pos:          10,                                // 'e' in "error on line2"
+			expectedLine: 2,
+			expectedCol:  9, // "key": "e -> 0-indexed 8 on line, so 1-based 9
 			expectedHighlight: "    1: {\n" +
 				"    2: \"key\": \"error on line2\"}\n" +
 				strings.Repeat(" ", (9-1)+7) + "^\n",
@@ -146,39 +146,39 @@ func TestHighlightBytePosition(t *testing.T) {
 			// Line 2: "  \"name\": \"test\",\n" (19 bytes)
 			// Line 3: "  \"value\": \"" (11 bytes) + 'e' is target.
 			// Pos = 2 + 19 + 11 = 32
-			input: "{\n  \"name\": \"test\",\n  \"value\": \"error here\"\n}",
-			pos:            32, // 'e' in "error here"
-			expectedLine:   3,
-			expectedCol:    13, // "  \"value\": \"e is 0-indexed 12 on its line
+			input:        "{\n  \"name\": \"test\",\n  \"value\": \"error here\"\n}",
+			pos:          32, // 'e' in "error here"
+			expectedLine: 3,
+			expectedCol:  13, // "  \"value\": \"e is 0-indexed 12 on its line
 			expectedHighlight: "    2:   \"name\": \"test\",\n" +
 				"    3:   \"value\": \"error here\"\n" + // fullErrorLine should capture this
 				strings.Repeat(" ", (13-1)+7) + "^\n",
-				// Note: The function reads the rest of the line, so the final "}" from input won't be in this highlight part for line 3.
+			// Note: The function reads the rest of the line, so the final "}" from input won't be in this highlight part for line 3.
 		},
 		{
-			name:           "Error position out of bounds (negative)",
-			input:          `{"key": "value"}`,
-			pos:            -1, // Effectively pos=0
-			expectedLine:   1,
-			expectedCol:    1,
+			name:         "Error position out of bounds (negative)",
+			input:        `{"key": "value"}`,
+			pos:          -1, // Effectively pos=0
+			expectedLine: 1,
+			expectedCol:  1,
 			expectedHighlight: "    1: {\"key\": \"value\"}\n" +
 				strings.Repeat(" ", (1-1)+7) + "^\n",
 		},
 		{
-			name:           "Error position out of bounds (too large)",
-			input:          `{"key": "value"}`, // length 17
-			pos:            100, // Effectively pos=17 (after last char)
-			expectedLine:   1,
-			expectedCol:    18, // Column after the last character
+			name:         "Error position out of bounds (too large)",
+			input:        `{"key": "value"}`, // length 16
+			pos:          100,                // Effectively pos=16 (after last char)
+			expectedLine: 1,
+			expectedCol:  17, // Column after the last character
 			expectedHighlight: "    1: {\"key\": \"value\"}\n" +
-				strings.Repeat(" ", (18-1)+7) + "^\n",
+				strings.Repeat(" ", (17-1)+7) + "^\n",
 		},
 		{
-			name:           "Error at first char of input",
-			input:          `{`,
-			pos:            0,
-			expectedLine:   1,
-			expectedCol:    1,
+			name:         "Error at first char of input",
+			input:        `{`,
+			pos:          0,
+			expectedLine: 1,
+			expectedCol:  1,
 			expectedHighlight: "    1: {\n" +
 				strings.Repeat(" ", (1-1)+7) + "^\n",
 		},
