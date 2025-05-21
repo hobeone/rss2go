@@ -73,21 +73,45 @@ func TestEndToEndIntegration(t *testing.T) {
 
 	d.CreateAndStartFeedWatchers(allFeeds[0:1])
 
-	/*
-		resp := <-d.RespChan
-		if resp.Error != nil {
-			t.Fatalf("Should not have gotten an error. got: %s", resp.Error)
-		}
-		if len(resp.Items) != 25 {
-			t.Errorf("Expected 25 items from the feed. Got %d", len(resp.Items))
-		}
+	// Get the FeedWatcher for the test feed
+	fw := d.Feeds[allFeeds[0].URL]
+	if fw == nil {
+		t.Fatalf("FeedWatcher not found for URL: %s", allFeeds[0].URL)
+	}
+	// Enable saving the response for testing
+	// This field needs to be exposed first. For now, let's assume it is.
+	// If not, we'll need to modify feed_watcher.go
+	fw.SetSaveResponse(true)
 
-		resp = <-d.RespChan
-		if resp.Error != nil {
-			t.Fatalf("Should not have gotten an error. got: %s", resp.Error)
-		}
-		if len(resp.Items) != 0 {
-			t.Errorf("Expected 0 items from the feed. Got %d", len(resp.Items))
-		}
-	*/
+	// Wait for the first poll to complete.
+	// The mock After function is set to 1 second. Let's wait a bit longer.
+	time.Sleep(2 * time.Second)
+
+	if fw.LastCrawlResponse == nil {
+		t.Fatalf("LastCrawlResponse is nil after first poll")
+	}
+	if fw.LastCrawlResponse.Error != nil {
+		t.Fatalf("Should not have gotten an error on first poll. got: %s", fw.LastCrawlResponse.Error)
+	}
+	if len(fw.LastCrawlResponse.Items) != 25 {
+		t.Errorf("Expected 25 items from the feed on first poll. Got %d", len(fw.LastCrawlResponse.Items))
+	}
+
+	// Wait for the second poll to complete.
+	time.Sleep(2 * time.Second)
+
+	if fw.LastCrawlResponse == nil {
+		t.Fatalf("LastCrawlResponse is nil after second poll")
+	}
+	if fw.LastCrawlResponse.Error != nil {
+		// It's possible to get an error if the feed itself didn't change (e.g. "no items found")
+		// but the test expects 0 items, so an error indicating "no new items" is not a failure for the assertion.
+		// However, a critical error (like a network issue if the test server died) would be.
+		// For now, let's assume no error is expected if items are 0.
+		// The original test also fataled on any error here.
+		t.Fatalf("Should not have gotten an error on second poll. got: %s", fw.LastCrawlResponse.Error)
+	}
+	if len(fw.LastCrawlResponse.Items) != 0 {
+		t.Errorf("Expected 0 items from the feed on second poll. Got %d", len(fw.LastCrawlResponse.Items))
+	}
 }

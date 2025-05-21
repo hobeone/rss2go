@@ -205,10 +205,15 @@ func validateFeed(f *FeedInfo) error {
 	u, err := url.Parse(f.URL)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %s", err)
-	} else if u.Scheme == "" {
+	}
+	if u.Scheme == "" {
 		return errors.New("URL has no Scheme")
-	} else if u.Host == "" {
+	}
+	if u.Host == "" {
 		return errors.New("URL has no Host")
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("invalid URL scheme: %s. Only 'http' and 'https' are allowed", u.Scheme)
 	}
 
 	f.URL = u.String()
@@ -648,6 +653,10 @@ func (d *Handle) AddFeedsToUser(u *User, feeds []*FeedInfo) error {
 func (d *Handle) RemoveFeedsFromUser(u *User, feeds []*FeedInfo) error {
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
+
+	if len(feeds) == 0 {
+		return nil // Nothing to remove
+	}
 
 	feedIDs := make([]int64, len(feeds))
 	for i, f := range feeds {

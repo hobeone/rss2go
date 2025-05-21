@@ -37,11 +37,18 @@ func (uc *userCommand) configure(app *kingpin.Application) {
 	passwdCmd.Arg("email", "Email address of the user").Required().StringVar(&uc.Email)
 
 	subCmd := userCmd.Command("subscribe", "Subscribe a user to a feed(s)").Action(uc.subscribeCmd)
+	subCmd.Arg("email", "Email address of the user").Required().StringVar(&uc.Email) // Added email arg
 	subCmd.Arg("urls", "URLs of feed to subscribe to").Required().StringsVar(&uc.Feeds)
 
-	unsubCmd := userCmd.Command("unsubscribe", "Unsubscribe a user to a feed(s)").Action(uc.subscribeCmd)
-	unsubCmd.Arg("urls", "URLs of feed to subscribe to").Required().StringsVar(&uc.Feeds)
+	unsubCmd := userCmd.Command("unsubscribe", "Unsubscribe a user from a feed(s)").Action(uc.unsubscribeCmd) // Fixed action
+	unsubCmd.Arg("email", "Email address of the user").Required().StringVar(&uc.Email)   // Added email arg
+	unsubCmd.Arg("urls", "URLs of feed to unsubscribe from").Required().StringsVar(&uc.Feeds) // Clarified help
 
+}
+
+func (uc *userCommand) unsubscribeCmd(c *kingpin.ParseContext) error {
+	uc.init()
+	return uc.unsubscribe()
 }
 
 func (uc *userCommand) passwdCmd(c *kingpin.ParseContext) error {
