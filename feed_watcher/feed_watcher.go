@@ -15,6 +15,7 @@ package feedwatcher
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -58,6 +59,7 @@ var After = func(d time.Duration) <-chan time.Time {
 type FeedCrawlRequest struct {
 	URI          string
 	ResponseChan chan *FeedCrawlResponse
+	Ctx          context.Context
 }
 
 // FeedCrawlResponse is we get back from the crawler.
@@ -458,6 +460,7 @@ func (fw *FeedWatcher) CrawlFeed() (r *FeedCrawlResponse) {
 	req := &FeedCrawlRequest{
 		URI:          fw.FeedInfo.URL,
 		ResponseChan: make(chan *FeedCrawlResponse),
+		Ctx:          context.Background(),
 	}
 	resp := &FeedCrawlResponse{}
 	for {

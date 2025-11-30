@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -212,7 +213,7 @@ func (fc *feedCommand) test(c *kingpin.ParseContext) error {
 	fc.init()
 	url := fc.FeedURL
 
-	resp, err := crawler.GetFeed(url, nil)
+	resp, err := crawler.GetFeed(context.Background(), url, nil)
 	if err != nil {
 		return err
 	}

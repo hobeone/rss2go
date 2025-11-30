@@ -59,15 +59,13 @@ func NewHTTPClient(timeout time.Duration) *HTTPClient {
 // GetFeed gets a URL and returns a http.Response.
 // Sets a reasonable timeout on the connection and read from the server.
 // Users will need to Close() the resposne.Body or risk leaking connections.
-func GetFeed(url string, client *HTTPClient) (*http.Response, error) {
+func GetFeed(ctx context.Context, url string, client *HTTPClient) (*http.Response, error) {
 	logrus.Infof("Crawling %v", url)
 
 	if client == nil {
 		client = NewHTTPClient(defaultTimeout)
 	}
 
-	ctx, _ := context.WithTimeout(context.Background(), 20*time.Second)
-	//defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 
 	if err != nil {
@@ -100,7 +98,7 @@ func GetFeed(url string, client *HTTPClient) (*http.Response, error) {
 
 // GetFeedAndMakeResponse gets a URL and returns a FeedCrawlResponse
 // Sets FeedCrawlResponse.Error if there was a problem retreiving the URL.
-func GetFeedAndMakeResponse(url string, client *HTTPClient) *feedwatcher.FeedCrawlResponse {
+func GetFeedAndMakeResponse(ctx context.Context, url string, client *HTTPClient) *feedwatcher.FeedCrawlResponse {
 	resp := &feedwatcher.FeedCrawlResponse{
 		URI: url,
 	}
@@ -110,8 +108,6 @@ func GetFeedAndMakeResponse(url string, client *HTTPClient) *feedwatcher.FeedCra
 		client = NewHTTPClient(defaultTimeout)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 
 	if err != nil {
@@ -178,10 +174,15 @@ func GetFeedAndMakeResponse(url string, client *HTTPClient) *feedwatcher.FeedCra
 // FeedCrawler pulls FeedCrawlRequests from the crawl_requests channel,
 // gets the given URL and returns a response
 func FeedCrawler(crawlRequests chan *feedwatcher.FeedCrawlRequest, client *HTTPClient) {
-	for {
+	for req := range crawlRequests {
 		logrus.Info("Waiting on request")
-		req := <-crawlRequests
-		req.ResponseChan <- GetFeedAndMakeResponse(req.URI, client)
+		if req.Ctx == nil {
+			req.Ctx = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(req.Ctx, 20*time.Second)
+		resp := GetFeedAndMakeResponse(ctx, req.URI, client)
+		cancel()
+		req.ResponseChan <- resp
 	}
 }
 

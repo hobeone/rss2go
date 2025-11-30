@@ -1,6 +1,7 @@
 package crawler
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil" // Added for ioutil.ReadAll
 	"net"
@@ -46,7 +47,7 @@ func TestGetFeed(t *testing.T) {
 	ts := httptest.NewServer(fakeServerHandler)
 	defer ts.Close()
 
-	resp, err := GetFeed(fmt.Sprintf("%s/%s", ts.URL, "ars.rss"), nil)
+	resp, err := GetFeed(context.Background(), fmt.Sprintf("%s/%s", ts.URL, "ars.rss"), nil)
 	if err != nil {
 		t.Fatalf("Error getting feed: %s\n", err.Error())
 	}
@@ -54,7 +55,7 @@ func TestGetFeed(t *testing.T) {
 		t.Fatal("GetFeed should return an error when status != 200\n.")
 	}
 
-	resp, err = GetFeed(fmt.Sprintf("%s/%s", ts.URL, "error.rss"), nil)
+	resp, err = GetFeed(context.Background(), fmt.Sprintf("%s/%s", ts.URL, "error.rss"), nil)
 
 	if err == nil {
 		t.Fatalf("Should have gotten error for feed: %s\n", "error.rss")
@@ -73,7 +74,7 @@ func TestGetFeed(t *testing.T) {
 		},
 	}
 
-	_, err = GetFeed(fmt.Sprintf("%s/%s", ts.URL, "timeout"), dialErrorClient)
+	_, err = GetFeed(context.Background(), fmt.Sprintf("%s/%s", ts.URL, "timeout"), dialErrorClient)
 	if err == nil {
 		t.Fatalf("Should have gotten timeout")
 	}
@@ -85,7 +86,7 @@ func TestGetFeedAndMakeResponse(t *testing.T) {
 	ts := httptest.NewServer(fakeServerHandler)
 	defer ts.Close()
 
-	resp := GetFeedAndMakeResponse(fmt.Sprintf("%s/%s", ts.URL, "ars.rss"), nil)
+	resp := GetFeedAndMakeResponse(context.Background(), fmt.Sprintf("%s/%s", ts.URL, "ars.rss"), nil)
 	if resp.Error != nil {
 		t.Fatalf("Error getting feed: %s\n", resp.Error.Error())
 	}
@@ -93,7 +94,7 @@ func TestGetFeedAndMakeResponse(t *testing.T) {
 		t.Fatal("GetFeed should return an error when status != 200\n.")
 	}
 
-	resp = GetFeedAndMakeResponse(fmt.Sprintf("%s/%s", ts.URL, "error.rss"), nil)
+	resp = GetFeedAndMakeResponse(context.Background(), fmt.Sprintf("%s/%s", ts.URL, "error.rss"), nil)
 
 	if resp.Error == nil {
 		t.Fatalf("Should have gotten error for feed: %s\n", "error.rss")
@@ -112,24 +113,24 @@ func TestGetFeedAndMakeResponse(t *testing.T) {
 		},
 	}
 
-	resp = GetFeedAndMakeResponse(fmt.Sprintf("%s/%s", ts.URL, "timeout"), dialErrorClient)
+	resp = GetFeedAndMakeResponse(context.Background(), fmt.Sprintf("%s/%s", ts.URL, "timeout"), dialErrorClient)
 	if resp.Error == nil {
 		t.Fatalf("Should have gotten timeout")
 	}
 
-	resp = GetFeedAndMakeResponse("http://testfeed", dialErrorClient)
+	resp = GetFeedAndMakeResponse(context.Background(), "http://testfeed", dialErrorClient)
 
 	if resp.Error == nil {
 		t.Fatalf("Should have returned an error on connect timeout")
 	}
 
-	resp = GetFeedAndMakeResponse(fmt.Sprintf("%s/%s", ts.URL, "ars.rss"), nil)
+	resp = GetFeedAndMakeResponse(context.Background(), fmt.Sprintf("%s/%s", ts.URL, "ars.rss"), nil)
 	if resp.Error != nil {
 		t.Fatalf("Error getting feed: %s\n", resp.Error.Error())
 	}
 	bodyWithoutContentLength := string(resp.Body)
 
-	resp = GetFeedAndMakeResponse(fmt.Sprintf("%s/%s", ts.URL, "ars_with_content_length.rss"), nil)
+	resp = GetFeedAndMakeResponse(context.Background(), fmt.Sprintf("%s/%s", ts.URL, "ars_with_content_length.rss"), nil)
 	if resp.Error != nil {
 		t.Fatalf("Error getting feed: %s\n", resp.Error)
 	}
@@ -274,7 +275,7 @@ func TestGetFeedExtendedScenarios(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resp, err := GetFeed(ts.URL+tt.path, nil)
+			resp, err := GetFeed(context.Background(), ts.URL+tt.path, nil)
 			if resp != nil && resp.Body != nil {
 				defer resp.Body.Close()
 			}
@@ -445,7 +446,7 @@ func TestGetFeedAndMakeResponseExtendedScenarios(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resp := GetFeedAndMakeResponse(ts.URL+tt.path, nil)
+			resp := GetFeedAndMakeResponse(context.Background(), ts.URL+tt.path, nil)
 
 			if tt.expectError {
 				if resp.Error == nil {
