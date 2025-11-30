@@ -7,12 +7,9 @@ This document outlines suggested steps to further modernize the rss2go codebase.
 - [x] Introduce `context.Context` to `crawler` package.
 - [x] Fix resource leaks (context cancellation) and potential infinite loops in `FeedCrawler`.
 - [x] Logging Migration: Replaced `logrus` with `log/slog`.
+- [x] Database Migrations: Replaced `gomigrate` with `pressly/goose`.
 
 ## Recommended Next Steps
-
-### 1. Database Migrations
-**Goal:** Replace `github.com/hobeone/gomigrate` with a widely supported tool like `golang-migrate/migrate` or `pressly/goose`.
-**Benefit:** Better support, CLI tools, standard format.
 
 ### 3. CLI Library
 **Goal:** Consider migrating from `kingpin` (maintenance mode) to `cobra`.
