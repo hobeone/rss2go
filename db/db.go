@@ -8,17 +8,25 @@ import (
 	"net/mail"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 	"log/slog"
+	"embed"
 
-	"github.com/hobeone/gomigrate"
 	"github.com/jmoiron/sqlx"
+	"github.com/pressly/goose/v3"
 	"golang.org/x/crypto/bcrypt"
 
 	// Import sqlite3 driver
 	_ "github.com/mattn/go-sqlite3"
 )
+
+//go:embed migrations/*.sql
+var embedMigrations embed.FS
+
+//go:embed fixtures/*.sql
+var embedFixtures embed.FS
 
 // FeedInfo represents a feed (atom, rss or rdf) that rss2go is polling.
 type FeedInfo struct {
@@ -166,58 +174,44 @@ func NewMemoryDBHandle(logger *slog.Logger, loadFixtures bool) *Handle {
 		logger:  logger,
 		queryer: newQueryLogger(db, logger),
 	}
-	err = d.Migrate(SchemaMigrations())
+	err = d.Migrate()
 	if err != nil {
 		panic(err)
 	}
 
 	if loadFixtures {
-		// load Fixtures
-		err = d.Migrate(TestFixtures())
+		// Load fixtures manually to avoid messing up goose migration versioning
+		q, err := embedFixtures.ReadFile("fixtures/00001_test_fixtures.sql")
 		if err != nil {
 			panic(err)
+		}
+		stmts := strings.Split(string(q), ";")
+		for _, stmt := range stmts {
+			stmt = strings.TrimSpace(stmt)
+			if stmt == "" {
+				continue
+			}
+			if _, err := d.db.Exec(stmt); err != nil {
+				panic(fmt.Errorf("error executing fixture statement '%s': %w", stmt, err))
+			}
 		}
 	}
 
 	return d
 }
 
-// logrusShim adapts slog to the interface expected by gomigrate (likely logrus-compatible)
-type logrusShim struct {
-	l *slog.Logger
-}
-func (l logrusShim) Printf(format string, args ...interface{}) { l.l.Info(fmt.Sprintf(format, args...)) }
-func (l logrusShim) Println(args ...interface{}) { l.l.Info(fmt.Sprint(args...)) }
-func (l logrusShim) Infof(format string, args ...interface{}) { l.l.Info(fmt.Sprintf(format, args...)) }
-func (l logrusShim) Debugf(format string, args ...interface{}) { l.l.Debug(fmt.Sprintf(format, args...)) }
-func (l logrusShim) Warnf(format string, args ...interface{}) { l.l.Warn(fmt.Sprintf(format, args...)) }
-func (l logrusShim) Errorf(format string, args ...interface{}) { l.l.Error(fmt.Sprintf(format, args...)) }
-func (l logrusShim) Fatalf(format string, args ...interface{}) { l.l.Error(fmt.Sprintf(format, args...)); panic("fatal") }
-func (l logrusShim) Panicf(format string, args ...interface{}) { l.l.Error(fmt.Sprintf(format, args...)); panic("panic") }
-func (l logrusShim) Print(args ...interface{}) { l.l.Info(fmt.Sprint(args...)) }
-func (l logrusShim) Info(args ...interface{}) { l.l.Info(fmt.Sprint(args...)) }
-func (l logrusShim) Debug(args ...interface{}) { l.l.Debug(fmt.Sprint(args...)) }
-func (l logrusShim) Warn(args ...interface{}) { l.l.Warn(fmt.Sprint(args...)) }
-func (l logrusShim) Error(args ...interface{}) { l.l.Error(fmt.Sprint(args...)) }
-func (l logrusShim) Fatal(args ...interface{}) { l.l.Error(fmt.Sprint(args...)); panic("fatal") }
-func (l logrusShim) Panic(args ...interface{}) { l.l.Error(fmt.Sprint(args...)); panic("panic") }
-func (l logrusShim) Infoln(args ...interface{}) { l.l.Info(fmt.Sprint(args...)) }
-func (l logrusShim) Debugln(args ...interface{}) { l.l.Debug(fmt.Sprint(args...)) }
-func (l logrusShim) Warnln(args ...interface{}) { l.l.Warn(fmt.Sprint(args...)) }
-func (l logrusShim) Errorln(args ...interface{}) { l.l.Error(fmt.Sprint(args...)) }
-func (l logrusShim) Fatalln(args ...interface{}) { l.l.Error(fmt.Sprint(args...)); panic("fatal") }
-func (l logrusShim) Panicln(args ...interface{}) { l.l.Error(fmt.Sprint(args...)); panic("panic") }
-
-
 // Migrate uses the migrations at the given path to update the database.
-func (d *Handle) Migrate(m []*gomigrate.Migration) error {
-	migrator, err := gomigrate.NewMigratorWithMigrations(d.db.DB, gomigrate.Sqlite3{}, m)
-	if err != nil {
+func (d *Handle) Migrate() error {
+	goose.SetBaseFS(embedMigrations)
+
+	if err := goose.SetDialect("sqlite3"); err != nil {
 		return err
 	}
-	migrator.Logger = logrusShim{l: d.logger}
-	err = migrator.Migrate()
-	return err
+
+	if err := goose.Up(d.db.DB, "migrations"); err != nil {
+		return err
+	}
+	return nil
 }
 
 /*

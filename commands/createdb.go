@@ -28,7 +28,7 @@ func (cc *createDBCommand) migrateCmd(c *kingpin.ParseContext) error {
 }
 
 func (cc *createDBCommand) migrate() error {
-	err := cc.DBH.Migrate(db.SchemaMigrations())
+	err := cc.DBH.Migrate()
 	if err != nil {
 		slog.Error("Error starting migration", "error", err)
 		os.Exit(1)
