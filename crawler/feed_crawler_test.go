@@ -13,7 +13,6 @@ import (
 	"time"
 
 	feedwatcher "github.com/hobeone/rss2go/feed_watcher"
-	"github.com/sirupsen/logrus"
 )
 
 func TestFeedCrawler(t *testing.T) {
@@ -150,13 +149,13 @@ var fakeServerHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Req
 	case strings.HasSuffix(r.URL.Path, "ars.rss") || strings.HasSuffix(r.URL.Path, "/redirect_target"):
 		feedResp, err := os.ReadFile("../testdata/ars.rss")
 		if err != nil {
-			logrus.Fatalf("Error reading test feed: %s", err.Error())
+			panic(fmt.Sprintf("Error reading test feed: %s", err.Error()))
 		}
 		content = feedResp
 	case strings.HasSuffix(r.URL.Path, "ars_with_content_length.rss"):
 		feedResp, err := os.ReadFile("../testdata/ars.rss")
 		if err != nil {
-			logrus.Fatalf("Error reading test feed: %s", err.Error())
+			panic(fmt.Sprintf("Error reading test feed: %s", err.Error()))
 		}
 		content = feedResp
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(content)))
@@ -190,7 +189,7 @@ var fakeServerHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Req
 	case r.URL.Path == "/wrong_content_type":
 		feedResp, err := os.ReadFile("../testdata/ars.rss")
 		if err != nil {
-			logrus.Fatalf("Error reading test feed: %s", err.Error())
+			panic(fmt.Sprintf("Error reading test feed: %s", err.Error()))
 		}
 		content = feedResp
 		w.Header().Set("Content-Type", "text/plain")

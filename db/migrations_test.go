@@ -14,7 +14,7 @@ func TestMigrations(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	migrator.Logger = logger
+	migrator.Logger = logrusShim{l: logger}
 	err = migrator.Migrate()
 
 	if err != nil {
@@ -26,7 +26,7 @@ func TestMigrations(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	migrator.Logger = logger
+	migrator.Logger = logrusShim{l: logger}
 	err = migrator.Migrate()
 
 	if err != nil {

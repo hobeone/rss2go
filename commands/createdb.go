@@ -1,10 +1,12 @@
 package commands
 
 import (
+	"log/slog"
+	"os"
+
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
-	"github.com/sirupsen/logrus"
 )
 
 type createDBCommand struct {
@@ -28,7 +30,8 @@ func (cc *createDBCommand) migrateCmd(c *kingpin.ParseContext) error {
 func (cc *createDBCommand) migrate() error {
 	err := cc.DBH.Migrate(db.SchemaMigrations())
 	if err != nil {
-		logrus.Fatalf("Error starting migration: %v", err)
+		slog.Error("Error starting migration", "error", err)
+		os.Exit(1)
 	}
 	return nil
 }

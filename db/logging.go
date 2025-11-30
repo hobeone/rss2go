@@ -9,13 +9,14 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/sirupsen/logrus"
+	"log/slog"
+
 	"github.com/jmoiron/sqlx"
 )
 
 type queryLogger struct {
 	queryer sqlx.Ext
-	logger  logrusAdapter
+	logger  slogAdapter
 }
 
 // Query implements the Queryer interface
@@ -49,8 +50,8 @@ func (p *queryLogger) Exec(query string, args ...interface{}) (sql.Result, error
 	return res, err
 }
 
-type logrusAdapter struct {
-	logger logrus.FieldLogger
+type slogAdapter struct {
+	logger *slog.Logger
 }
 
 var (
@@ -58,7 +59,7 @@ var (
 	newlineregex = regexp.MustCompile(`(?m)\n^\s+`)
 )
 
-func (l logrusAdapter) Print(t time.Duration, query string, args []interface{}) {
+func (l slogAdapter) Print(t time.Duration, query string, args []interface{}) {
 	messages := []interface{}{}
 
 	query = newlineregex.ReplaceAllString(query, " ")
@@ -104,7 +105,7 @@ func (l logrusAdapter) Print(t time.Duration, query string, args []interface{}) 
 	}
 
 	messages = append(messages, sql)
-	l.logger.Debugln(messages...)
+	l.logger.Debug(fmt.Sprint(messages...))
 }
 func isPrintable(s string) bool {
 	for _, r := range s {

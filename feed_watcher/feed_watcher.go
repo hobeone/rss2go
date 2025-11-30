@@ -24,12 +24,12 @@ import (
 	netmail "net/mail"
 	"sync"
 	"time"
+	"log/slog"
 
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed"
 	"github.com/hobeone/rss2go/mail"
 	"github.com/mmcdole/gofeed"
-	"github.com/sirupsen/logrus"
 )
 
 // Cache this many times of the most recent GUIDs for each feed.
@@ -92,7 +92,7 @@ type FeedWatcher struct {
 	GUIDCache         map[string]bool
 	LastCrawlResponse *FeedCrawlResponse
 	After             func(d time.Duration) <-chan time.Time // Allow for mocking out in test.
-	Logger            logrus.FieldLogger
+	Logger            *slog.Logger
 	saveResponse      bool // hack for testing, need to figure out a better way for this.
 	pSync             sync.Mutex
 }
@@ -129,7 +129,7 @@ func NewFeedWatcher(
 		GUIDCache:         guids,
 		LastCrawlResponse: &FeedCrawlResponse{},
 		After:             After,
-		Logger:            logrus.StandardLogger(),
+		Logger:            slog.Default(),
 	}
 }
 
@@ -183,7 +183,7 @@ func (fw *FeedWatcher) UpdateFeed(resp *FeedCrawlResponse) error {
 	fw.FeedInfo.LastPollTime = time.Now()
 	fw.FeedInfo.LastPollError = ""
 	fw.FeedInfo.LastErrorResponse = ""
-	fw.Logger.Infof("updating feed")
+	fw.Logger.Info("updating feed")
 	if resp.HTTPResponseStatusCode != http.StatusOK || resp.Error != nil {
 		if resp.HTTPResponseStatusCode != http.StatusOK {
 			fw.FeedInfo.LastPollError = fmt.Sprintf("Non 200 HTTP Status Code: %d, %v", resp.HTTPResponseStatusCode, resp.Error)
@@ -199,7 +199,7 @@ func (fw *FeedWatcher) UpdateFeed(resp *FeedCrawlResponse) error {
 		}
 	} else {
 		if updateErr := fw.updateFeed(resp); updateErr != nil {
-			fw.Logger.Errorf("Feed error: %s", updateErr)
+			fw.Logger.Error("Feed error", "error", updateErr)
 		}
 
 		// Update DB Record
@@ -247,10 +247,10 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 	if feed == nil || len(feed.Items) == 0 {
 		if err != nil {
 			resp.Error = fmt.Errorf("Error parsing response from %s: %#v", resp.URI, err)
-			fw.Logger.Error(resp.Error)
+			fw.Logger.Error("Error parsing response", "uri", resp.URI, "error", err)
 		} else {
 			resp.Error = fmt.Errorf("no items found in %s", resp.URI)
-			fw.Logger.Info(resp.Error)
+			fw.Logger.Info("No items found", "uri", resp.URI)
 		}
 		return resp.Error
 	}
@@ -271,7 +271,7 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 
 	guidsToLoad := int(math.Ceil(float64(len(feed.Items)) * guidCacheSize))
 
-	fw.Logger.Infof("Got %d stories from feed %s.", len(feed.Items), fw.FeedInfo.URL)
+	fw.Logger.Info("Got stories from feed", "count", len(feed.Items), "url", fw.FeedInfo.URL)
 
 	// On first pass or no stories ever seen
 	if len(fw.GUIDCache) == 0 {
@@ -281,19 +281,19 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 			resp.Error = fmt.Errorf("error getting Guids from DB: %s", err)
 			return resp.Error
 		}
-		fw.Logger.Infof("Loaded %d known guids for Feed %s.", len(fw.GUIDCache), fw.FeedInfo.URL)
+		fw.Logger.Info("Loaded known guids for Feed", "count", len(fw.GUIDCache), "url", fw.FeedInfo.URL)
 	}
 
 	resp.Items = fw.filterNewItems(feed.Items)
-	fw.Logger.Infof("Feed %s has %d new items", feed.Title, len(resp.Items))
+	fw.Logger.Info("Feed has new items", "title", feed.Title, "count", len(resp.Items))
 
 	handledItems := 0
 	for _, item := range resp.Items {
 		item.Title = fmt.Sprintf("%s: %s", fw.FeedInfo.Name, item.Title)
-		fw.Logger.Infof("New Story: %s, sending for mail.", item.Title)
+		fw.Logger.Info("New Story, sending for mail", "title", item.Title)
 		err := fw.sendMail(item)
 		if err != nil {
-			fw.Logger.Infof("Error sending mail: '%s'.  Skipping %d remaining items", err.Error(), len(resp.Items)-handledItems)
+			fw.Logger.Info("Error sending mail. Skipping remaining items", "error", err, "skipped", len(resp.Items)-handledItems)
 			resp.Error = &ErrMailDeliveryFailed{err.Error()}
 			// An error with the mailer usually means we should just stop trying for
 			// a bit. So skip the rest of the items.
@@ -303,9 +303,9 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 			if err != nil {
 				e := fmt.Errorf("error writing guid to db: %s", err)
 				resp.Error = e
-				fw.Logger.Info(e)
+				fw.Logger.Error("Error writing guid to db", "error", e)
 			} else {
-				fw.Logger.Infof("Added guid %s for feed %s", item.GUID, fw.FeedInfo.URL)
+				fw.Logger.Info("Added guid for feed", "guid", item.GUID, "url", fw.FeedInfo.URL)
 			}
 		}
 		handledItems++
@@ -317,7 +317,7 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 		fw.GUIDCache, err = fw.LoadGuidsFromDb(guidsToLoad)
 		if err != nil {
 			e := fmt.Errorf("error getting Guids from DB: %s", err)
-			fw.Logger.Info(e)
+			fw.Logger.Error("Error getting Guids from DB", "error", e)
 			resp.Error = e
 		}
 	}
@@ -337,15 +337,15 @@ func (fw *FeedWatcher) PollFeed() bool {
 	toSleep := time.Duration(0)
 	if timeSinceLastPoll < fw.minSleepTime {
 		toSleep = fw.minSleepTime - timeSinceLastPoll
-		fw.Logger.Infof("Last poll of %s was only %v ago, waiting at least %v.",
-			fw.FeedInfo.URL, timeSinceLastPoll, toSleep)
+		fw.Logger.Info(fmt.Sprintf("Last poll of %s was only %v ago, waiting at least %v.",
+			fw.FeedInfo.URL, timeSinceLastPoll, toSleep))
 	}
 	for {
 		// To have exit signals handled properly non of the other cases can block
 		//
 		select {
 		case <-fw.exitChan:
-			fw.Logger.Infof("Got exit signal, stopping poll of %v", fw.FeedInfo.URL)
+			fw.Logger.Info("Got exit signal, stopping poll", "url", fw.FeedInfo.URL)
 			return true
 		case <-fw.afterWithJitter(toSleep):
 			// see if we can crawl
@@ -353,13 +353,13 @@ func (fw *FeedWatcher) PollFeed() bool {
 			resp := fw.CrawlFeed()
 			if resp.Error == ErrCrawlerNotAvailable {
 				toSleep = fw.minSleepTime
-				fw.Logger.Infof("No crawler available, sleeping.")
+				fw.Logger.Info("No crawler available, sleeping.")
 				break
 			}
 			err := fw.UpdateFeed(resp)
 			if err != nil {
 				fmt.Println(err)
-				fw.Logger.Errorf("Error updating feed information: %s", err)
+				fw.Logger.Error("Error updating feed information", "error", err)
 			}
 			if fw.saveResponse {
 				fw.LastCrawlResponse = resp
@@ -369,13 +369,13 @@ func (fw *FeedWatcher) PollFeed() bool {
 				switch resp.Error.(type) {
 				case *ErrMailDeliveryFailed:
 					toSleep = fw.minSleepTime
-					fw.Logger.Infof("Feed %s had mail delivery error. Sleeping for %v ", fw.FeedInfo.URL, toSleep)
+					fw.Logger.Info("Feed had mail delivery error. Sleeping.", "url", fw.FeedInfo.URL, "sleep", toSleep)
 				default:
 					toSleep = fw.maxSleepTime
-					fw.Logger.Infof("Feed %s had error. Waiting maxium allowed time before next poll.", fw.FeedInfo.URL)
+					fw.Logger.Info("Feed had error. Waiting maxium allowed time before next poll.", "url", fw.FeedInfo.URL)
 				}
 			}
-			fw.Logger.Infof("Feed %s sleeping for: %v", fw.FeedInfo.URL, toSleep)
+			fw.Logger.Info("Feed sleeping", "url", fw.FeedInfo.URL, "duration", toSleep)
 		}
 	}
 }
@@ -383,7 +383,7 @@ func (fw *FeedWatcher) PollFeed() bool {
 // call time.After for the given amount of seconds plus a up to 60 extra seconds.
 func (fw *FeedWatcher) afterWithJitter(d time.Duration) <-chan time.Time {
 	s := d + time.Duration(rand.Int63n(60))*time.Second
-	fw.Logger.Infof("Waiting %v until next poll of %s", s, fw.FeedInfo.URL)
+	fw.Logger.Info("Waiting until next poll", "duration", s, "url", fw.FeedInfo.URL)
 	return fw.After(s)
 }
 
@@ -407,15 +407,15 @@ func (fw *FeedWatcher) recordGUID(guid string) error {
 }
 
 func (fw *FeedWatcher) filterNewItems(stories []*gofeed.Item) []*gofeed.Item {
-	fw.Logger.Infof("Filtering stories we already know about.")
+	fw.Logger.Info("Filtering stories we already know about.")
 	newStories := []*gofeed.Item{}
 	for _, story := range stories {
 		if _, found := fw.GUIDCache[story.GUID]; !found {
 			_, err := fw.dbh.GetFeedItemByGUID(fw.FeedInfo.ID, story.GUID)
 			if err == nil {
-				fw.Logger.Errorf("Got story with known ID that wasn't in GUIDCache, skipping and adding to cache. Feed: %s (%d) - GUID: '%s'", fw.FeedInfo.URL, fw.FeedInfo.ID, story.GUID)
+				fw.Logger.Error("Got story with known ID that wasn't in GUIDCache, skipping and adding to cache", "feed", fw.FeedInfo.URL, "id", fw.FeedInfo.ID, "guid", story.GUID)
 				if guidErr := fw.dbh.RecordGUID(fw.FeedInfo.ID, story.GUID); guidErr != nil {
-					logrus.Errorf("Error updating GUID: %s", guidErr)
+					slog.Error("Error updating GUID", "error", guidErr)
 				}
 				fw.GUIDCache[story.GUID] = true
 				continue
@@ -466,9 +466,9 @@ func (fw *FeedWatcher) CrawlFeed() (r *FeedCrawlResponse) {
 	for {
 		select {
 		case fw.crawlChan <- req:
-			fw.Logger.Infof("Requesting crawl of feed %v", fw.FeedInfo.URL)
+			fw.Logger.Info("Requesting crawl of feed", "url", fw.FeedInfo.URL)
 			resp = <-req.ResponseChan
-			fw.Logger.Infof("Got response to crawl of %v of length (%d)", resp.URI, len(resp.Body))
+			fw.Logger.Info("Got response to crawl", "uri", resp.URI, "length", len(resp.Body))
 			return resp
 		default:
 			resp.Error = ErrCrawlerNotAvailable

@@ -2,17 +2,15 @@ package commands
 
 import (
 	"io"
+	"log/slog"
 	"testing"
 
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
-	"github.com/sirupsen/logrus"
 )
 
-func NullLogger() logrus.FieldLogger {
-	l := logrus.New()
-	l.Out = io.Discard
-	return l
+func NullLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
 func TestAddFeed(t *testing.T) {

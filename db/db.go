@@ -10,10 +10,10 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"log/slog"
 
 	"github.com/hobeone/gomigrate"
 	"github.com/jmoiron/sqlx"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 
 	// Import sqlite3 driver
@@ -86,13 +86,13 @@ type Service interface {
 // operation is in process at a time.
 type Handle struct {
 	db        *sqlx.DB
-	logger    logrus.FieldLogger
+	logger    *slog.Logger
 	syncMutex sync.Mutex
 	queryer   *queryLogger
 }
 
-func openDB(dbType string, dbArgs string, logger logrus.FieldLogger) *sqlx.DB {
-	logger.Infof("db: opening database %s:%s", dbType, dbArgs)
+func openDB(dbType string, dbArgs string, logger *slog.Logger) *sqlx.DB {
+	logger.Info(fmt.Sprintf("db: opening database %s:%s", dbType, dbArgs))
 	// Error only returns from this if it is an unknown driver.
 	d, err := sqlx.Connect(dbType, dbArgs)
 	if err != nil {
@@ -125,10 +125,10 @@ func setupDB(db *sqlx.DB) error {
 	return nil
 }
 
-func newQueryLogger(db *sqlx.DB, logger logrus.FieldLogger) *queryLogger {
+func newQueryLogger(db *sqlx.DB, logger *slog.Logger) *queryLogger {
 	return &queryLogger{
 		queryer: db,
-		logger:  logrusAdapter{logger},
+		logger:  slogAdapter{logger},
 	}
 }
 
@@ -136,7 +136,7 @@ func newQueryLogger(db *sqlx.DB, logger logrus.FieldLogger) *queryLogger {
 //
 //	dbPath: the path to the database to use.
 //	verbose: when true database accesses are logged to stdout
-func NewDBHandle(dbPath string, logger logrus.FieldLogger) *Handle {
+func NewDBHandle(dbPath string, logger *slog.Logger) *Handle {
 	constructedPath := fmt.Sprintf("file:%s?cache=shared&mode=rwc&_busy_timeout=5000", dbPath)
 	db := openDB("sqlite3", constructedPath, logger)
 	err := setupDB(db)
@@ -153,7 +153,7 @@ func NewDBHandle(dbPath string, logger logrus.FieldLogger) *Handle {
 // NewMemoryDBHandle creates a new in memory database.  Only used for testing.
 // The name of the database is a random string so multiple tests can run in
 // parallel with their own database.
-func NewMemoryDBHandle(logger logrus.FieldLogger, loadFixtures bool) *Handle {
+func NewMemoryDBHandle(logger *slog.Logger, loadFixtures bool) *Handle {
 	db := openDB("sqlite3", ":memory:", logger)
 
 	err := setupDB(db)
@@ -182,13 +182,40 @@ func NewMemoryDBHandle(logger logrus.FieldLogger, loadFixtures bool) *Handle {
 	return d
 }
 
+// logrusShim adapts slog to the interface expected by gomigrate (likely logrus-compatible)
+type logrusShim struct {
+	l *slog.Logger
+}
+func (l logrusShim) Printf(format string, args ...interface{}) { l.l.Info(fmt.Sprintf(format, args...)) }
+func (l logrusShim) Println(args ...interface{}) { l.l.Info(fmt.Sprint(args...)) }
+func (l logrusShim) Infof(format string, args ...interface{}) { l.l.Info(fmt.Sprintf(format, args...)) }
+func (l logrusShim) Debugf(format string, args ...interface{}) { l.l.Debug(fmt.Sprintf(format, args...)) }
+func (l logrusShim) Warnf(format string, args ...interface{}) { l.l.Warn(fmt.Sprintf(format, args...)) }
+func (l logrusShim) Errorf(format string, args ...interface{}) { l.l.Error(fmt.Sprintf(format, args...)) }
+func (l logrusShim) Fatalf(format string, args ...interface{}) { l.l.Error(fmt.Sprintf(format, args...)); panic("fatal") }
+func (l logrusShim) Panicf(format string, args ...interface{}) { l.l.Error(fmt.Sprintf(format, args...)); panic("panic") }
+func (l logrusShim) Print(args ...interface{}) { l.l.Info(fmt.Sprint(args...)) }
+func (l logrusShim) Info(args ...interface{}) { l.l.Info(fmt.Sprint(args...)) }
+func (l logrusShim) Debug(args ...interface{}) { l.l.Debug(fmt.Sprint(args...)) }
+func (l logrusShim) Warn(args ...interface{}) { l.l.Warn(fmt.Sprint(args...)) }
+func (l logrusShim) Error(args ...interface{}) { l.l.Error(fmt.Sprint(args...)) }
+func (l logrusShim) Fatal(args ...interface{}) { l.l.Error(fmt.Sprint(args...)); panic("fatal") }
+func (l logrusShim) Panic(args ...interface{}) { l.l.Error(fmt.Sprint(args...)); panic("panic") }
+func (l logrusShim) Infoln(args ...interface{}) { l.l.Info(fmt.Sprint(args...)) }
+func (l logrusShim) Debugln(args ...interface{}) { l.l.Debug(fmt.Sprint(args...)) }
+func (l logrusShim) Warnln(args ...interface{}) { l.l.Warn(fmt.Sprint(args...)) }
+func (l logrusShim) Errorln(args ...interface{}) { l.l.Error(fmt.Sprint(args...)) }
+func (l logrusShim) Fatalln(args ...interface{}) { l.l.Error(fmt.Sprint(args...)); panic("fatal") }
+func (l logrusShim) Panicln(args ...interface{}) { l.l.Error(fmt.Sprint(args...)); panic("panic") }
+
+
 // Migrate uses the migrations at the given path to update the database.
 func (d *Handle) Migrate(m []*gomigrate.Migration) error {
 	migrator, err := gomigrate.NewMigratorWithMigrations(d.db.DB, gomigrate.Sqlite3{}, m)
 	if err != nil {
 		return err
 	}
-	migrator.Logger = d.logger
+	migrator.Logger = logrusShim{l: d.logger}
 	err = migrator.Migrate()
 	return err
 }
@@ -447,7 +474,7 @@ func (d *Handle) GetFeedItemByGUID(feedID int64, guid string) (*FeedItem, error)
 
 // RecordGUID adds a FeedItem record for the given feedID and guid.
 func (d *Handle) RecordGUID(feedID int64, guid string) error {
-	d.logger.Infof("Adding or Updating GUID '%s' for feed %d", guid, feedID)
+	d.logger.Info("Adding or Updating GUID", "guid", guid, "feed_id", feedID)
 	d.syncMutex.Lock()
 	defer d.syncMutex.Unlock()
 
@@ -464,7 +491,7 @@ func (d *Handle) GetMostRecentGUIDsForFeed(feedID int64, max int) ([]string, err
 	defer d.syncMutex.Unlock()
 
 	err := sqlx.Select(d.queryer, &items, "SELECT guid FROM feed_item WHERE feed_info_id = ? ORDER BY added_on DESC LIMIT ?", feedID, max)
-	d.logger.Infof("Got last %d guids for feed_id: %d.", len(items), feedID)
+	d.logger.Info(fmt.Sprintf("Got last %d guids for feed_id: %d.", len(items), feedID))
 	knownGuids := make([]string, len(items))
 	for i, v := range items {
 		knownGuids[i] = v.GUID

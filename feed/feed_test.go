@@ -1,20 +1,12 @@
 package feed
 
 import (
-	"io"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/mmcdole/gofeed"
-	"github.com/sirupsen/logrus"
 )
-
-func NullLogger() logrus.FieldLogger {
-	l := logrus.New()
-	l.Out = io.Discard
-	return l
-}
 
 func TestParseFeed(t *testing.T) {
 	feedResp, err := os.ReadFile("../testdata/ars.rss")

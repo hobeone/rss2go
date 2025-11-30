@@ -13,6 +13,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/mail"
 	"os/exec"
 	"time"
@@ -21,7 +22,6 @@ import (
 
 	"github.com/hobeone/rss2go/config"
 	"github.com/mmcdole/gofeed"
-	"github.com/sirupsen/logrus"
 )
 
 // MTABINARY sets the default MTA binary to exec when sending mail locally.
@@ -51,10 +51,10 @@ func (r SendmailRunner) Run(from string, to []string, msg []byte) error {
 	//func (r SendmailRunner) Run(input []byte) ([]byte, error) {
 	cmd := exec.Command(r.SendmailPath, "-t", "-i")
 	cmd.Stdin = bytes.NewReader(msg)
-	logrus.Infof("mail: running command %#v", cmd.Args)
+	slog.Info("mail: running command", "args", cmd.Args)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		logrus.Infof("mail: error running command %#v, output %s", cmd.Args, output)
+		slog.Info("mail: error running command", "args", cmd.Args, "output", output)
 	}
 	return err
 }
@@ -85,7 +85,7 @@ func (sender *LocalMTASender) SendMail(msg *gomail.Message) error {
 	if err != nil {
 		return fmt.Errorf("error running command %s", err.Error())
 	}
-	logrus.Infof("mail: successfully sent mail: %v to %v", msg.GetHeader("From"), msg.GetHeader("To"))
+	slog.Info("mail: successfully sent mail", "from", msg.GetHeader("From"), "to", msg.GetHeader("To"))
 	return nil
 }
 
@@ -100,7 +100,7 @@ func NewLocalMTASender(mtaPath string) *LocalMTASender {
 	if err != nil {
 		panic(fmt.Sprintf("Couldn't find specified MTA: %s", err.Error()))
 	} else {
-		logrus.Infof("mail: found %s at %s.", mtaPath, c)
+		slog.Info("mail: found MTA", "path", mtaPath, "resolved", c)
 	}
 	mtaPath = c
 
@@ -169,9 +169,9 @@ func (s *SMTPSender) smtpDaemon() {
 				return
 			}
 			if !open {
-				logrus.Infof("mail: Opening connection to %s:%d", s.Hostname, s.Port)
+				slog.Info("mail: Opening connection", "host", s.Hostname, "port", s.Port)
 				if sender, err = s.dialer.Dial(); err != nil {
-					logrus.Errorf("mail: Error connecting to mail server: %v", err)
+					slog.Error("mail: Error connecting to mail server", "error", err)
 					m.Response <- err
 					continue
 				}
@@ -180,20 +180,20 @@ func (s *SMTPSender) smtpDaemon() {
 			lastActivity = time.Now()
 			if err := gomail.Send(sender, m.Message); err != nil {
 				m.Response <- err
-				logrus.Errorf("mail: error sending mail: %v", err)
+				slog.Error("mail: error sending mail", "error", err)
 				sender.Close()
 				open = false
 				continue
 			}
-			logrus.Infof("mail: sent mail to %s: %s", m.Message.GetHeader("To"), m.Message.GetHeader("Subject"))
+			slog.Info("mail: sent mail", "to", m.Message.GetHeader("To"), "subject", m.Message.GetHeader("Subject"))
 			m.Response <- nil
 		// Close the connection to the SMTP server if no email was sent in
 		// the last 30 seconds.
 		case <-time.After(30 * time.Second):
 			if time.Since(lastActivity).Seconds() > 30 && open {
-				logrus.Infof("mail: Closing SMTP connection after 30 seconds of inactivity.")
+				slog.Info("mail: Closing SMTP connection after 30 seconds of inactivity.")
 				if err := sender.Close(); err != nil {
-					logrus.Errorf("mail: Error closing connection: %v", err)
+					slog.Error("mail: Error closing connection", "error", err)
 				}
 				open = false
 			}
@@ -209,7 +209,7 @@ type NullMailSender struct {
 // SendMail increments a counter for checking in tests.
 func (sender *NullMailSender) SendMail(m *gomail.Message) error {
 	sender.Count++
-	logrus.Infof("NullMailer faked sending mail: %s to %v", m.GetHeader("From"), m.GetHeader("To"))
+	slog.Info("NullMailer faked sending mail", "from", m.GetHeader("From"), "to", m.GetHeader("To"))
 	return nil
 }
 
@@ -236,13 +236,13 @@ func CreateAndStartMailer(config *config.Config) *Dispatcher {
 	var sender Sender
 
 	if !config.Mail.SendMail {
-		logrus.Info("mail: using null mail sender as configured.")
+		slog.Info("mail: using null mail sender as configured.")
 		sender = &NullMailSender{}
 	} else if config.Mail.MtaPath != "" {
-		logrus.Infof("mail: using Local MTA: %s", config.Mail.MtaPath)
+		slog.Info("mail: using Local MTA", "path", config.Mail.MtaPath)
 		sender = NewLocalMTASender(config.Mail.MtaPath)
 	} else if config.Mail.Hostname != "" {
-		logrus.Infof("mail: using SMTP Server: %s:%d", config.Mail.Hostname, config.Mail.Port)
+		slog.Info("mail: using SMTP Server", "host", config.Mail.Hostname, "port", config.Mail.Port)
 		sender = NewSMTPSender(config.Mail.Hostname, config.Mail.Port, config.Mail.Username, config.Mail.Password)
 	} else {
 		panic(fmt.Sprintln("mail: no mail sending capability defined in config."))
@@ -253,7 +253,7 @@ func CreateAndStartMailer(config *config.Config) *Dispatcher {
 		config.Mail.FromAddress,
 		sender,
 	)
-	logrus.Infof("mail: created new mailer: %#v", mailer)
+	slog.Info("mail: created new mailer", "mailer", fmt.Sprintf("%#v", mailer))
 	go mailer.DispatchLoop()
 	return mailer
 }

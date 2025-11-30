@@ -2,25 +2,28 @@ package log
 
 import (
 	"io"
+	"log/slog"
 	"os"
-
-	"github.com/sirupsen/logrus"
-	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 )
 
-func SetupLogger(logger *logrus.Logger) {
-	fmter := &prefixed.TextFormatter{
-		FullTimestamp: true,
+// SetupLogger configures the default slog logger.
+func SetupLogger(debug bool) *slog.Logger {
+	level := slog.LevelInfo
+	if debug {
+		level = slog.LevelDebug
 	}
-
-	logger.Formatter = fmter
-	logger.Out = os.Stdout
-	// Only log the info severity or above.
-	logger.Level = logrus.InfoLevel
+	opts := &slog.HandlerOptions{
+		Level: level,
+	}
+	handler := slog.NewTextHandler(os.Stdout, opts)
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
+	return logger
 }
 
-// SetNullOutput sets the looger to send everything to /dev/null.
+// SetNullOutput sets the default logger to discard everything.
 // useful when running unittests.
 func SetNullOutput() {
-	logrus.SetOutput(io.Discard)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	slog.SetDefault(logger)
 }

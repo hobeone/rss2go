@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,7 +14,6 @@ import (
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
 	feedwatcher "github.com/hobeone/rss2go/feed_watcher"
-	"github.com/sirupsen/logrus"
 )
 
 var fakeServerHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -23,7 +23,7 @@ var fakeServerHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Req
 		fmt.Println("SERVING feed1.atim")
 		feedResp, err := os.ReadFile("testdata/ars.rss")
 		if err != nil {
-			logrus.Fatalf("Error reading test feed: %s", err.Error())
+			panic(fmt.Sprintf("Error reading test feed: %s", err.Error()))
 		}
 		content = feedResp
 	case true:
@@ -39,7 +39,7 @@ func TestEndToEndIntegration(t *testing.T) {
 
 	// Override the sleep function
 	feedwatcher.After = func(d time.Duration) <-chan time.Time {
-		logrus.Infof("Call to mock After, waiting for just 1 second.")
+		slog.Info("Call to mock After, waiting for just 1 second.")
 		return time.After(time.Second * time.Duration(1))
 	}
 

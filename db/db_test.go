@@ -1,23 +1,20 @@
 package db
 
 import (
+	"database/sql"
 	"database/sql/driver"
 	"errors"
-	"database/sql"
 	"io"
+	"log/slog"
 	"reflect"
 	"testing"
 	"time"
 
 	testdb "github.com/erikstmartin/go-testdb"
-	"github.com/sirupsen/logrus"
 )
 
-func NullLogger() logrus.FieldLogger {
-	l := logrus.New()
-	l.Level = logrus.DebugLevel
-	l.Out = io.Discard
-	return l
+func NullLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
 func TestConnectionError(t *testing.T) {

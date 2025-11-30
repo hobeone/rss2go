@@ -1,11 +1,13 @@
 package commands
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/hobeone/rss2go/config"
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/log"
-	"github.com/sirupsen/logrus"
 )
 
 const defaultConfig = "~/.config/rss2go/config.json"
@@ -40,15 +42,8 @@ func RegisterCommands() {
 }
 
 func commonInit() (*config.Config, *db.Handle) {
-	if *debug {
-		logrus.SetLevel(logrus.DebugLevel)
-	}
 	cfg := loadConfig(*configfile)
-	logger := logrus.New()
-	log.SetupLogger(logger)
-	if *debugdb {
-		logger.Level = logrus.DebugLevel
-	}
+	logger := log.SetupLogger(*debug || *debugdb)
 
 	dbh := db.NewDBHandle(cfg.DB.Path, logger)
 
@@ -57,15 +52,17 @@ func commonInit() (*config.Config, *db.Handle) {
 
 func loadConfig(cfile string) *config.Config {
 	if len(cfile) == 0 {
-		logrus.Infof("No --config_file given.  Using default: %s", *configfile)
+		// We haven't set up the logger yet, so use default slog or fmt
+		fmt.Printf("No --config_file given.  Using default: %s\n", *configfile)
 		cfile = *configfile
 	}
 
-	logrus.Infof("Got config file: %s\n", cfile)
+	fmt.Printf("Got config file: %s\n", cfile)
 	cfg := config.NewConfig()
 	err := cfg.ReadConfig(cfile)
 	if err != nil {
-		logrus.Fatal(err)
+		fmt.Fprintf(os.Stderr, "Fatal error loading config: %v\n", err)
+		os.Exit(1)
 	}
 
 	// Override cfg from flags

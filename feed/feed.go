@@ -2,13 +2,13 @@ package feed
 
 import (
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/mmcdole/gofeed"
-	"github.com/sirupsen/logrus"
 
 	"golang.org/x/net/html"
 )
@@ -39,7 +39,7 @@ func parseFix(f *gofeed.Feed) (*gofeed.Feed, error) {
 	}
 	base, err := url.Parse(f.Link)
 	if err != nil {
-		logrus.Infof("unable to parse link: %v", f.Link)
+		slog.Info("unable to parse link", "link", f.Link)
 	}
 
 	for _, s := range f.Items {
@@ -68,7 +68,7 @@ func parseFix(f *gofeed.Feed) (*gofeed.Feed, error) {
 			} else if s.Title != "" {
 				s.GUID = s.Title
 			} else {
-				logrus.Infof("feed: story has no id: %v", s)
+				slog.Info("feed: story has no id", "story", s)
 				return nil, fmt.Errorf("story has no id: %v", s)
 			}
 		}
@@ -84,7 +84,7 @@ func parseFix(f *gofeed.Feed) (*gofeed.Feed, error) {
 			if err == nil {
 				s.Link = link.String()
 			} else {
-				logrus.Infof("feed: unable to resolve link: %s: %v", err, s.Link)
+				slog.Info("feed: unable to resolve link", "error", err, "link", s.Link)
 			}
 		}
 		_, serr := url.Parse(s.Link)
@@ -101,7 +101,7 @@ func parseFix(f *gofeed.Feed) (*gofeed.Feed, error) {
 		// which seems excessive - but meh.
 		s.Content, err = cleanFeedContent(s.Content)
 		if err != nil {
-			logrus.Errorf("feed: error cleaning up content: %s", err)
+			slog.Error("feed: error cleaning up content", "error", err)
 		}
 
 		p := bluemonday.UGCPolicy()
@@ -109,7 +109,7 @@ func parseFix(f *gofeed.Feed) (*gofeed.Feed, error) {
 
 		s.Content, err = rewriteFeedContent(s.Content)
 		if err != nil {
-			logrus.Errorf("feed: error cleaning up content: %s", err)
+			slog.Error("feed: error cleaning up content", "error", err)
 		}
 
 	}
@@ -141,7 +141,7 @@ func cleanFeedContent(htmlFrag string) (string, error) {
 		if exists && val != "" {
 			escLinkSrc, err := url.QueryUnescape(val)
 			if err != nil {
-				logrus.Infof("feed: error unescaping iframe URL. Error: %s, URL: %#v", err, val)
+				slog.Info("feed: error unescaping iframe URL", "error", err, "url", val)
 				return
 			}
 			s.ReplaceWithHtml(fmt.Sprintf(`<a href="%s">%s</a>`, escLinkSrc, escLinkSrc))

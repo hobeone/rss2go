@@ -2,6 +2,8 @@ package commands
 
 import (
 	"fmt"
+	"log/slog"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -12,10 +14,8 @@ import (
 	"github.com/hobeone/rss2go/crawler"
 	"github.com/hobeone/rss2go/db"
 	feedwatcher "github.com/hobeone/rss2go/feed_watcher"
-	"github.com/hobeone/rss2go/log"
 	"github.com/hobeone/rss2go/mail"
 	"github.com/mmcdole/gofeed"
-	"github.com/sirupsen/logrus"
 
 	"net/http"
 	netmail "net/mail"
@@ -47,12 +47,6 @@ func (dc *daemonCommand) configure(app *kingpin.Application) {
 }
 
 func (dc *daemonCommand) run(c *kingpin.ParseContext) error {
-	if *debug {
-		logrus.SetLevel(logrus.DebugLevel)
-	}
-	if *quiet {
-		logrus.SetLevel(logrus.ErrorLevel)
-	}
 	dc.Config = loadConfig(*configfile)
 	dc.Config.Mail.SendMail = dc.SendMail
 	dc.Config.DB.UpdateDb = dc.UpdateDB
@@ -61,11 +55,12 @@ func (dc *daemonCommand) run(c *kingpin.ParseContext) error {
 	d.PollFeeds = dc.PollFeeds
 	allFeeds, err := d.DBH.GetAllFeedsWithUsers()
 	if err != nil {
-		logrus.Fatal(err.Error())
+		slog.Error(err.Error())
+		os.Exit(1)
 	}
 	d.CreateAndStartFeedWatchers(allFeeds)
 
-	logrus.Infof("Got %d feeds to watch.", len(allFeeds))
+	slog.Info("Got feeds to watch", "count", len(allFeeds))
 
 	go d.feedDbUpdateLoop()
 
@@ -74,10 +69,11 @@ func (dc *daemonCommand) run(c *kingpin.ParseContext) error {
 
 	if dc.ExpvarPort > 0 {
 		host_and_port := fmt.Sprintf("localhost:%d", dc.ExpvarPort)
-		logrus.Infof("Listening on %s", host_and_port)
+		slog.Info("Listening on", "address", host_and_port)
 		err = http.ListenAndServe(host_and_port, nil)
 		if err != nil {
-			logrus.Fatalf("Error starting expvar server: %s", err)
+			slog.Error("Error starting expvar server", "error", err)
+			os.Exit(1)
 		}
 	}
 	d.pollWG.Wait()
@@ -92,21 +88,15 @@ type Daemon struct {
 	Feeds     map[string]*feedwatcher.FeedWatcher
 	DBH       *db.Handle
 	PollFeeds bool
-	Logger    logrus.FieldLogger
+	Logger    *slog.Logger
 	pollWG    sync.WaitGroup
 }
 
 // NewDaemon returns a pointer to a new Daemon struct with defaults set.
 func NewDaemon(cfg *config.Config) *Daemon {
 	var dbh *db.Handle
-	logger := logrus.New()
-	log.SetupLogger(logger)
-	if *debugdb {
-		logger.Level = logrus.DebugLevel
-	}
-	if *quiet {
-		logger.Level = logrus.ErrorLevel
-	}
+	logger := slog.Default()
+
 	if cfg.DB.Type == "memory" {
 		dbh = db.NewMemoryDBHandle(logger, false)
 	} else {
@@ -130,7 +120,7 @@ func NewDaemon(cfg *config.Config) *Daemon {
 // Watch the db config and update feeds based on removal or addition of feeds
 func (d *Daemon) feedDbUpdateLoop() {
 	ival := time.Duration(d.Config.DB.WatchInterval) * time.Second
-	logrus.Infof("Watching the db for changed feeds every %v", ival)
+	slog.Info("Watching the db for changed feeds", "interval", ival)
 	for {
 		time.Sleep(ival)
 		d.feedDbUpdate()
@@ -157,7 +147,7 @@ func PrintMemUsage() {
 func (d *Daemon) feedDbUpdate() {
 	dbFeeds, err := d.DBH.GetAllFeedsWithUsers()
 	if err != nil {
-		logrus.Errorf("Error getting feeds from db: %s", err.Error())
+		slog.Error("Error getting feeds from db", "error", err)
 		return
 	}
 	allFeeds := make(map[string]*db.FeedInfo)
@@ -166,7 +156,7 @@ func (d *Daemon) feedDbUpdate() {
 	}
 	for k, v := range d.Feeds {
 		if _, ok := allFeeds[k]; !ok {
-			logrus.Infof("Feed %s removed from db. Stopping poll.", k)
+			slog.Info("Feed removed from db. Stopping poll.", "url", k)
 			v.StopPoll()
 			delete(d.Feeds, k)
 		}
@@ -175,11 +165,11 @@ func (d *Daemon) feedDbUpdate() {
 	for k, v := range allFeeds {
 		if _, ok := d.Feeds[k]; !ok {
 			feedsToStart = append(feedsToStart, v)
-			logrus.Infof("Feed %s added to db. Adding to queue to start.", k)
+			slog.Info("Feed added to db. Adding to queue to start.", "url", k)
 		}
 	}
 	if len(feedsToStart) > 0 {
-		logrus.Infof("Adding %d feeds to watch.", len(feedsToStart))
+		slog.Info("Adding feeds to watch.", "count", len(feedsToStart))
 		d.startPollers(feedsToStart)
 	}
 }
@@ -187,7 +177,7 @@ func (d *Daemon) feedDbUpdate() {
 // Watch the db config and update
 func (d *Daemon) feedStateSummaryLoop() {
 	ival := time.Duration(d.Config.ReportInterval) * time.Second
-	logrus.Infof("Checking to send reports every %v", ival)
+	slog.Info("Checking to send reports", "interval", ival)
 	for {
 		d.feedStateSummary()
 		time.Sleep(ival)
@@ -197,7 +187,7 @@ func (d *Daemon) feedStateSummaryLoop() {
 func (d *Daemon) feedStateSummary() {
 	users, err := d.DBH.GetAllUsers()
 	if err != nil {
-		logrus.Errorf("Error getting users from DB: %s", err)
+		slog.Error("Error getting users from DB", "error", err)
 		return
 	}
 
@@ -206,18 +196,18 @@ func (d *Daemon) feedStateSummary() {
 	for _, u := range users {
 		lastReport, err := d.DBH.GetUserReport(&u)
 		if err != nil {
-			logrus.Errorf("Error getting the last time we sent a report to user %s: %s", u.Email, err)
+			slog.Error("Error getting the last time we sent a report to user", "email", u.Email, "error", err)
 			return
 		}
 
 		if lastReport.LastReport.Before(sevenDaysAgo) {
-			logrus.Infof("Creating Error report for %s", u.Email)
+			slog.Info("Creating Error report", "email", u.Email)
 			var sb strings.Builder
 			badfeeds := 0
 			sb.WriteString(fmt.Sprintf("Failed/Stale Feed report for %s<br>\n", u.Email))
 			feeds, err := d.DBH.GetUserFeedsWithErrors(&u)
 			if err != nil {
-				logrus.Errorf("Error getting users failed feeds: %s", err)
+				slog.Error("Error getting users failed feeds", "error", err)
 				return
 			}
 			badfeeds = badfeeds + len(feeds)
@@ -237,7 +227,7 @@ func (d *Daemon) feedStateSummary() {
 
 			feeds, err = d.DBH.GetUserStaleFeeds(&u)
 			if err != nil {
-				logrus.Errorf("Error getting stale feeds from DB: %s", err)
+				slog.Error("Error getting stale feeds from DB", "error", err)
 				return
 			}
 			badfeeds = badfeeds + len(feeds)
@@ -273,16 +263,16 @@ func (d *Daemon) feedStateSummary() {
 				d.MailChan <- req
 				resp := <-req.ResultChan
 				if resp != nil {
-					logrus.Errorf("Error sending mail: %s", err)
+					slog.Error("Error sending mail", "error", resp)
 					return
 				}
-				logrus.Infof("Sent error report to %s", u.Email)
+				slog.Info("Sent error report", "to", u.Email)
 			} else {
-				logrus.Infof("No bad feeds found for %s", u.Email)
+				slog.Info("No bad feeds found", "for", u.Email)
 			}
 			err = d.DBH.SetUserReport(&u)
 			if err != nil {
-				logrus.Errorf("Error recording I sent an error report to %s: %s", u.Email, err)
+				slog.Error("Error recording I sent an error report", "to", u.Email, "error", err)
 			}
 
 		}
@@ -293,7 +283,7 @@ func (d *Daemon) startPollers(newFeeds []*db.FeedInfo) {
 	// make feeds unique
 	for _, f := range newFeeds {
 		if _, ok := d.Feeds[f.URL]; ok {
-			logrus.Infof("Found duplicate feed: %s", f.URL)
+			slog.Info("Found duplicate feed", "url", f.URL)
 			continue
 		}
 

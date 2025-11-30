@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 	"time"
+	"log/slog"
 
 	"gopkg.in/gomail.v2"
 
@@ -13,13 +14,10 @@ import (
 	"github.com/hobeone/rss2go/feed"
 	"github.com/hobeone/rss2go/log"
 	"github.com/hobeone/rss2go/mail"
-	"github.com/sirupsen/logrus"
 )
 
-func NullLogger() logrus.FieldLogger {
-	l := logrus.New()
-	l.Out = io.Discard
-	return l
+func NullLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
 type FailMailer struct{}

@@ -6,18 +6,11 @@ This document outlines suggested steps to further modernize the rss2go codebase.
 - [x] Remove obsolete CI (`wercker.yml`) and init scripts (`upstart`).
 - [x] Introduce `context.Context` to `crawler` package.
 - [x] Fix resource leaks (context cancellation) and potential infinite loops in `FeedCrawler`.
+- [x] Logging Migration: Replaced `logrus` with `log/slog`.
 
 ## Recommended Next Steps
 
-### 1. Logging Migration
-**Goal:** Replace `github.com/sirupsen/logrus` with the standard library `log/slog` (Go 1.21+).
-**Benefit:** Removes external dependency, better performance, standard API.
-**Strategy:**
-- Update `log/log.go` to setup a `*slog.Logger`.
-- Replace `logrus.FieldLogger` with `*slog.Logger` in structs (`FeedWatcher`, etc.).
-- Rewrite log calls: `logrus.Infof("msg %s", arg)` -> `slog.Info("msg", "key", arg)`.
-
-### 2. Database Migrations
+### 1. Database Migrations
 **Goal:** Replace `github.com/hobeone/gomigrate` with a widely supported tool like `golang-migrate/migrate` or `pressly/goose`.
 **Benefit:** Better support, CLI tools, standard format.
 

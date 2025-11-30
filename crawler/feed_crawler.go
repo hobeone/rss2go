@@ -5,13 +5,13 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"time"
 
 	feedwatcher "github.com/hobeone/rss2go/feed_watcher"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -60,7 +60,7 @@ func NewHTTPClient(timeout time.Duration) *HTTPClient {
 // Sets a reasonable timeout on the connection and read from the server.
 // Users will need to Close() the resposne.Body or risk leaking connections.
 func GetFeed(ctx context.Context, url string, client *HTTPClient) (*http.Response, error) {
-	logrus.Infof("Crawling %v", url)
+	slog.Info("Crawling", "url", url)
 
 	if client == nil {
 		client = NewHTTPClient(defaultTimeout)
@@ -69,7 +69,7 @@ func GetFeed(ctx context.Context, url string, client *HTTPClient) (*http.Respons
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 
 	if err != nil {
-		logrus.Errorf("Error creating request: %v", err)
+		slog.Error("Error creating request", "error", err)
 		return nil, err
 	}
 	req.Header.Set("Accept", Accept)
@@ -77,20 +77,20 @@ func GetFeed(ctx context.Context, url string, client *HTTPClient) (*http.Respons
 
 	requestDump, err := httputil.DumpRequestOut(req, true)
 	if err != nil {
-		logrus.Errorf("Couldn't dump request: %s", err)
+		slog.Error("Couldn't dump request", "error", err)
 	} else {
-		logrus.Debugln(string(requestDump))
+		slog.Debug("Request Dump", "dump", string(requestDump))
 	}
 
 	r, err := client.Do(req)
 
 	if err != nil {
-		logrus.Infof("Error getting %s: %s", url, err)
+		slog.Info("Error getting feed", "url", url, "error", err)
 		return r, err
 	}
 	if r.StatusCode != http.StatusOK {
 		err = fmt.Errorf("feed %s returned a non 200 status code: %s", url, r.Status)
-		logrus.Info(err)
+		slog.Info("Non-200 status", "error", err)
 		return r, err
 	}
 	return r, nil
@@ -102,7 +102,7 @@ func GetFeedAndMakeResponse(ctx context.Context, url string, client *HTTPClient)
 	resp := &feedwatcher.FeedCrawlResponse{
 		URI: url,
 	}
-	logrus.Infof("Crawling %v", url)
+	slog.Info("Crawling", "url", url)
 
 	if client == nil {
 		client = NewHTTPClient(defaultTimeout)
@@ -111,7 +111,7 @@ func GetFeedAndMakeResponse(ctx context.Context, url string, client *HTTPClient)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 
 	if err != nil {
-		logrus.Errorf("Error creating request: %v", err)
+		slog.Error("Error creating request", "error", err)
 		resp.Error = err
 		return resp
 	}
@@ -120,15 +120,15 @@ func GetFeedAndMakeResponse(ctx context.Context, url string, client *HTTPClient)
 
 	requestDump, err := httputil.DumpRequestOut(req, true)
 	if err != nil {
-		logrus.Errorf("Couldn't dump request: %s", err)
+		slog.Error("Couldn't dump request", "error", err)
 	} else {
-		logrus.Debugln(string(requestDump))
+		slog.Debug("Request Dump", "dump", string(requestDump))
 	}
 
 	r, err := client.Do(req)
 
 	if err != nil {
-		logrus.Infof("Error getting %s: %s", url, err)
+		slog.Info("Error getting feed", "url", url, "error", err)
 		resp.Error = err
 		return resp
 	}
@@ -137,7 +137,7 @@ func GetFeedAndMakeResponse(ctx context.Context, url string, client *HTTPClient)
 
 	if r.StatusCode != http.StatusOK {
 		err = fmt.Errorf("feed %s returned a non 200 status code: %s", url, r.Status)
-		logrus.Info(err)
+		slog.Info("Non-200 status", "error", err)
 		resp.Error = err
 		return resp
 	}
@@ -145,11 +145,6 @@ func GetFeedAndMakeResponse(ctx context.Context, url string, client *HTTPClient)
 	if r != nil {
 		// If there are connection issues the response will be nil
 		defer r.Body.Close()
-	}
-
-	if err != nil {
-		resp.Error = err
-		return resp
 	}
 
 	resp.HTTPResponseStatus = r.Status
@@ -175,7 +170,7 @@ func GetFeedAndMakeResponse(ctx context.Context, url string, client *HTTPClient)
 // gets the given URL and returns a response
 func FeedCrawler(crawlRequests chan *feedwatcher.FeedCrawlRequest, client *HTTPClient) {
 	for req := range crawlRequests {
-		logrus.Info("Waiting on request")
+		slog.Info("Waiting on request")
 		if req.Ctx == nil {
 			req.Ctx = context.Background()
 		}
@@ -189,8 +184,8 @@ func FeedCrawler(crawlRequests chan *feedwatcher.FeedCrawlRequest, client *HTTPC
 // StartCrawlerPool creates a pool of num http crawlers listening to the crawl_channel.
 func StartCrawlerPool(num int, crawlChannel chan *feedwatcher.FeedCrawlRequest) {
 	httpClient := NewHTTPClient(defaultTimeout)
-	for i := 0; i < num; i++ {
-		logrus.Infof("Starting Crawler %d", i)
+	for i := range num {
+		slog.Info("Starting Crawler", "id", i)
 		go FeedCrawler(crawlChannel, httpClient)
 	}
 }

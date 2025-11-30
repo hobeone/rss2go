@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"golang.org/x/net/html/charset"
@@ -13,7 +14,6 @@ import (
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/opml"
 	"github.com/mattn/go-sqlite3"
-	"github.com/sirupsen/logrus"
 )
 
 type opmlCommand struct {
@@ -86,7 +86,8 @@ func (oc *opmlCommand) importOpml(c *kingpin.ParseContext) error {
 
 	fr, err := os.ReadFile(oc.File)
 	if err != nil {
-		logrus.Fatalf("Error reading OPML file: %s", err.Error())
+		slog.Error("Error reading OPML file", "error", err)
+		os.Exit(1)
 	}
 	o := opml.Opml{}
 	d := xml.NewDecoder(bytes.NewReader(fr))
@@ -95,7 +96,8 @@ func (oc *opmlCommand) importOpml(c *kingpin.ParseContext) error {
 	d.Strict = false
 
 	if err := d.Decode(&o); err != nil {
-		logrus.Fatalf("opml error: %v", err.Error())
+		slog.Error("opml error", "error", err)
+		os.Exit(1)
 	}
 	feeds := make(map[string]string)
 	var proc func(outlines []*opml.OpmlOutline)

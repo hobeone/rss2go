@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -17,7 +19,6 @@ import (
 	"github.com/hobeone/rss2go/feed"
 	feedwatcher "github.com/hobeone/rss2go/feed_watcher"
 	"github.com/hobeone/rss2go/mail"
-	"github.com/sirupsen/logrus"
 
 	"github.com/alecthomas/kingpin/v2"
 
@@ -259,7 +260,8 @@ func (fc *feedCommand) test(c *kingpin.ParseContext) error {
 		fmt.Println("****** Mail Message *******")
 		b := bytes.NewBuffer([]byte{})
 		if _, writeErr := m.WriteTo(b); writeErr != nil {
-			logrus.Fatalf("Error writing: %s", err)
+			slog.Error("Error writing", "error", err)
+			os.Exit(1)
 		}
 		spew.Dump(b)
 		fmt.Println("****** ++++++++++++ *******")
