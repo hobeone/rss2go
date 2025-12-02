@@ -121,7 +121,7 @@ func parseFix(f *gofeed.Feed) (*gofeed.Feed, error) {
 // Some feeds are double escaped with things like: &amp;amp;
 func fullyHTMLUnescape(orig string) string {
 	mod := orig
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		mod = html.UnescapeString(orig)
 		if orig == mod {
 			return mod

@@ -89,7 +89,8 @@ func (fc *feedCommand) runone(c *kingpin.ParseContext) error {
 	)
 	feeds := make(map[string]*feedwatcher.FeedWatcher)
 	feeds[fw.FeedInfo.URL] = fw
-	if fc.Loops == -1 {
+	switch fc.Loops {
+	case -1:
 		for {
 			resp := fw.CrawlFeed()
 			err := fw.UpdateFeed(resp)
@@ -98,14 +99,16 @@ func (fc *feedCommand) runone(c *kingpin.ParseContext) error {
 			}
 			time.Sleep(time.Second * time.Duration(fc.Config.Crawl.MinInterval))
 		}
-	} else if fc.Loops == 1 {
+
+	case 1:
 		resp := fw.CrawlFeed()
 		err := fw.UpdateFeed(resp)
 		if err != nil {
 			fmt.Printf("Error when updating feed: %v\n", err)
 		}
-	} else {
-		for i := 0; i < fc.Loops; i++ {
+
+	default:
+		for range fc.Loops {
 			resp := fw.CrawlFeed()
 			err := fw.UpdateFeed(resp)
 			if err != nil {
@@ -129,10 +132,7 @@ func (fc *feedCommand) badfeeds(c *kingpin.ParseContext) error {
 		fmt.Printf("  Url: %s\n", f.URL)
 		fmt.Printf("  Last Update: %s\n", f.LastPollTime)
 		fmt.Printf("  Error: %s\n", strings.TrimSpace(f.LastPollError))
-		blen := len(f.LastErrorResponse)
-		if blen > 100 {
-			blen = 100
-		}
+		blen := min(100, len(f.LastErrorResponse))
 		fmt.Printf("  Last Content: %s...\n", f.LastErrorResponse[0:blen])
 		fmt.Println()
 	}
@@ -182,7 +182,7 @@ func (fc *feedCommand) add() error {
 	for _, email := range fc.UserEmails {
 		user, err := fc.DBH.GetUserByEmail(email)
 		if err != nil {
-			return fmt.Errorf("Error looking up user %s, does it exist? (%v)", email, err)
+			return fmt.Errorf("error looking up user %s, does it exist? (%v)", email, err)
 		}
 		err = fc.DBH.AddFeedsToUser(user, []*db.FeedInfo{f})
 		if err != nil {
@@ -204,7 +204,7 @@ func (fc *feedCommand) delete(c *kingpin.ParseContext) error {
 		}
 	}
 	if hadError {
-		return fmt.Errorf("Error removing one or more feeds")
+		return fmt.Errorf("error removing one or more feeds")
 	}
 
 	return nil
@@ -224,11 +224,7 @@ func (fc *feedCommand) test(c *kingpin.ParseContext) error {
 	if err != nil {
 		return err
 	}
-	s := len(dump)
-	maxDump := 1000
-	if s < 1000 {
-		maxDump = s
-	}
+	maxDump := min(len(dump), 1000)
 	fmt.Println(string(dump[0:maxDump]))
 
 	body, err := io.ReadAll(resp.Body)

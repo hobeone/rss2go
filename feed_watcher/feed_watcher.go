@@ -18,13 +18,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"math/rand"
 	"net/http"
 	netmail "net/mail"
 	"sync"
 	"time"
-	"log/slog"
 
 	"github.com/hobeone/rss2go/db"
 	"github.com/hobeone/rss2go/feed"
@@ -285,7 +285,9 @@ func (fw *FeedWatcher) updateFeed(resp *FeedCrawlResponse) error {
 	}
 
 	resp.Items = fw.filterNewItems(feed.Items)
-	fw.Logger.Info("Feed has new items", "title", feed.Title, "count", len(resp.Items))
+	if len(resp.Items) > 0 {
+		fw.Logger.Info("Feed has new items", "title", feed.Title, "count", len(resp.Items))
+	}
 
 	handledItems := 0
 	for _, item := range resp.Items {

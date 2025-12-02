@@ -157,7 +157,7 @@ func highlightBytePosition(f io.Reader, pos int64) (line, col int, highlight str
 	lastLine := ""
 	thisLine := new(bytes.Buffer) // Holds content of the error line *before* pos
 
-	for n := int64(0); n < pos; n++ {
+	for range pos {
 		b, err := br.ReadByte()
 		if err != nil {
 			break // EOF or other read error before reaching pos
@@ -180,15 +180,15 @@ func highlightBytePosition(f io.Reader, pos int64) (line, col int, highlight str
 
 	// 'thisLine' has content before 'pos'. Read 'restOfLineReader' to get content from 'pos' onwards for the current line.
 	restOfLineReader := bufio.NewReader(br) // Use the existing buffered reader
-    actualRestOfLineBytes, err := restOfLineReader.ReadBytes('\n')
-    var actualRestOfLine string
-    if err != nil && err != io.EOF {
-        // Handle error or decide how to proceed if reading rest of line fails
-        actualRestOfLine = ""
-    } else {
+	actualRestOfLineBytes, err := restOfLineReader.ReadBytes('\n')
+	var actualRestOfLine string
+	if err != nil && err != io.EOF {
+		// Handle error or decide how to proceed if reading rest of line fails
+		actualRestOfLine = ""
+	} else {
 		actualRestOfLine = string(bytes.TrimRight(actualRestOfLineBytes, "\n"))
 	}
-	
+
 	fullErrorLine := thisLine.String() + actualRestOfLine
 
 	if line > 1 {
@@ -198,6 +198,6 @@ func highlightBytePosition(f io.Reader, pos int64) (line, col int, highlight str
 	// Arrow position: 'currentColInLoop' is the 0-indexed offset on the line for the char at 'pos'.
 	// The prefix "%5d: " (e.g., "    1: ") has a length of 7.
 	// So, we need 'currentColInLoop' spaces relative to the start of 'fullErrorLine', plus 7 for the prefix.
-	highlight += fmt.Sprintf("%s^\n", strings.Repeat(" ", currentColInLoop + 7)) // This was actually correct. The issue is in test expectations.
+	highlight += fmt.Sprintf("%s^\n", strings.Repeat(" ", currentColInLoop+7)) // This was actually correct. The issue is in test expectations.
 	return
 }
