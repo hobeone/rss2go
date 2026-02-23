@@ -1,6 +1,6 @@
 module github.com/hobeone/rss2go
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/PuerkitoBio/goquery v1.11.0
@@ -24,7 +24,7 @@ require (
 
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
-	github.com/pressly/goose/v3 v3.26.0
+	github.com/pressly/goose/v3 v3.27.0
 )
 
 require (
