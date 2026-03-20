@@ -40,7 +40,7 @@ func NewPool(size int, cfg *config.Config, logger *slog.Logger) *Pool {
 
 	p.sender = p.defaultSender
 
-	for i := 0; i < size; i++ {
+	for i := range size {
 		go p.worker(i)
 	}
 

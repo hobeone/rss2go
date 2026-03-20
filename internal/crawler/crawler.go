@@ -42,7 +42,7 @@ func NewPool(size int, timeout time.Duration, logger *slog.Logger) *Pool {
 		logger: logger.With("component", "crawler"),
 	}
 
-	for i := 0; i < size; i++ {
+	for i := range size {
 		go p.worker(i)
 	}
 
