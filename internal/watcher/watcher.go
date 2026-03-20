@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/mmcdole/gofeed"
 	"github.com/hobe/rss2go/internal/crawler"
@@ -61,7 +62,8 @@ func New(feed models.Feed, store db.Store, c CrawlerPool, m MailerPool, interval
 	contentPol.AllowAttrs("href").OnElements("a")
 	contentPol.RequireNoReferrerOnLinks(true)
 	contentPol.RequireParseableURLs(true)
-	contentPol.AllowElements("b", "i", "u", "strong", "em", "p", "br", "div", "span", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote")
+	contentPol.AllowElements("b", "i", "u", "strong", "em", "p", "br", "div", "span", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "img")
+	contentPol.AllowAttrs("src", "alt", "title", "width", "height").OnElements("img")
 
 	return &Watcher{
 		feed:       feed,
@@ -199,11 +201,44 @@ func (w *Watcher) FormatItem(feedTitle string, item *gofeed.Item) (subject, body
 	if content == "" {
 		content = item.Description
 	}
+	
+	// Pre-process to remove likely tracking pixels
+	content = removeTrackingImages(content)
+
 	safeContent := strings.TrimSpace(w.contentPol.Sanitize(content))
 
 	subject = "[" + safeFeedTitle + "] " + safeTitle
 	body = safeContent + "<br><br><a href=\"" + safeLink + "\">Read more</a>"
 	return
+}
+
+func removeTrackingImages(htmlStr string) string {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlStr))
+	if err != nil {
+		return htmlStr // Fallback to returning original string if parsing fails
+	}
+
+	doc.Find("img").Each(func(i int, s *goquery.Selection) {
+		width, _ := s.Attr("width")
+		height, _ := s.Attr("height")
+		src, _ := s.Attr("src")
+
+		// Remove if width or height is 1 or 0
+		if width == "1" || width == "0" || height == "1" || height == "0" {
+			s.Remove()
+			return
+		}
+
+		// Remove if URL contains common tracking keywords
+		srcLower := strings.ToLower(src)
+		if strings.Contains(srcLower, "tracker") || strings.Contains(srcLower, "pixel") || strings.Contains(srcLower, "analytics") {
+			s.Remove()
+			return
+		}
+	})
+
+	htmlStr, _ = doc.Find("body").Html()
+	return htmlStr
 }
 
 
