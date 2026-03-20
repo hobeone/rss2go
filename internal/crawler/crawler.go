@@ -97,7 +97,6 @@ func (p *Pool) fetch(ctx context.Context, url string) ([]byte, error) {
 		"url", url,
 		"status", resp.StatusCode,
 		"content_type", resp.Header.Get("Content-Type"),
-		"content_length", resp.ContentLength,
 		"duration", duration,
 	)
 
