@@ -38,9 +38,7 @@ func Load(cfgFile string) (*Config, error) {
 	if cfgFile != "" {
 		v.SetConfigFile(cfgFile)
 	} else {
-		v.AddConfigPath(".")
-		v.SetConfigName("rss2go")
-		v.SetConfigType("yaml")
+		v.SetConfigFile("./rss2go.yaml")
 	}
 
 	v.SetEnvPrefix("RSS2GO")
