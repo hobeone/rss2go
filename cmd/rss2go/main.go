@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/hobe/rss2go"
 	"github.com/hobe/rss2go/internal/config"
@@ -266,15 +265,17 @@ func runTestFeed(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Sending first item: %s\n", item.Title)
 
-	mPool.Submit(mailer.MailRequest{
+	err = mPool.Send(mailer.MailRequest{
 		To:      []string{email},
 		Subject: "[TEST] " + subject,
 		Body:    body,
 	})
+	if err != nil {
+		return fmt.Errorf("failed to send test email: %w", err)
+	}
 
-	// Give it a few seconds to send
-	time.Sleep(20 * time.Second)
-	fmt.Println("Test email sent (check logs for errors)")
+	fmt.Println("Test email sent successfully!")
 
 	return nil
-}
+	}
+
