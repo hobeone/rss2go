@@ -80,12 +80,20 @@ func New(feed models.Feed, store db.Store, c CrawlerPool, m MailerPool, interval
 
 // Run starts the watcher loop.
 func (w *Watcher) Run(ctx context.Context) {
-	jitter := w.getJitter()
-	w.logger.Info("starting watcher", "next_poll", time.Now().Add(jitter))
+	initialWait := w.getJitter()
+	if !w.feed.LastPoll.IsZero() {
+		nextScheduledPoll := w.feed.LastPoll.Add(w.interval)
+		wait := time.Until(nextScheduledPoll)
+		if wait > 0 {
+			initialWait += wait
+		}
+	}
 
-	// Initial jitter to avoid thundering herd on startup
+	w.logger.Info("starting watcher", "next_poll", time.Now().Add(initialWait))
+
+	// Initial wait (last poll offset + jitter)
 	select {
-	case <-time.After(jitter):
+	case <-time.After(initialWait):
 	case <-ctx.Done():
 		return
 	}
