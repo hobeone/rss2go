@@ -28,6 +28,7 @@ type Pool struct {
 	requests  chan CrawlRequest
 	responses chan CrawlResponse
 	client    *http.Client
+	timeout   time.Duration
 	logger    *slog.Logger
 }
 
@@ -36,10 +37,9 @@ func NewPool(size int, timeout time.Duration, logger *slog.Logger) *Pool {
 	p := &Pool{
 		requests:  make(chan CrawlRequest, size*2),
 		responses: make(chan CrawlResponse, size*2),
-		client: &http.Client{
-			Timeout: timeout,
-		},
-		logger: logger.With("component", "crawler"),
+		client:    &http.Client{},
+		timeout:   timeout,
+		logger:    logger.With("component", "crawler"),
 	}
 
 	for i := range size {
@@ -66,6 +66,11 @@ func (p *Pool) fetch(ctx context.Context, url string) ([]byte, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+
+	// Create a sub-context with the pool's configured timeout
+	ctx, cancel := context.WithTimeout(ctx, p.timeout)
+	defer cancel()
+
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
