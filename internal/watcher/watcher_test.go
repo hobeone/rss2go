@@ -95,18 +95,23 @@ func TestWatcher_HandleResponse(t *testing.T) {
 
 	// Mock Mailer behavior
 	mPool.On("Submit", mock.MatchedBy(func(req mailer.MailRequest) bool {
-		return req.Subject == "[Example] Item 1" && req.To[0] == "user@example.com"
+		// Verify sanitization
+		// bluemonday StrictPolicy strips the entire tag, not just the brackets, leaving trailing space in this specific XML.
+		// We use strings.TrimSpace in the actual code, so trailing spaces are removed.
+		isSubjectSafe := req.Subject == "[Example] Safe Title"
+		isBodySafe := req.Body == "Safe <b>Description</b><br><br><a href=\"http://example.com/item1\">Read more</a>"
+		return isSubjectSafe && isBodySafe && req.To[0] == "user@example.com"
 	})).Return()
 
 	rss := `<?xml version="1.0" encoding="UTF-8" ?>
 <rss version="2.0">
 <channel>
-  <title>Example</title>
+  <title>Example &lt;script&gt;Feed&lt;/script&gt;</title>
   <item>
-    <title>Item 1</title>
+    <title>Safe Title &lt;img src="x" onerror="alert(1)"&gt;</title>
     <link>http://example.com/item1</link>
     <guid>item-1</guid>
-    <description>Desc</description>
+    <description>Safe &lt;b&gt;Description&lt;/b&gt;&lt;script&gt;bad&lt;/script&gt;&lt;img src="tracker.gif"&gt;</description>
   </item>
 </channel>
 </rss>`
