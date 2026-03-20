@@ -38,7 +38,7 @@ func (s *Store) Close() error {
 }
 
 func (s *Store) GetFeeds(ctx context.Context) ([]models.Feed, error) {
-	query := "SELECT id, url, title, last_poll, poll_interval FROM feeds"
+	query := "SELECT id, url, title, last_poll FROM feeds"
 	s.logger.Debug("executing query", "query", query)
 	rows, err := s.db.QueryContext(ctx, query)
 	if err != nil {
@@ -50,7 +50,7 @@ func (s *Store) GetFeeds(ctx context.Context) ([]models.Feed, error) {
 	for rows.Next() {
 		var f models.Feed
 		var lastPoll sql.NullTime
-		if err := rows.Scan(&f.ID, &f.URL, &f.Title, &lastPoll, &f.PollInterval); err != nil {
+		if err := rows.Scan(&f.ID, &f.URL, &f.Title, &lastPoll); err != nil {
 			return nil, err
 		}
 		if lastPoll.Valid {
@@ -62,12 +62,12 @@ func (s *Store) GetFeeds(ctx context.Context) ([]models.Feed, error) {
 }
 
 func (s *Store) GetFeed(ctx context.Context, id int64) (*models.Feed, error) {
-	query := "SELECT id, url, title, last_poll, poll_interval FROM feeds WHERE id = ?"
+	query := "SELECT id, url, title, last_poll FROM feeds WHERE id = ?"
 	s.logger.Debug("executing query", "query", query, "args", []any{id})
 	var f models.Feed
 	var lastPoll sql.NullTime
 	err := s.db.QueryRowContext(ctx, query, id).
-		Scan(&f.ID, &f.URL, &f.Title, &lastPoll, &f.PollInterval)
+		Scan(&f.ID, &f.URL, &f.Title, &lastPoll)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil

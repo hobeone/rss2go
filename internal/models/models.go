@@ -8,7 +8,6 @@ type Feed struct {
 	URL            string    `json:"url"`
 	Title          string    `json:"title"`
 	LastPoll       time.Time `json:"last_poll"`
-	PollInterval   int       `json:"poll_interval"` // in seconds
 }
 
 // User represents a subscriber.

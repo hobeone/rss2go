@@ -4,8 +4,7 @@ CREATE TABLE feeds (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     url TEXT NOT NULL UNIQUE,
     title TEXT NOT NULL,
-    last_poll DATETIME,
-    poll_interval INTEGER DEFAULT 3600
+    last_poll DATETIME
 );
 
 CREATE TABLE users (
