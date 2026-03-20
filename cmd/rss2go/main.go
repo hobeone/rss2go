@@ -256,27 +256,25 @@ func runTestFeed(cmd *cobra.Command, args []string) error {
 	}
 
 	item := feed.Items[0]
-	
+
 	mPool := mailer.NewPool(1, cfg, logger)
 	defer mPool.Close()
 
 	// Use a dummy watcher to use its FormatItem logic
 	w := watcher.New(models.Feed{}, nil, nil, nil, 0, 0, logger)
 	subject, body := w.FormatItem(feed.Title, item)
-	
+
 	fmt.Printf("Sending first item: %s\n", item.Title)
-	
+
 	mPool.Submit(mailer.MailRequest{
 		To:      []string{email},
 		Subject: "[TEST] " + subject,
 		Body:    body,
 	})
-	
+
 	// Give it a few seconds to send
-	time.Sleep(3 * time.Second)
+	time.Sleep(20 * time.Second)
 	fmt.Println("Test email sent (check logs for errors)")
-	
+
 	return nil
 }
-
-
