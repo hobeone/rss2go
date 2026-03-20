@@ -99,19 +99,21 @@ func TestWatcher_HandleResponse(t *testing.T) {
 		// bluemonday StrictPolicy strips the entire tag, not just the brackets, leaving trailing space in this specific XML.
 		// We use strings.TrimSpace in the actual code, so trailing spaces are removed.
 		isSubjectSafe := req.Subject == "[Example] Safe Title"
-		isBodySafe := req.Body == "Safe <b>Description</b><br><br><a href=\"http://example.com/item1\">Read more</a>"
+		// The test now verifies Content is used if available. 
+		isBodySafe := req.Body == "Full <b>Content</b><br><br><a href=\"http://example.com/item1\">Read more</a>"
 		return isSubjectSafe && isBodySafe && req.To[0] == "user@example.com"
 	})).Return()
 
 	rss := `<?xml version="1.0" encoding="UTF-8" ?>
-<rss version="2.0">
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
 <channel>
   <title>Example &lt;script&gt;Feed&lt;/script&gt;</title>
   <item>
     <title>Safe Title &lt;img src="x" onerror="alert(1)"&gt;</title>
     <link>http://example.com/item1</link>
     <guid>item-1</guid>
-    <description>Safe &lt;b&gt;Description&lt;/b&gt;&lt;script&gt;bad&lt;/script&gt;&lt;img src="tracker.gif"&gt;</description>
+    <description>Safe &lt;b&gt;Description&lt;/b&gt;</description>
+    <content:encoded><![CDATA[Full <b>Content</b><script>bad</script><img src="tracker.gif">]]></content:encoded>
   </item>
 </channel>
 </rss>`
