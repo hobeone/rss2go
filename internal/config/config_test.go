@@ -8,11 +8,10 @@ import (
 )
 
 func TestLoad(t *testing.T) {
-	t.Run("DefaultNoFileSucceeds", func(t *testing.T) {
-		cfg, err := Load("")
-		assert.NoError(t, err)
-		assert.NotNil(t, cfg)
-		assert.Equal(t, "rss2go.db", cfg.DBPath)
+	t.Run("DefaultNoFileFails", func(t *testing.T) {
+		_, err := Load("")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "error reading default config file")
 	})
 
 	t.Run("ExplicitMissingFileFails", func(t *testing.T) {

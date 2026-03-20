@@ -63,10 +63,8 @@ func Load(cfgFile string) (*Config, error) {
 		if cfgFile != "" {
 			return nil, fmt.Errorf("error reading config file %s: %w", cfgFile, err)
 		}
-		// If using default search paths, ignore "file not found"
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return nil, fmt.Errorf("error reading config file: %w", err)
-		}
+		// If using default search paths, and no file is found, we should still error as requested
+		return nil, fmt.Errorf("error reading default config file: %w", err)
 	}
 
 	var cfg Config
