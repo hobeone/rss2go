@@ -59,6 +59,11 @@ func Load(cfgFile string) (*Config, error) {
 	v.SetDefault("use_tls", true)
 
 	if err := v.ReadInConfig(); err != nil {
+		// If a config file was explicitly provided but not found, return error
+		if cfgFile != "" {
+			return nil, fmt.Errorf("error reading config file %s: %w", cfgFile, err)
+		}
+		// If using default search paths, ignore "file not found"
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			return nil, fmt.Errorf("error reading config file: %w", err)
 		}
