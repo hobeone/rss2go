@@ -79,17 +79,39 @@ func (p *Pool) fetch(ctx context.Context, url string) ([]byte, error) {
 	req.Header.Set("User-Agent", "rss2go/2.0")
 	req.Header.Set("Accept", "application/rss+xml, application/atom+xml, text/xml;q=0.9, */*;q=0.8")
 
+	p.logger.Debug("sending request", "url", url, "timeout", p.timeout)
+	start := time.Now()
 	resp, err := p.client.Do(req)
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			p.logger.Debug("request timed out", "url", url, "duration", time.Since(start))
+		} else {
+			p.logger.Debug("request failed", "url", url, "error", err, "duration", time.Since(start))
+		}
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	duration := time.Since(start)
+	p.logger.Debug("response received",
+		"url", url,
+		"status", resp.StatusCode,
+		"content_type", resp.Header.Get("Content-Type"),
+		"content_length", resp.ContentLength,
+		"duration", duration,
+	)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	return io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	p.logger.Debug("read complete", "url", url, "bytes", len(body))
+	return body, nil
 }
 
 // Submit sends a crawl request to the pool.
