@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"math/rand"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -31,16 +32,20 @@ type MailerPool interface {
 
 // Watcher manages the polling of a single feed.
 type Watcher struct {
-	feed       models.Feed
-	store      db.Store
-	crawler    CrawlerPool
-	mailer     MailerPool
-	logger     *slog.Logger
-	interval   time.Duration
-	jitter     time.Duration
-	strictPol  *bluemonday.Policy
-	contentPol *bluemonday.Policy
+	feed            models.Feed
+	store           db.Store
+	crawler         CrawlerPool
+	mailer          MailerPool
+	logger          *slog.Logger
+	interval        time.Duration
+	jitter          time.Duration
+	strictPol       *bluemonday.Policy
+	contentPol      *bluemonday.Policy
+	currentInterval time.Duration
+	mu              sync.Mutex
 }
+
+const maxBackoff = 24 * time.Hour
 
 // New creates a new feed watcher.
 func New(feed models.Feed, store db.Store, c CrawlerPool, m MailerPool, interval, jitter time.Duration, logger *slog.Logger) *Watcher {
@@ -71,10 +76,11 @@ func New(feed models.Feed, store db.Store, c CrawlerPool, m MailerPool, interval
 		crawler:    c,
 		mailer:     m,
 		logger:     logger.With("feed_id", feed.ID, "url", feed.URL),
-		interval:   interval,
-		jitter:     jitter,
-		strictPol:  strictPol,
-		contentPol: contentPol,
+		interval:        interval,
+		jitter:          jitter,
+		strictPol:       strictPol,
+		contentPol:      contentPol,
+		currentInterval: interval,
 	}
 }
 
@@ -98,18 +104,17 @@ func (w *Watcher) Run(ctx context.Context) {
 		return
 	}
 
-	ticker := time.NewTicker(w.interval)
-	defer ticker.Stop()
-
-	// Initial crawl
-	w.crawl(ctx)
-	w.logger.Info("initial poll triggered", "next_poll", time.Now().Add(w.interval))
-
 	for {
+		w.crawl(ctx)
+
+		w.mu.Lock()
+		wait := w.currentInterval
+		w.mu.Unlock()
+
+		w.logger.Info("poll triggered", "next_poll", time.Now().Add(wait))
+
 		select {
-		case <-ticker.C:
-			w.crawl(ctx)
-			w.logger.Info("poll triggered", "next_poll", time.Now().Add(w.interval))
+		case <-time.After(wait):
 		case <-ctx.Done():
 			w.logger.Info("watcher shutting down")
 			return
@@ -132,8 +137,22 @@ func (w *Watcher) HandleResponse(ctx context.Context, resp crawler.CrawlResponse
 	if resp.Error != nil {
 		atomic.AddUint64(&metrics.FeedsCrawledErrors, 1)
 		w.logger.Error("crawl failed", "error", resp.Error)
+
+		w.mu.Lock()
+		w.currentInterval *= 2
+		if w.currentInterval > maxBackoff {
+			w.currentInterval = maxBackoff
+		}
+		newInterval := w.currentInterval
+		w.mu.Unlock()
+
+		w.logger.Warn("backing off due to error", "new_interval", newInterval)
 		return
 	}
+
+	w.mu.Lock()
+	w.currentInterval = w.interval
+	w.mu.Unlock()
 
 	fp := gofeed.NewParser()
 	feed, err := fp.Parse(bytes.NewReader(resp.Body))
