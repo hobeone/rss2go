@@ -19,11 +19,15 @@ type MailRequest struct {
 	Body    string
 }
 
+// Sender is an interface for sending emails.
+type Sender func(req MailRequest) error
+
 // Pool is a pool of workers for sending emails.
 type Pool struct {
 	requests chan MailRequest
 	config   *config.Config
 	logger   *slog.Logger
+	sender   Sender
 }
 
 // NewPool creates a new mailer pool.
@@ -33,6 +37,8 @@ func NewPool(size int, cfg *config.Config, logger *slog.Logger) *Pool {
 		config:   cfg,
 		logger:   logger.With("component", "mailer"),
 	}
+
+	p.sender = p.defaultSender
 
 	for i := 0; i < size; i++ {
 		go p.worker(i)
@@ -45,7 +51,7 @@ func (p *Pool) worker(id int) {
 	p.logger.Debug("starting worker", "worker_id", id)
 	for req := range p.requests {
 		p.logger.Debug("sending email", "to", req.To, "subject", req.Subject)
-		err := p.send(req)
+		err := p.sender(req)
 		if err != nil {
 			p.logger.Error("failed to send email", "to", req.To, "subject", req.Subject, "error", err)
 		} else {
@@ -54,7 +60,7 @@ func (p *Pool) worker(id int) {
 	}
 }
 
-func (p *Pool) send(req MailRequest) error {
+func (p *Pool) defaultSender(req MailRequest) error {
 	if p.config.SMTPServer != "" {
 		return p.sendSMTP(req)
 	}
