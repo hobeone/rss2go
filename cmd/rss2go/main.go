@@ -85,12 +85,22 @@ func main() {
 	}
 }
 
-func getStore() (*sqlite.Store, error) {
+func getLogger(cfg *config.Config) *slog.Logger {
+	var level slog.Level
+	if err := level.UnmarshalText([]byte(cfg.LogLevel)); err != nil {
+		level = slog.LevelInfo
+	}
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
+	slog.SetDefault(logger)
+	return logger
+}
+
+func getStore(logger *slog.Logger) (*sqlite.Store, error) {
 	cfg, err := config.Load(cfgFile)
 	if err != nil {
 		return nil, err
 	}
-	store, err := sqlite.New(cfg.DBPath)
+	store, err := sqlite.New(cfg.DBPath, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -106,22 +116,13 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	var level slog.Level
-	if err := level.UnmarshalText([]byte(cfg.LogLevel)); err != nil {
-		level = slog.LevelInfo
-	}
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
-	slog.SetDefault(logger)
+	logger := getLogger(cfg)
 
-	store, err := sqlite.New(cfg.DBPath)
+	store, err := getStore(logger)
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
 	defer store.Close()
-
-	if err := store.Migrate(rss2go.MigrationsFS); err != nil {
-		return fmt.Errorf("failed to run migrations: %w", err)
-	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -156,7 +157,13 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 }
 
 func runAddFeed(cmd *cobra.Command, args []string) error {
-	store, err := getStore()
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		return err
+	}
+	logger := getLogger(cfg)
+
+	store, err := getStore(logger)
 	if err != nil {
 		return err
 	}
@@ -171,7 +178,13 @@ func runAddFeed(cmd *cobra.Command, args []string) error {
 }
 
 func runAddUser(cmd *cobra.Command, args []string) error {
-	store, err := getStore()
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		return err
+	}
+	logger := getLogger(cfg)
+
+	store, err := getStore(logger)
 	if err != nil {
 		return err
 	}
@@ -186,7 +199,13 @@ func runAddUser(cmd *cobra.Command, args []string) error {
 }
 
 func runSubscribe(cmd *cobra.Command, args []string) error {
-	store, err := getStore()
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		return err
+	}
+	logger := getLogger(cfg)
+
+	store, err := getStore(logger)
 	if err != nil {
 		return err
 	}
@@ -214,7 +233,13 @@ func runSubscribe(cmd *cobra.Command, args []string) error {
 }
 
 func runListFeeds(cmd *cobra.Command, args []string) error {
-	store, err := getStore()
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		return err
+	}
+	logger := getLogger(cfg)
+
+	store, err := getStore(logger)
 	if err != nil {
 		return err
 	}
@@ -242,7 +267,7 @@ func runTestFeed(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	logger := getLogger(cfg)
 
 	fp := gofeed.NewParser()
 	feed, err := fp.ParseURL(feedURL)
@@ -277,5 +302,4 @@ func runTestFeed(cmd *cobra.Command, args []string) error {
 	fmt.Println("Test email sent successfully!")
 
 	return nil
-	}
-
+}

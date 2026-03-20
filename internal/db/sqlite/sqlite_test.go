@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"testing"
 
@@ -13,7 +14,8 @@ func TestStore(t *testing.T) {
 	dbPath := "test.db"
 	defer os.Remove(dbPath)
 
-	store, err := New(dbPath)
+	logger := slog.New(slog.DiscardHandler)
+	store, err := New(dbPath, logger)
 	assert.NoError(t, err)
 	defer store.Close()
 
@@ -90,7 +92,8 @@ func TestStore(t *testing.T) {
 
 func TestStore_Errors(t *testing.T) {
 	dbPath := "test_errors.db"
-	store, err := New(dbPath)
+	logger := slog.New(slog.DiscardHandler)
+	store, err := New(dbPath, logger)
 	assert.NoError(t, err)
 	
 	// Close the DB immediately to simulate connection errors
@@ -133,7 +136,8 @@ func TestStore_Errors(t *testing.T) {
 func TestNew_Error(t *testing.T) {
 	// If it doesn't fail on open, it might fail on ping. SQLite is permissive, but we can try an invalid path format
 	// Actually, just pass a directory instead of a file
-	_, err := New("/etc")
+	logger := slog.New(slog.DiscardHandler)
+	_, err := New("/etc", logger)
 	assert.Error(t, err)
 }
 
