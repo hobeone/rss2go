@@ -3,13 +3,13 @@ package mailer
 import (
 	"fmt"
 	"log/slog"
-	"net/smtp"
 	"os/exec"
 	"strings"
 	"sync/atomic"
 
 	"github.com/hobe/rss2go/internal/config"
 	"github.com/hobe/rss2go/internal/metrics"
+	"gopkg.in/gomail.v2"
 )
 
 // MailRequest represents a request to send an email.
@@ -71,13 +71,19 @@ func (p *Pool) defaultSender(req MailRequest) error {
 }
 
 func (p *Pool) sendSMTP(req MailRequest) error {
-	auth := smtp.PlainAuth("", p.config.SMTPUser, p.config.SMTPPass, p.config.SMTPServer)
-	addr := fmt.Sprintf("%s:%d", p.config.SMTPServer, p.config.SMTPPort)
+	m := gomail.NewMessage()
+	m.SetHeader("From", p.config.SMTPSender)
+	m.SetHeader("To", req.To...)
+	m.SetHeader("Subject", req.Subject)
+	m.SetBody("text/html", req.Body)
 
-	msg := []byte(fmt.Sprintf("To: %s\r\nSubject: %s\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n%s",
-		strings.Join(req.To, ", "), req.Subject, req.Body))
-
-	return smtp.SendMail(addr, auth, p.config.SMTPSender, req.To, msg)
+	d := gomail.NewDialer(p.config.SMTPServer, p.config.SMTPPort, p.config.SMTPUser, p.config.SMTPPass)
+	// Some servers use SSL on 465, others use StartTLS on 587. 
+	// gomail detects this by default, but we can override it if needed.
+	// Actually p.config.UseTLS should map to gomail's SSL if port is 465.
+	// For now let's just use the Dialer.
+	
+	return d.DialAndSend(m)
 }
 
 func (p *Pool) sendSendmail(req MailRequest) error {
