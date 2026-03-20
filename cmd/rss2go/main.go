@@ -15,6 +15,7 @@ import (
 	"github.com/hobe/rss2go/internal/db/sqlite"
 	"github.com/hobe/rss2go/internal/mailer"
 	"github.com/hobe/rss2go/internal/metrics"
+	"github.com/hobe/rss2go/internal/models"
 	"github.com/hobe/rss2go/internal/watcher"
 	"github.com/mmcdole/gofeed"
 	"github.com/spf13/cobra"
@@ -259,22 +260,23 @@ func runTestFeed(cmd *cobra.Command, args []string) error {
 	mPool := mailer.NewPool(1, cfg, logger)
 	defer mPool.Close()
 
-	// Use a dummy watcher just to use its sanitization logic 
-	// (we'll call the logic directly since we have it in watcher)
-	// For the test-feed command, let's keep it simple.
+	// Use a dummy watcher to use its FormatItem logic
+	w := watcher.New(models.Feed{}, nil, nil, nil, 0, 0, logger)
+	subject, body := w.FormatItem(feed.Title, item)
 	
 	fmt.Printf("Sending first item: %s\n", item.Title)
 	
 	mPool.Submit(mailer.MailRequest{
 		To:      []string{email},
-		Subject: "[TEST] [" + feed.Title + "] " + item.Title,
-		Body:    item.Description + "<br><br><a href=\"" + item.Link + "\">Read more</a>",
+		Subject: "[TEST] " + subject,
+		Body:    body,
 	})
 	
-	// Give it a second to send
-	time.Sleep(2 * time.Second)
+	// Give it a few seconds to send
+	time.Sleep(3 * time.Second)
 	fmt.Println("Test email sent (check logs for errors)")
 	
 	return nil
 }
+
 

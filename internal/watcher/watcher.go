@@ -165,24 +165,13 @@ func (w *Watcher) HandleResponse(ctx context.Context, resp crawler.CrawlResponse
 			continue
 		}
 
-		safeTitle := strings.TrimSpace(w.strictPol.Sanitize(item.Title))
-		safeFeedTitle := strings.TrimSpace(w.strictPol.Sanitize(feed.Title))
-		safeLink := strings.TrimSpace(w.strictPol.Sanitize(item.Link))
+		subject, body := w.FormatItem(feed.Title, item)
 
-		// Use Content if available, otherwise Description. 
-		// If both are available and different, we can include both or just Content.
-		// Many feeds use Description for summary and Content for full text.
-		content := item.Content
-		if content == "" {
-			content = item.Description
-		}
-		safeContent := strings.TrimSpace(w.contentPol.Sanitize(content))
-
-		w.logger.Info("new item found", "title", safeTitle, "guid", guid)
+		w.logger.Info("new item found", "title", item.Title, "guid", guid)
 		w.mailer.Submit(mailer.MailRequest{
 			To:      userEmails,
-			Subject: "[" + safeFeedTitle + "] " + safeTitle,
-			Body:    safeContent + "<br><br><a href=\"" + safeLink + "\">Read more</a>",
+			Subject: subject,
+			Body:    body,
 		})
 
 		if err := w.store.MarkSeen(ctx, w.feed.ID, guid); err != nil {
@@ -197,6 +186,26 @@ func (w *Watcher) HandleResponse(ctx context.Context, resp crawler.CrawlResponse
 
 	w.logger.Debug("crawl complete", "new_items", newItemsCount)
 }
+
+// FormatItem sanitizes and formats a feed item for an email.
+func (w *Watcher) FormatItem(feedTitle string, item *gofeed.Item) (subject, body string) {
+	safeTitle := strings.TrimSpace(w.strictPol.Sanitize(item.Title))
+	safeFeedTitle := strings.TrimSpace(w.strictPol.Sanitize(feedTitle))
+	safeLink := strings.TrimSpace(w.strictPol.Sanitize(item.Link))
+
+	// Use Content if available, otherwise Description.
+	// Many feeds use Description for summary and Content for full text.
+	content := item.Content
+	if content == "" {
+		content = item.Description
+	}
+	safeContent := strings.TrimSpace(w.contentPol.Sanitize(content))
+
+	subject = "[" + safeFeedTitle + "] " + safeTitle
+	body = safeContent + "<br><br><a href=\"" + safeLink + "\">Read more</a>"
+	return
+}
+
 
 func (w *Watcher) getJitter() time.Duration {
 	if w.jitter == 0 {
