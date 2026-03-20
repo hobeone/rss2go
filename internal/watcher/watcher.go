@@ -127,6 +127,7 @@ func (w *Watcher) crawl(ctx context.Context) {
 	w.crawler.Submit(crawler.CrawlRequest{
 		FeedID: w.feed.ID,
 		URL:    w.feed.URL,
+		Ctx:    ctx,
 	})
 }
 

@@ -1,6 +1,7 @@
 package crawler
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 type CrawlRequest struct {
 	FeedID int64
 	URL    string
+	Ctx    context.Context
 }
 
 // CrawlResponse represents the result of a fetch.
@@ -51,7 +53,7 @@ func (p *Pool) worker(id int) {
 	p.logger.Debug("starting worker", "worker_id", id)
 	for req := range p.requests {
 		p.logger.Debug("crawling feed", "feed_id", req.FeedID, "url", req.URL)
-		body, err := p.fetch(req.URL)
+		body, err := p.fetch(req.Ctx, req.URL)
 		p.responses <- CrawlResponse{
 			FeedID: req.FeedID,
 			Body:   body,
@@ -60,8 +62,11 @@ func (p *Pool) worker(id int) {
 	}
 }
 
-func (p *Pool) fetch(url string) ([]byte, error) {
-	req, err := http.NewRequest("GET", url, nil)
+func (p *Pool) fetch(ctx context.Context, url string) ([]byte, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
