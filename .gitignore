@@ -1,3 +1,7 @@
 /rss2go
 rss2go.yaml
 rss2go.db
+feeds
+file.csv
+insert.sql
+*.db*
