@@ -3,9 +3,11 @@ package mailer
 import (
 	"fmt"
 	"log/slog"
+	"math"
 	"os/exec"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/hobe/rss2go/internal/config"
 	"github.com/hobe/rss2go/internal/metrics"
@@ -58,14 +60,34 @@ func (p *Pool) worker(id int) {
 	}
 }
 
+const (
+	maxRetries    = 5
+	initialDelay  = 1 * time.Second
+	maxRetryDelay = 30 * time.Minute
+)
+
 // Send sends an email immediately and returns the error.
 // It also increments the metrics on success.
+// If an error occurs, it retries with exponential backoff.
 func (p *Pool) Send(req MailRequest) error {
-	err := p.sender(req)
-	if err == nil {
-		atomic.AddUint64(&metrics.EmailsSentTotal, 1)
+	var err error
+	for i := 0; i <= maxRetries; i++ {
+		err = p.sender(req)
+		if err == nil {
+			atomic.AddUint64(&metrics.EmailsSentTotal, 1)
+			return nil
+		}
+
+		if i < maxRetries {
+			delay := time.Duration(math.Pow(2, float64(i))) * initialDelay
+			if delay > maxRetryDelay {
+				delay = maxRetryDelay
+			}
+			p.logger.Warn("failed to send email, retrying", "attempt", i+1, "delay", delay, "error", err)
+			time.Sleep(delay)
+		}
 	}
-	return err
+	return fmt.Errorf("failed to send email after %d retries: %w", maxRetries, err)
 }
 
 func (p *Pool) defaultSender(req MailRequest) error {
