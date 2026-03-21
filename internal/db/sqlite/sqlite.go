@@ -18,7 +18,9 @@ type Store struct {
 
 // New creates a new SQLite store.
 func New(dbPath string, logger *slog.Logger) (*Store, error) {
-	db, err := sql.Open("sqlite", dbPath)
+	// Add PRAGMAs to DSN for modernc.org/sqlite to enable WAL mode and handle concurrent writes
+	dsn := fmt.Sprintf("%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)", dbPath)
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("error opening database: %w", err)
 	}
@@ -26,6 +28,11 @@ func New(dbPath string, logger *slog.Logger) (*Store, error) {
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("error pinging database: %w", err)
 	}
+
+	// Configure connection pool to prevent connection exhaustion and help with write locks
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(25)
+	db.SetConnMaxLifetime(5 * time.Minute)
 
 	return &Store{
 		db:     db,
