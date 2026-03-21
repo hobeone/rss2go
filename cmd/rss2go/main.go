@@ -21,8 +21,9 @@ import (
 )
 
 var (
-	cfgFile string
-	rootCmd = &cobra.Command{
+	cfgFile  string
+	logLevel string
+	rootCmd  = &cobra.Command{
 		Use:   "rss2go",
 		Short: "rss2go is an RSS-to-Email daemon",
 	}
@@ -76,6 +77,7 @@ var (
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./rss2go.yaml)")
+	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "", "override log level (debug, info, warn, error)")
 	rootCmd.AddCommand(daemonCmd)
 	rootCmd.AddCommand(addFeedCmd)
 	rootCmd.AddCommand(addUserCmd)
@@ -93,8 +95,13 @@ func main() {
 }
 
 func getLogger(cfg *config.Config) *slog.Logger {
+	levelStr := cfg.LogLevel
+	if logLevel != "" {
+		levelStr = logLevel
+	}
+
 	var level slog.Level
-	if err := level.UnmarshalText([]byte(cfg.LogLevel)); err != nil {
+	if err := level.UnmarshalText([]byte(levelStr)); err != nil {
 		level = slog.LevelInfo
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
