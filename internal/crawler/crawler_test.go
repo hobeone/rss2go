@@ -30,5 +30,6 @@ func TestPool(t *testing.T) {
 	resp := <-p.Responses()
 	assert.NoError(t, resp.Error)
 	assert.Equal(t, int64(1), resp.FeedID)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "mock rss content", string(resp.Body))
 }

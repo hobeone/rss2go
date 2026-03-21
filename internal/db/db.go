@@ -13,6 +13,7 @@ type Store interface {
 	GetFeed(ctx context.Context, id int64) (*models.Feed, error)
 	AddFeed(ctx context.Context, url string, title string) (int64, error)
 	UpdateFeedLastPoll(ctx context.Context, id int64) error
+	UpdateFeedError(ctx context.Context, id int64, code int, snippet string) error
 
 	// User operations
 	AddUser(ctx context.Context, email string) (int64, error)

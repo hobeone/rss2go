@@ -4,7 +4,10 @@ CREATE TABLE feeds (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     url TEXT NOT NULL UNIQUE,
     title TEXT NOT NULL,
-    last_poll DATETIME
+    last_poll DATETIME,
+    last_error_time DATETIME,
+    last_error_code INTEGER,
+    last_error_snippet TEXT
 );
 
 CREATE TABLE users (

@@ -18,9 +18,10 @@ type CrawlRequest struct {
 
 // CrawlResponse represents the result of a fetch.
 type CrawlResponse struct {
-	FeedID int64
-	Body   []byte
-	Error  error
+	FeedID     int64
+	StatusCode int
+	Body       []byte
+	Error      error
 }
 
 // Pool is a pool of workers for fetching RSS feeds.
@@ -53,16 +54,17 @@ func (p *Pool) worker(id int) {
 	p.logger.Debug("starting worker", "worker_id", id)
 	for req := range p.requests {
 		p.logger.Debug("crawling feed", "feed_id", req.FeedID, "url", req.URL)
-		body, err := p.fetch(req.Ctx, req.URL)
+		body, code, err := p.fetch(req.Ctx, req.URL)
 		p.responses <- CrawlResponse{
-			FeedID: req.FeedID,
-			Body:   body,
-			Error:  err,
+			FeedID:     req.FeedID,
+			StatusCode: code,
+			Body:       body,
+			Error:      err,
 		}
 	}
 }
 
-func (p *Pool) fetch(ctx context.Context, url string) ([]byte, error) {
+func (p *Pool) fetch(ctx context.Context, url string) ([]byte, int, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -73,7 +75,7 @@ func (p *Pool) fetch(ctx context.Context, url string) ([]byte, error) {
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	req.Header.Set("User-Agent", "rss2go/2.0")
@@ -88,7 +90,7 @@ func (p *Pool) fetch(ctx context.Context, url string) ([]byte, error) {
 		} else {
 			p.logger.Debug("request failed", "url", url, "error", err, "duration", time.Since(start))
 		}
-		return nil, err
+		return nil, 0, err
 	}
 	defer resp.Body.Close()
 
@@ -100,17 +102,17 @@ func (p *Pool) fetch(ctx context.Context, url string) ([]byte, error) {
 		"duration", duration,
 	)
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, resp.StatusCode, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return body, resp.StatusCode, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	p.logger.Debug("read complete", "url", url, "bytes", len(body))
-	return body, nil
+	return body, resp.StatusCode, nil
 }
 
 // Submit sends a crawl request to the pool.

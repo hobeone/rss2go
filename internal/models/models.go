@@ -8,6 +8,9 @@ type Feed struct {
 	URL            string    `json:"url"`
 	Title          string    `json:"title"`
 	LastPoll       time.Time `json:"last_poll"`
+	LastErrorTime  time.Time `json:"last_error_time"`
+	LastErrorCode  int       `json:"last_error_code"`
+	LastErrorSnippet string    `json:"last_error_snippet"`
 }
 
 // User represents a subscriber.

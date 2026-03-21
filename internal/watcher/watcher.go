@@ -139,6 +139,22 @@ func (w *Watcher) HandleResponse(ctx context.Context, resp crawler.CrawlResponse
 		atomic.AddUint64(&metrics.FeedsCrawledErrors, 1)
 		w.logger.Error("crawl failed", "error", resp.Error)
 
+		// Record error in DB
+		snippet := ""
+		if len(resp.Body) > 0 {
+			maxLen := 500
+			if len(resp.Body) < maxLen {
+				maxLen = len(resp.Body)
+			}
+			snippet = string(resp.Body[:maxLen])
+		} else {
+			snippet = resp.Error.Error()
+		}
+
+		if err := w.store.UpdateFeedError(ctx, w.feed.ID, resp.StatusCode, snippet); err != nil {
+			w.logger.Error("failed to update feed error in DB", "error", err)
+		}
+
 		w.mu.Lock()
 		w.currentInterval *= 2
 		if w.currentInterval > maxBackoff {
@@ -154,6 +170,11 @@ func (w *Watcher) HandleResponse(ctx context.Context, resp crawler.CrawlResponse
 	w.mu.Lock()
 	w.currentInterval = w.interval
 	w.mu.Unlock()
+
+	// Clear error in DB on success
+	if err := w.store.UpdateFeedError(ctx, w.feed.ID, 0, ""); err != nil {
+		w.logger.Error("failed to clear feed error in DB", "error", err)
+	}
 
 	fp := gofeed.NewParser()
 	feed, err := fp.Parse(bytes.NewReader(resp.Body))

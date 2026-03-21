@@ -88,6 +88,15 @@ func TestStore(t *testing.T) {
 	uNil, err := store.GetUserByEmail(ctx, "notfound@example.com")
 	assert.NoError(t, err)
 	assert.Nil(t, uNil)
+
+	// Test UpdateFeedError
+	err = store.UpdateFeedError(ctx, id, 500, "Internal Server Error")
+	assert.NoError(t, err)
+	fErr, err := store.GetFeed(ctx, id)
+	assert.NoError(t, err)
+	assert.Equal(t, 500, fErr.LastErrorCode)
+	assert.Equal(t, "Internal Server Error", fErr.LastErrorSnippet)
+	assert.False(t, fErr.LastErrorTime.IsZero())
 }
 
 func TestStore_Errors(t *testing.T) {
@@ -112,6 +121,9 @@ func TestStore_Errors(t *testing.T) {
 	assert.Error(t, err)
 
 	err = store.UpdateFeedLastPoll(ctx, 1)
+	assert.Error(t, err)
+
+	err = store.UpdateFeedError(ctx, 1, 500, "snippet")
 	assert.Error(t, err)
 
 	_, err = store.AddUser(ctx, "email")

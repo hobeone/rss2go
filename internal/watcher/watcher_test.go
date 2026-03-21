@@ -33,6 +33,10 @@ func (m *mockStore) UpdateFeedLastPoll(ctx context.Context, id int64) error {
 	args := m.Called(ctx, id)
 	return args.Error(0)
 }
+func (m *mockStore) UpdateFeedError(ctx context.Context, id int64, code int, snippet string) error {
+	args := m.Called(ctx, id, code, snippet)
+	return args.Error(0)
+}
 func (m *mockStore) AddUser(ctx context.Context, email string) (int64, error) {
 	args := m.Called(ctx, email)
 	return args.Get(0).(int64), args.Error(1)
@@ -93,6 +97,7 @@ func TestWatcher_HandleResponse(t *testing.T) {
 	store.On("IsSeen", ctx, feed.ID, "item-1").Return(false, nil)
 	store.On("MarkSeen", ctx, feed.ID, "item-1").Return(nil)
 	store.On("UpdateFeedLastPoll", ctx, feed.ID).Return(nil)
+	store.On("UpdateFeedError", ctx, feed.ID, 0, "").Return(nil)
 
 	// Mock Mailer behavior
 	mPool.On("Submit", mock.MatchedBy(func(req mailer.MailRequest) bool {
