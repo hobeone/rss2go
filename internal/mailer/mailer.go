@@ -6,6 +6,7 @@ import (
 	"math"
 	"os/exec"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -30,6 +31,12 @@ type Pool struct {
 	config   *config.Config
 	logger   *slog.Logger
 	sender   Sender
+
+	// SMTP persistence management
+	mu         sync.Mutex
+	smtpDialer *gomail.Dialer
+	smtpConn   gomail.SendCloser
+	idleTimer  *time.Timer
 }
 
 // NewPool creates a new mailer pool.
@@ -38,6 +45,11 @@ func NewPool(size int, cfg *config.Config, logger *slog.Logger) *Pool {
 		requests: make(chan MailRequest, size*2),
 		config:   cfg,
 		logger:   logger.With("component", "mailer"),
+	}
+
+	if cfg.SMTPServer != "" {
+		p.smtpDialer = gomail.NewDialer(cfg.SMTPServer, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass)
+		p.smtpDialer.SSL = cfg.UseTLS
 	}
 
 	p.sender = p.defaultSender
@@ -92,7 +104,7 @@ func (p *Pool) Send(req MailRequest) error {
 
 func (p *Pool) defaultSender(req MailRequest) error {
 	if p.config.SMTPServer != "" {
-		return p.sendSMTP(req)
+		return p.persistentSMTPSender(req)
 	}
 	if p.config.Sendmail != "" {
 		return p.sendSendmail(req)
@@ -100,20 +112,55 @@ func (p *Pool) defaultSender(req MailRequest) error {
 	return fmt.Errorf("no mailer configured (SMTP or Sendmail)")
 }
 
-func (p *Pool) sendSMTP(req MailRequest) error {
+func (p *Pool) persistentSMTPSender(req MailRequest) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.smtpConn == nil {
+		p.logger.Debug("opening new SMTP connection")
+		s, err := p.smtpDialer.Dial()
+		if err != nil {
+			return fmt.Errorf("failed to dial SMTP: %w", err)
+		}
+		p.smtpConn = s
+	}
+
 	m := gomail.NewMessage()
 	m.SetHeader("From", p.config.SMTPSender)
 	m.SetHeader("To", req.To...)
 	m.SetHeader("Subject", req.Subject)
 	m.SetBody("text/html", req.Body)
 
-	d := gomail.NewDialer(p.config.SMTPServer, p.config.SMTPPort, p.config.SMTPUser, p.config.SMTPPass)
-	// Some servers use SSL on 465, others use StartTLS on 587.
-	// gomail detects this by default, but we can override it if needed.
-	// Actually p.config.UseTLS should map to gomail's SSL if port is 465.
-	// For now let's just use the Dialer.
+	if err := gomail.Send(p.smtpConn, m); err != nil {
+		p.logger.Debug("SMTP send failed, closing connection", "error", err)
+		p.closeSMTP()
+		return fmt.Errorf("failed to send via SMTP: %w", err)
+	}
 
-	return d.DialAndSend(m)
+	// Reset idle timer to close connection after 3 minutes of inactivity
+	if p.idleTimer != nil {
+		p.idleTimer.Stop()
+	}
+	p.idleTimer = time.AfterFunc(3*time.Minute, func() {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		p.closeSMTP()
+	})
+
+	return nil
+}
+
+func (p *Pool) closeSMTP() {
+	if p.smtpConn != nil {
+		p.logger.Debug("closing SMTP connection")
+		p.smtpConn.Close()
+		p.smtpConn = nil
+	}
+}
+
+func (p *Pool) sendSMTP(req MailRequest) error {
+	// This method is now replaced by persistentSMTPSender
+	return p.persistentSMTPSender(req)
 }
 
 func (p *Pool) sendSendmail(req MailRequest) error {
@@ -142,4 +189,10 @@ func (p *Pool) Submit(req MailRequest) {
 // Close closes the pool.
 func (p *Pool) Close() {
 	close(p.requests)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.closeSMTP()
+	if p.idleTimer != nil {
+		p.idleTimer.Stop()
+	}
 }
