@@ -49,7 +49,7 @@ func NewPool(size int, cfg *config.Config, logger *slog.Logger) *Pool {
 
 	if cfg.SMTPServer != "" {
 		p.smtpDialer = gomail.NewDialer(cfg.SMTPServer, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass)
-		p.smtpDialer.SSL = cfg.UseTLS
+		//p.smtpDialer.SSL = cfg.UseTLS
 	}
 
 	p.sender = p.defaultSender
@@ -152,6 +152,8 @@ func (p *Pool) persistentSMTPSender(req MailRequest) error {
 		return fmt.Errorf("failed to send via SMTP: %w", err)
 	}
 
+	p.logger.Info("email sent successfully", "to", req.To, "subject", req.Subject)
+
 	// Reset idle timer to close connection after 3 minutes of inactivity
 	if p.idleTimer != nil {
 		p.idleTimer.Stop()
@@ -159,7 +161,10 @@ func (p *Pool) persistentSMTPSender(req MailRequest) error {
 	p.idleTimer = time.AfterFunc(3*time.Minute, func() {
 		p.mu.Lock()
 		defer p.mu.Unlock()
-		p.closeSMTP()
+		if p.smtpConn != nil {
+			p.logger.Debug("closing idle SMTP connection", "server", p.config.SMTPServer)
+			p.closeSMTP()
+		}
 	})
 
 	return nil
