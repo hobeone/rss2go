@@ -163,10 +163,17 @@ func (s *Store) UpdateFeedLastPoll(ctx context.Context, id int64) error {
 }
 
 func (s *Store) UpdateFeedError(ctx context.Context, id int64, code int, snippet string) error {
-	query := "UPDATE feeds SET last_error_time = ?, last_error_code = ?, last_error_snippet = ? WHERE id = ?"
-	now := time.Now()
-	s.logger.Debug("executing exec", "query", query, "args", []any{now, code, snippet, id})
-	_, err := s.db.ExecContext(ctx, query, now, code, snippet, id)
+	var query string
+	var args []any
+	if code == 0 && snippet == "" {
+		query = "UPDATE feeds SET last_error_time = NULL, last_error_code = NULL, last_error_snippet = NULL WHERE id = ?"
+		args = []any{id}
+	} else {
+		query = "UPDATE feeds SET last_error_time = ?, last_error_code = ?, last_error_snippet = ? WHERE id = ?"
+		args = []any{time.Now(), code, snippet, id}
+	}
+	s.logger.Debug("executing exec", "query", query, "args", args)
+	_, err := s.db.ExecContext(ctx, query, args...)
 	return err
 }
 

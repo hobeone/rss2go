@@ -97,6 +97,15 @@ func TestStore(t *testing.T) {
 	assert.Equal(t, 500, fErr.LastErrorCode)
 	assert.Equal(t, "Internal Server Error", fErr.LastErrorSnippet)
 	assert.False(t, fErr.LastErrorTime.IsZero())
+
+	// Test Clear Error
+	err = store.UpdateFeedError(ctx, id, 0, "")
+	assert.NoError(t, err)
+	fClear, err := store.GetFeed(ctx, id)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, fClear.LastErrorCode)
+	assert.Equal(t, "", fClear.LastErrorSnippet)
+	assert.True(t, fClear.LastErrorTime.IsZero())
 }
 
 func TestStore_Errors(t *testing.T) {
