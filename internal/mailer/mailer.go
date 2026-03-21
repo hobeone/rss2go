@@ -117,9 +117,19 @@ func (p *Pool) persistentSMTPSender(req MailRequest) error {
 	defer p.mu.Unlock()
 
 	if p.smtpConn == nil {
-		p.logger.Debug("opening new SMTP connection")
+		p.logger.Debug("opening new SMTP connection",
+			"server", p.config.SMTPServer,
+			"port", p.config.SMTPPort,
+			"user", p.config.SMTPUser,
+			"use_tls", p.config.UseTLS,
+		)
 		s, err := p.smtpDialer.Dial()
 		if err != nil {
+			p.logger.Error("failed to dial SMTP server",
+				"server", p.config.SMTPServer,
+				"port", p.config.SMTPPort,
+				"error", err,
+			)
 			return fmt.Errorf("failed to dial SMTP: %w", err)
 		}
 		p.smtpConn = s
@@ -132,7 +142,12 @@ func (p *Pool) persistentSMTPSender(req MailRequest) error {
 	m.SetBody("text/html", req.Body)
 
 	if err := gomail.Send(p.smtpConn, m); err != nil {
-		p.logger.Debug("SMTP send failed, closing connection", "error", err)
+		p.logger.Error("SMTP send failed",
+			"server", p.config.SMTPServer,
+			"to", req.To,
+			"subject", req.Subject,
+			"error", err,
+		)
 		p.closeSMTP()
 		return fmt.Errorf("failed to send via SMTP: %w", err)
 	}
