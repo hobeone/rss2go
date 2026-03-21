@@ -73,7 +73,15 @@ var (
 		Short: "List feeds with recorded errors",
 		RunE:  runListErrors,
 	}
+
+	catchupCmd = &cobra.Command{
+		Use:   "catchup [feed-id]",
+		Short: "Mark all items in a feed (or all feeds) as seen without mailing",
+		RunE:  runCatchup,
+	}
 )
+
+var catchupAll bool
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./rss2go.yaml)")
@@ -85,6 +93,9 @@ func init() {
 	rootCmd.AddCommand(listFeedsCmd)
 	rootCmd.AddCommand(testFeedCmd)
 	rootCmd.AddCommand(listErrorsCmd)
+
+	catchupCmd.Flags().BoolVar(&catchupAll, "all", false, "catchup all feeds")
+	rootCmd.AddCommand(catchupCmd)
 }
 
 func main() {
@@ -351,6 +362,93 @@ func runListErrors(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Code:    %d\n", f.LastErrorCode)
 		fmt.Printf("Snippet: %s\n", f.LastErrorSnippet)
 		fmt.Println("------------------------------------------------------------")
+	}
+
+	return nil
+}
+
+func runCatchup(cmd *cobra.Command, args []string) error {
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		return err
+	}
+	logger := getLogger(cfg)
+
+	store, err := getStore(logger)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+	var feeds []models.Feed
+
+	if catchupAll {
+		feeds, err = store.GetFeeds(ctx)
+		if err != nil {
+			return err
+		}
+	} else {
+		if len(args) == 0 {
+			return fmt.Errorf("either feed-id or --all must be provided")
+		}
+		var feedID int64
+		if _, err := fmt.Sscanf(args[0], "%d", &feedID); err != nil {
+			return fmt.Errorf("invalid feed ID: %s", args[0])
+		}
+		f, err := store.GetFeed(ctx, feedID)
+		if err != nil {
+			return err
+		}
+		if f == nil {
+			return fmt.Errorf("feed not found: %d", feedID)
+		}
+		feeds = append(feeds, *f)
+	}
+
+	fp := gofeed.NewParser()
+	for i := range feeds {
+		f := feeds[i]
+		fmt.Printf("Catching up on feed: %s (%s)\n", f.Title, f.URL)
+		parsedFeed, err := fp.ParseURL(f.URL)
+		if err != nil {
+			fmt.Printf("  Failed to parse feed: %v\n", err)
+			continue
+		}
+
+		markedCount := 0
+		for itm := range parsedFeed.Items {
+			item := parsedFeed.Items[itm]
+			guid := item.GUID
+			if guid == "" {
+				guid = item.Link
+			}
+
+			seen, err := store.IsSeen(ctx, f.ID, guid)
+			if err != nil {
+				fmt.Printf("  Failed to check if item is seen: %v\n", err)
+				continue
+			}
+			if seen {
+				continue
+			}
+
+			if err := store.MarkSeen(ctx, f.ID, guid); err != nil {
+				fmt.Printf("  Failed to mark item as seen: %v\n", err)
+				continue
+			}
+			markedCount++
+		}
+
+		if err := store.UpdateFeedLastPoll(ctx, f.ID); err != nil {
+			fmt.Printf("  Failed to update last poll time: %v\n", err)
+		}
+		// Also clear errors
+		if err := store.UpdateFeedError(ctx, f.ID, 0, ""); err != nil {
+			fmt.Printf("  Failed to clear feed error: %v\n", err)
+		}
+
+		fmt.Printf("  Done. Marked %d new items as seen.\n", markedCount)
 	}
 
 	return nil
