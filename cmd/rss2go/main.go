@@ -66,6 +66,12 @@ var (
 		Args:  cobra.ExactArgs(2),
 		RunE:  runTestFeed,
 	}
+
+	listErrorsCmd = &cobra.Command{
+		Use:   "list-errors",
+		Short: "List feeds with recorded errors",
+		RunE:  runListErrors,
+	}
 )
 
 func init() {
@@ -76,6 +82,7 @@ func init() {
 	rootCmd.AddCommand(subscribeCmd)
 	rootCmd.AddCommand(listFeedsCmd)
 	rootCmd.AddCommand(testFeedCmd)
+	rootCmd.AddCommand(listErrorsCmd)
 }
 
 func main() {
@@ -301,5 +308,47 @@ func runTestFeed(cmd *cobra.Command, args []string) error {
 
 	fmt.Println("Test email sent successfully!")
 
+	return nil
+}
+
+func runListErrors(cmd *cobra.Command, args []string) error {
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		return err
+	}
+	logger := getLogger(cfg)
+
+	store, err := getStore(logger)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	feeds, err := store.GetFeeds(context.Background())
+	if err != nil {
+		return err
+	}
+
+	found := false
+	for _, f := range feeds {
+		if !f.LastErrorTime.IsZero() || f.LastErrorCode != 0 {
+			if !found {
+				fmt.Println("Feeds with errors:")
+				fmt.Println("------------------------------------------------------------")
+				found = true
+			}
+			fmt.Printf("Feed ID: %d\n", f.ID)
+			fmt.Printf("Title:   %s\n", f.Title)
+			fmt.Printf("URL:     %s\n", f.URL)
+			fmt.Printf("Time:    %s\n", f.LastErrorTime.Format("2006-01-02 15:04:05"))
+			fmt.Printf("Code:    %d\n", f.LastErrorCode)
+			fmt.Printf("Snippet: %s\n", f.LastErrorSnippet)
+			fmt.Println("------------------------------------------------------------")
+		}
+	}
+
+	if !found {
+		fmt.Println("No feeds with errors found.")
+	}
 	return nil
 }
