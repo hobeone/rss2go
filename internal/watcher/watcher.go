@@ -3,6 +3,8 @@ package watcher
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"html"
 	"log/slog"
 	"math/rand"
 	"strings"
@@ -252,8 +254,8 @@ func (w *Watcher) FormatItem(feedTitle string, item *gofeed.Item) (subject, body
 		content = item.Description
 	}
 	
-	// Pre-process to remove likely tracking pixels
-	content = removeTrackingImages(content)
+	// Pre-process to clean content, remove trackers, and handle embedded elements
+	content = cleanFeedContent(content)
 
 	safeContent := strings.TrimSpace(w.contentPol.Sanitize(content))
 
@@ -262,12 +264,32 @@ func (w *Watcher) FormatItem(feedTitle string, item *gofeed.Item) (subject, body
 	return
 }
 
-func removeTrackingImages(htmlStr string) string {
+func cleanFeedContent(htmlStr string) string {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlStr))
 	if err != nil {
 		return htmlStr // Fallback to returning original string if parsing fails
 	}
 
+	// Replace iframes with links
+	doc.Find("iframe").Each(func(i int, s *goquery.Selection) {
+		src, exists := s.Attr("src")
+		if exists && src != "" {
+			replacement := fmt.Sprintf(`<a href="%s">[Embedded Content: %s]</a>`, html.EscapeString(src), html.EscapeString(src))
+			s.ReplaceWithHtml(replacement)
+		} else {
+			s.Remove()
+		}
+	})
+
+	// Remove feedsportal tracking links
+	doc.Find("a").Each(func(i int, s *goquery.Selection) {
+		href, exists := s.Attr("href")
+		if exists && strings.Contains(strings.ToLower(href), "da.feedsportal.com") {
+			s.Remove()
+		}
+	})
+
+	// Remove tracking images
 	doc.Find("img").Each(func(i int, s *goquery.Selection) {
 		width, _ := s.Attr("width")
 		height, _ := s.Attr("height")
