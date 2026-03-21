@@ -13,13 +13,13 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/microcosm-cc/bluemonday"
-	"github.com/mmcdole/gofeed"
 	"github.com/hobe/rss2go/internal/crawler"
 	"github.com/hobe/rss2go/internal/db"
 	"github.com/hobe/rss2go/internal/mailer"
 	"github.com/hobe/rss2go/internal/metrics"
 	"github.com/hobe/rss2go/internal/models"
+	"github.com/microcosm-cc/bluemonday"
+	"github.com/mmcdole/gofeed"
 )
 
 // CrawlerPool defines the interface for submitting crawl requests.
@@ -51,20 +51,13 @@ const maxBackoff = 24 * time.Hour
 
 // New creates a new feed watcher.
 func New(feed models.Feed, store db.Store, c CrawlerPool, m MailerPool, interval, jitter time.Duration, logger *slog.Logger) *Watcher {
-	
+
 	// Strict policy for titles and subjects (no HTML)
 	strictPol := bluemonday.StrictPolicy()
 
-	// Content policy for email bodies based on UGC, but strictly stripped of images and styles
-	contentPol := bluemonday.UGCPolicy()
-	
-	// Remove images to prevent tracking pixels and inappropriate content
-	contentPol.AllowElements() // Reset elements for images (there is no direct 'deny' element, so we just don't allow it if it was allowed)
-	// Actually bluemonday.UGCPolicy allows images. To remove them, we can't easily "remove" an allowed element.
-	// Wait, we CAN just build a custom policy or use UGC and then `contentPol.RequireNoReferrerOnLinks(true)`
 	// Let's build a strict safe HTML policy from scratch or modify UGC.
 	// A simpler safe policy:
-	contentPol = bluemonday.NewPolicy()
+	contentPol := bluemonday.NewPolicy()
 	contentPol.AllowStandardURLs()
 	contentPol.AllowAttrs("href").OnElements("a")
 	contentPol.RequireNoReferrerOnLinks(true)
@@ -73,11 +66,11 @@ func New(feed models.Feed, store db.Store, c CrawlerPool, m MailerPool, interval
 	contentPol.AllowAttrs("src", "alt", "title", "width", "height").OnElements("img")
 
 	return &Watcher{
-		feed:       feed,
-		store:      store,
-		crawler:    c,
-		mailer:     m,
-		logger:     logger.With("feed_id", feed.ID, "url", feed.URL),
+		feed:            feed,
+		store:           store,
+		crawler:         c,
+		mailer:          m,
+		logger:          logger.With("feed_id", feed.ID, "url", feed.URL),
 		interval:        interval,
 		jitter:          jitter,
 		strictPol:       strictPol,
@@ -144,10 +137,7 @@ func (w *Watcher) HandleResponse(ctx context.Context, resp crawler.CrawlResponse
 		// Record error in DB
 		snippet := ""
 		if len(resp.Body) > 0 {
-			maxLen := 500
-			if len(resp.Body) < maxLen {
-				maxLen = len(resp.Body)
-			}
+			maxLen := min(len(resp.Body), 500)
 			snippet = string(resp.Body[:maxLen])
 		} else {
 			snippet = resp.Error.Error()
@@ -253,7 +243,7 @@ func (w *Watcher) FormatItem(feedTitle string, item *gofeed.Item) (subject, body
 	if content == "" {
 		content = item.Description
 	}
-	
+
 	// Pre-process to clean content, remove trackers, and handle embedded elements
 	content = cleanFeedContent(content)
 
@@ -312,7 +302,6 @@ func cleanFeedContent(htmlStr string) string {
 	htmlStr, _ = doc.Find("body").Html()
 	return htmlStr
 }
-
 
 func (w *Watcher) getJitter() time.Duration {
 	if w.jitter == 0 {

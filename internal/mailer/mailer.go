@@ -74,7 +74,7 @@ func (p *Pool) worker(id int) {
 
 const (
 	maxRetries    = 5
-	initialDelay  = 1 * time.Second
+	initialDelay  = 10 * time.Second
 	maxRetryDelay = 30 * time.Minute
 )
 
@@ -91,10 +91,7 @@ func (p *Pool) Send(req MailRequest) error {
 		}
 
 		if i < maxRetries {
-			delay := time.Duration(math.Pow(2, float64(i))) * initialDelay
-			if delay > maxRetryDelay {
-				delay = maxRetryDelay
-			}
+			delay := min(time.Duration(math.Pow(2, float64(i)))*initialDelay, maxRetryDelay)
 			p.logger.Warn("failed to send email, retrying", "attempt", i+1, "delay", delay, "error", err)
 			time.Sleep(delay)
 		}
