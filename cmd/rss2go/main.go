@@ -324,31 +324,27 @@ func runListErrors(cmd *cobra.Command, args []string) error {
 	}
 	defer store.Close()
 
-	feeds, err := store.GetFeeds(context.Background())
+	feeds, err := store.GetFeedsWithErrors(context.Background())
 	if err != nil {
 		return err
 	}
 
-	found := false
-	for _, f := range feeds {
-		if !f.LastErrorTime.IsZero() || f.LastErrorCode != 0 {
-			if !found {
-				fmt.Println("Feeds with errors:")
-				fmt.Println("------------------------------------------------------------")
-				found = true
-			}
-			fmt.Printf("Feed ID: %d\n", f.ID)
-			fmt.Printf("Title:   %s\n", f.Title)
-			fmt.Printf("URL:     %s\n", f.URL)
-			fmt.Printf("Time:    %s\n", f.LastErrorTime.Format("2006-01-02 15:04:05"))
-			fmt.Printf("Code:    %d\n", f.LastErrorCode)
-			fmt.Printf("Snippet: %s\n", f.LastErrorSnippet)
-			fmt.Println("------------------------------------------------------------")
-		}
+	if len(feeds) == 0 {
+		fmt.Println("No feeds with errors found.")
+		return nil
 	}
 
-	if !found {
-		fmt.Println("No feeds with errors found.")
+	fmt.Println("Feeds with errors:")
+	fmt.Println("------------------------------------------------------------")
+	for _, f := range feeds {
+		fmt.Printf("Feed ID: %d\n", f.ID)
+		fmt.Printf("Title:   %s\n", f.Title)
+		fmt.Printf("URL:     %s\n", f.URL)
+		fmt.Printf("Time:    %s\n", f.LastErrorTime.Format("2006-01-02 15:04:05"))
+		fmt.Printf("Code:    %d\n", f.LastErrorCode)
+		fmt.Printf("Snippet: %s\n", f.LastErrorSnippet)
+		fmt.Println("------------------------------------------------------------")
 	}
+
 	return nil
 }

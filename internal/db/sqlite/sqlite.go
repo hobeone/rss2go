@@ -79,6 +79,41 @@ func (s *Store) GetFeeds(ctx context.Context) ([]models.Feed, error) {
 	return feeds, nil
 }
 
+func (s *Store) GetFeedsWithErrors(ctx context.Context) ([]models.Feed, error) {
+	query := "SELECT id, url, title, last_poll, last_error_time, last_error_code, last_error_snippet FROM feeds WHERE last_error_time IS NOT NULL OR last_error_code != 0"
+	s.logger.Debug("executing query", "query", query)
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var feeds []models.Feed
+	for rows.Next() {
+		var f models.Feed
+		var lastPoll, lastErrorTime sql.NullTime
+		var lastErrorCode sql.NullInt64
+		var lastErrorSnippet sql.NullString
+		if err := rows.Scan(&f.ID, &f.URL, &f.Title, &lastPoll, &lastErrorTime, &lastErrorCode, &lastErrorSnippet); err != nil {
+			return nil, err
+		}
+		if lastPoll.Valid {
+			f.LastPoll = lastPoll.Time
+		}
+		if lastErrorTime.Valid {
+			f.LastErrorTime = lastErrorTime.Time
+		}
+		if lastErrorCode.Valid {
+			f.LastErrorCode = int(lastErrorCode.Int64)
+		}
+		if lastErrorSnippet.Valid {
+			f.LastErrorSnippet = lastErrorSnippet.String
+		}
+		feeds = append(feeds, f)
+	}
+	return feeds, nil
+}
+
 func (s *Store) GetFeed(ctx context.Context, id int64) (*models.Feed, error) {
 	query := "SELECT id, url, title, last_poll, last_error_time, last_error_code, last_error_snippet FROM feeds WHERE id = ?"
 	s.logger.Debug("executing query", "query", query, "args", []any{id})

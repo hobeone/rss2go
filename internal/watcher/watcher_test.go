@@ -21,6 +21,10 @@ func (m *mockStore) GetFeeds(ctx context.Context) ([]models.Feed, error) {
 	args := m.Called(ctx)
 	return args.Get(0).([]models.Feed), args.Error(1)
 }
+func (m *mockStore) GetFeedsWithErrors(ctx context.Context) ([]models.Feed, error) {
+	args := m.Called(ctx)
+	return args.Get(0).([]models.Feed), args.Error(1)
+}
 func (m *mockStore) GetFeed(ctx context.Context, id int64) (*models.Feed, error) {
 	args := m.Called(ctx, id)
 	return args.Get(0).(*models.Feed), args.Error(1)

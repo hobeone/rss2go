@@ -10,6 +10,7 @@ import (
 type Store interface {
 	// Feed operations
 	GetFeeds(ctx context.Context) ([]models.Feed, error)
+	GetFeedsWithErrors(ctx context.Context) ([]models.Feed, error)
 	GetFeed(ctx context.Context, id int64) (*models.Feed, error)
 	AddFeed(ctx context.Context, url string, title string) (int64, error)
 	UpdateFeedLastPoll(ctx context.Context, id int64) error
