@@ -49,7 +49,10 @@ type Watcher struct {
 	parser          *gofeed.Parser
 }
 
-const maxBackoff = 24 * time.Hour
+const (
+	maxBackoff         = 24 * time.Hour
+	MaxItemContentSize = 5 * 1024 * 1024
+)
 
 // New creates a new feed watcher.
 func New(feed models.Feed, store db.Store, c CrawlerPool, m MailerPool, interval, jitter time.Duration, logger *slog.Logger) *Watcher {
@@ -264,8 +267,13 @@ func (w *Watcher) FormatItem(feedTitle string, item *gofeed.Item) (subject, body
 		content = item.Description
 	}
 
-	// Pre-process to clean content, remove trackers, and handle embedded elements
-	content = cleanFeedContent(content)
+	if len(content) > MaxItemContentSize {
+		w.logger.Error("item content too large to process", "title", item.Title, "size", len(content), "limit", MaxItemContentSize)
+		content = "<i>[Content omitted: item too large to process safely]</i>"
+	} else {
+		// Pre-process to clean content, remove trackers, and handle embedded elements
+		content = cleanFeedContent(content)
+	}
 
 	safeContent := strings.TrimSpace(w.contentPol.Sanitize(content))
 
@@ -275,12 +283,6 @@ func (w *Watcher) FormatItem(feedTitle string, item *gofeed.Item) (subject, body
 }
 
 func cleanFeedContent(htmlStr string) string {
-	// Don't parse extremely large content into a DOM tree to avoid memory issues.
-	// 5MB is a reasonable limit for individual item content.
-	if len(htmlStr) > 5*1024*1024 {
-		return htmlStr
-	}
-
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlStr))
 	if err != nil {
 		return htmlStr // Fallback to returning original string if parsing fails
