@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -36,6 +37,7 @@ type Pool struct {
 	client    *http.Client
 	timeout   time.Duration
 	logger    *slog.Logger
+	wg        sync.WaitGroup
 }
 
 // NewPool creates a new crawler pool.
@@ -49,6 +51,7 @@ func NewPool(size int, timeout time.Duration, logger *slog.Logger) *Pool {
 	}
 
 	for i := range size {
+		p.wg.Add(1)
 		go p.worker(i)
 	}
 
@@ -56,6 +59,7 @@ func NewPool(size int, timeout time.Duration, logger *slog.Logger) *Pool {
 }
 
 func (p *Pool) worker(id int) {
+	defer p.wg.Done()
 	p.logger.Debug("starting worker", "worker_id", id)
 	for req := range p.requests {
 		p.logger.Debug("crawling feed", "feed_id", req.FeedID, "url", req.URL)
@@ -133,4 +137,6 @@ func (p *Pool) Responses() <-chan CrawlResponse {
 // Close closes the pool.
 func (p *Pool) Close() {
 	close(p.requests)
+	p.wg.Wait()
+	close(p.responses)
 }
