@@ -1,8 +1,5 @@
 version: "2"
 
-default: standard
-
-
 linters:
   settings:
     errcheck:
