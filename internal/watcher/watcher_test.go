@@ -193,3 +193,20 @@ func TestWatcher_FormatItem_Sanitization(t *testing.T) {
 	}
 }
 
+func TestWatcher_FormatItem_LargeContent(t *testing.T) {
+	feed := models.Feed{ID: 1, URL: "http://example.com/rss", Title: "Example"}
+	w := New(feed, nil, nil, nil, time.Hour, 0, slog.New(slog.DiscardHandler))
+
+	// Create content > 5MB
+	largeContent := strings.Repeat("a", 6*1024*1024)
+	item := &gofeed.Item{
+		Title:   "Large",
+		Content: largeContent,
+	}
+
+	_, body := w.FormatItem("Example", item)
+	if !strings.Contains(body, largeContent) {
+		t.Errorf("large content was mangled or truncated unexpectedly")
+	}
+}
+

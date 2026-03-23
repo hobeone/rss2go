@@ -274,6 +274,12 @@ func (w *Watcher) FormatItem(feedTitle string, item *gofeed.Item) (subject, body
 }
 
 func cleanFeedContent(htmlStr string) string {
+	// Don't parse extremely large content into a DOM tree to avoid memory issues.
+	// 5MB is a reasonable limit for individual item content.
+	if len(htmlStr) > 5*1024*1024 {
+		return htmlStr
+	}
+
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlStr))
 	if err != nil {
 		return htmlStr // Fallback to returning original string if parsing fails
