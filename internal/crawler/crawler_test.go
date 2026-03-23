@@ -33,3 +33,26 @@ func TestPool(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "mock rss content", string(resp.Body))
 }
+
+func TestPool_SizeLimit(t *testing.T) {
+	content := make([]byte, MaxResponseBodySize+100)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write(content)
+	}))
+	defer ts.Close()
+
+	logger := slog.New(slog.DiscardHandler)
+	p := NewPool(1, 5*time.Second, logger)
+	defer p.Close()
+
+	req := CrawlRequest{
+		FeedID: 1,
+		URL:    ts.URL,
+	}
+	p.Submit(req)
+
+	resp := <-p.Responses()
+	assert.NoError(t, resp.Error)
+	assert.Equal(t, MaxResponseBodySize, len(resp.Body))
+}

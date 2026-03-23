@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+const (
+	// MaxResponseBodySize is the maximum size of a feed response body (10MB).
+	MaxResponseBodySize = 10 * 1024 * 1024
+)
+
 // CrawlRequest represents a request to fetch a feed.
 type CrawlRequest struct {
 	FeedID int64
@@ -102,7 +107,7 @@ func (p *Pool) fetch(ctx context.Context, url string) ([]byte, int, error) {
 		"duration", duration,
 	)
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBodySize))
 	if err != nil {
 		return nil, resp.StatusCode, err
 	}
