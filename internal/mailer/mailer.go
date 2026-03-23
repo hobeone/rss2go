@@ -42,7 +42,9 @@ type Pool struct {
 // NewPool creates a new mailer pool.
 func NewPool(size int, cfg *config.Config, logger *slog.Logger) *Pool {
 	p := &Pool{
-		requests: make(chan MailRequest, size*2),
+		// Use a larger buffer to prevent blocking watcher goroutines
+		// if SMTP delivery is slow.
+		requests: make(chan MailRequest, size*100),
 		config:   cfg,
 		logger:   logger.With("component", "mailer"),
 	}
