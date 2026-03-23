@@ -6,19 +6,20 @@
 
 -   **Modular Architecture**: Decoupled crawler, mailer, and feed watcher pools.
 -   **Pure Go Persistence**: Uses SQLite (`modernc.org/sqlite`) for storage—no CGO required.
--   **Structured Logging**: Powered by Go 1.22's `log/slog`.
+-   **Dynamic Sync**: Automatically detects added or removed feeds without restarting the daemon.
+-   **Structured Logging**: Powered by Go's `log/slog`.
 -   **Robust Configuration**: Load settings from YAML, JSON, TOML, or Environment Variables via `spf13/viper`.
--   **Observability**: Simple Prometheus-style `/metrics` endpoint.
+-   **Observability**: Prometheus-style `/metrics` endpoint.
 -   **Graceful Shutdown**: Context-aware design ensures all workers finish clean on SIGINT/SIGTERM.
 
 ---
 
 ## 🚀 Installation
 
-Ensure you have [Go 1.22+](https://go.dev/dl/) installed.
+Ensure you have [Go 1.24+](https://go.dev/dl/) installed.
 
 ```bash
-git clone https://github.com/hobe/rss2go.git
+git clone https://github.com/hobeone/rss2go.git
 cd rss2go
 go build -o rss2go ./cmd/rss2go
 ```
@@ -61,43 +62,42 @@ use_tls: true
 metrics_addr: ":8080"
 ```
 
-### Environment Variables
-
-All settings can be overridden using environment variables prefixed with `RSS2GO_`:
-
--   `RSS2GO_SMTP_PASS=mysecret ./rss2go daemon`
--   `RSS2GO_DB_PATH=/var/lib/rss2go.db ./rss2go daemon`
-
 ---
 
 ## 🛠️ Usage
 
-### 1. Initialize the Database
-The database is automatically initialized and migrated when you run any command.
+`rss2go` uses a hierarchical command structure.
 
-### 2. Add a Feed
-```bash
-./rss2go add-feed "https://go.dev/blog/feed.atom" "Go Blog"
-```
-
-### 3. Add a User
-```bash
-./rss2go add-user "subscriber@example.com"
-```
-
-### 4. Subscribe the User to the Feed
-List feeds to find the ID:
-```bash
-./rss2go list-feeds
-```
-Then subscribe using the email and feed ID:
-```bash
-./rss2go subscribe "subscriber@example.com" 1
-```
-
-### 5. Start the Daemon
+### 1. Initialize & Start Daemon
 ```bash
 ./rss2go daemon
+```
+
+### 2. Manage Feeds
+```bash
+# Add a feed
+./rss2go feed add "https://go.dev/blog/feed.atom" "Go Blog"
+
+# List feeds (find IDs)
+./rss2go feed list
+
+# Delete a feed
+./rss2go feed del 1  # or URL: ./rss2go feed del https://...
+
+# Catch up unread items without mailing
+./rss2go feed catchup 1
+```
+
+### 3. Manage Users & Subscriptions
+```bash
+# Add a user
+./rss2go user add "subscriber@example.com"
+
+# Subscribe a user to a feed
+./rss2go user subscribe "subscriber@example.com" 1
+
+# Unsubscribe a user
+./rss2go user unsubscribe "subscriber@example.com" 1
 ```
 
 ---
@@ -110,11 +110,6 @@ If `metrics_addr` is configured, you can view the internal state:
 curl http://localhost:8080/metrics
 ```
 
-**Metrics included:**
--   `feeds_crawled_total`: Total successful crawls.
--   `feeds_crawled_errors`: Total crawl failures.
--   `emails_sent_total`: Total notifications sent.
-
 ---
 
 ## 🧪 Testing
@@ -122,5 +117,5 @@ curl http://localhost:8080/metrics
 Run the full test suite to ensure everything is working correctly:
 
 ```bash
-go test ./...
+go test -race ./...
 ```
