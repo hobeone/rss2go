@@ -46,6 +46,7 @@ type Watcher struct {
 	currentInterval time.Duration
 	mu              sync.Mutex
 	cancel          context.CancelFunc
+	parser          *gofeed.Parser
 }
 
 const maxBackoff = 24 * time.Hour
@@ -77,6 +78,7 @@ func New(feed models.Feed, store db.Store, c CrawlerPool, m MailerPool, interval
 		strictPol:       strictPol,
 		contentPol:      contentPol,
 		currentInterval: interval,
+		parser:          gofeed.NewParser(),
 	}
 }
 
@@ -187,8 +189,7 @@ func (w *Watcher) HandleResponse(ctx context.Context, resp crawler.CrawlResponse
 		w.logger.Error("failed to clear feed error in DB", "error", err)
 	}
 
-	fp := gofeed.NewParser()
-	feed, err := fp.Parse(bytes.NewReader(resp.Body))
+	feed, err := w.parser.Parse(bytes.NewReader(resp.Body))
 	if err != nil {
 		w.logger.Error("failed to parse feed", "error", err)
 		return
