@@ -112,6 +112,25 @@ curl http://localhost:8080/metrics
 
 ---
 
+## 🐳 Docker Deployment
+
+`rss2go` and its companion web scraper can be run together using Docker Compose.
+
+### 1. Build and Start
+```bash
+docker-compose up -d --build
+```
+
+### 2. Usage with Scraper
+The scraper service runs on `http://scraper:8282`. To subscribe to a site that doesn't have a native feed (e.g., Escape Collective):
+
+```bash
+# Add the feed via the scraper proxy
+./rss2go feed add "http://scraper:8282/escapecollective" "Escape Collective"
+```
+
+---
+
 ## 🧪 Testing
 
 Run the full test suite to ensure everything is working correctly:

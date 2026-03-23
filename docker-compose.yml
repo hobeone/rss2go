@@ -1,0 +1,29 @@
+services:
+  rss2go-daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rss2go:latest
+    container_name: rss2go-daemon
+    restart: unless-stopped
+    volumes:
+      - ./data/config:/app/config:ro
+      - ./data/db:/app/db
+    command: ["daemon", "--config", "/app/config/rss2go.yaml"]
+    networks:
+      - rss2go-network
+
+  scraper:
+    image: rss2go:latest
+    container_name: rss2go-scraper
+    restart: unless-stopped
+    # Scraper listens on :8282
+    entrypoint: ["/usr/local/bin/scraper"]
+    ports:
+      - "8282:8282"
+    networks:
+      - rss2go-network
+
+networks:
+  rss2go-network:
+    driver: bridge

@@ -12,7 +12,11 @@ import (
 
 func TestStore(t *testing.T) {
 	dbPath := "test.db"
-	defer os.Remove(dbPath)
+	defer func() {
+		if err := os.Remove(dbPath); err != nil {
+			t.Errorf("failed to remove test db: %v", err)
+		}
+	}()
 
 	logger := slog.New(slog.DiscardHandler)
 	store, err := New(dbPath, logger)
@@ -115,8 +119,8 @@ func TestStore_Errors(t *testing.T) {
 	assert.NoError(t, err)
 	
 	// Close the DB immediately to simulate connection errors
-	store.Close()
-	os.Remove(dbPath)
+	assert.NoError(t, store.Close())
+	assert.NoError(t, os.Remove(dbPath))
 
 	ctx := context.Background()
 

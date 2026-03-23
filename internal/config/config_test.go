@@ -27,7 +27,11 @@ log_level: "debug"
 `
 		err := os.WriteFile("test_config.yaml", []byte(content), 0644)
 		assert.NoError(t, err)
-		defer os.Remove("test_config.yaml")
+		defer func() {
+			if err := os.Remove("test_config.yaml"); err != nil {
+				t.Errorf("failed to remove test config: %v", err)
+			}
+		}()
 
 		cfg, err := Load("test_config.yaml")
 		assert.NoError(t, err)

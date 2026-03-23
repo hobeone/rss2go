@@ -12,8 +12,14 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
+	github.com/gorilla/feeds v1.2.0 // indirect
+	github.com/hablullah/go-hijri v1.0.2 // indirect
+	github.com/hablullah/go-juliandays v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/jalaali/go-jalaali v0.0.0-20210801064154-80525e88d958 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/magefile/mage v1.14.0 // indirect
+	github.com/markusmobius/go-dateparser v1.2.4 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
@@ -37,6 +43,8 @@ require (
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
+	github.com/tetratelabs/wazero v1.2.1 // indirect
+	github.com/wasilibs/go-re2 v1.3.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/net v0.52.0 // indirect

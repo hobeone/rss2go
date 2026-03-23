@@ -1,21 +1,16 @@
-run:
-  timeout: 5m
-  tests: true
+version: "2"
+
+default: standard
+
 
 linters:
-  enable:
-    - govet
-    - staticcheck
-    - errcheck
-    - revive
-    - gofmt
-    - goimports
-    - misspell
-    - unparam
-    - unused
-    - whitespace
-
-issues:
-  exclude-use-default: false
-  max-issues-per-linter: 0
-  max-same-issues: 0
+  settings:
+    errcheck:
+      exclude-functions:
+        - (*database/sql.DB).Close
+        - (*database/sql.Rows).Close
+        - (*).Close
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (*github.com/hobeone/rss2go/internal/db/sqlite.Store).Close
+        - rows.Close

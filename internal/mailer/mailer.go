@@ -167,14 +167,9 @@ func (p *Pool) persistentSMTPSender(req MailRequest) error {
 func (p *Pool) closeSMTP() {
 	if p.smtpConn != nil {
 		p.logger.Debug("closing SMTP connection")
-		p.smtpConn.Close()
+		p.smtpConn.Close() //nolint:errcheck
 		p.smtpConn = nil
 	}
-}
-
-func (p *Pool) sendSMTP(req MailRequest) error {
-	// This method is now replaced by persistentSMTPSender
-	return p.persistentSMTPSender(req)
 }
 
 func (p *Pool) sendSendmail(req MailRequest) error {
@@ -187,12 +182,22 @@ func (p *Pool) sendSendmail(req MailRequest) error {
 	msg := fmt.Sprintf("To: %s\nSubject: %s\nContent-Type: text/html; charset=UTF-8\n\n%s",
 		strings.Join(req.To, ", "), req.Subject, req.Body)
 
+	errChan := make(chan error, 1)
 	go func() {
-		defer stdin.Close()
-		stdin.Write([]byte(msg))
+		defer func() { _ = stdin.Close() }()
+		_, werr := stdin.Write([]byte(msg))
+		errChan <- werr
 	}()
 
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("sendmail command failed: %w", err)
+	}
+
+	if err := <-errChan; err != nil {
+		return fmt.Errorf("failed to write to sendmail stdin: %w", err)
+	}
+
+	return nil
 }
 
 // Submit sends a mail request to the pool.

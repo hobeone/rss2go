@@ -13,7 +13,9 @@ import (
 func TestPool(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("mock rss content"))
+		if _, err := w.Write([]byte("mock rss content")); err != nil {
+			t.Errorf("failed to write response: %v", err)
+		}
 	}))
 	defer ts.Close()
 
@@ -38,7 +40,9 @@ func TestPool_SizeLimit(t *testing.T) {
 	content := make([]byte, MaxResponseBodySize+100)
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write(content)
+		if _, err := w.Write(content); err != nil {
+			t.Errorf("failed to write response: %v", err)
+		}
 	}))
 	defer ts.Close()
 

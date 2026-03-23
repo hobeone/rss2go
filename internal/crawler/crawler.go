@@ -101,7 +101,7 @@ func (p *Pool) fetch(ctx context.Context, url string) ([]byte, int, error) {
 		}
 		return nil, 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	duration := time.Since(start)
 	p.logger.Debug("response received",
