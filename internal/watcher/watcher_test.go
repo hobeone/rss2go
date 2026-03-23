@@ -29,9 +29,21 @@ func (m *mockStore) GetFeed(ctx context.Context, id int64) (*models.Feed, error)
 	args := m.Called(ctx, id)
 	return args.Get(0).(*models.Feed), args.Error(1)
 }
+func (m *mockStore) GetFeedByURL(ctx context.Context, url string) (*models.Feed, error) {
+	args := m.Called(ctx, url)
+	return args.Get(0).(*models.Feed), args.Error(1)
+}
 func (m *mockStore) AddFeed(ctx context.Context, url string, title string) (int64, error) {
 	args := m.Called(ctx, url, title)
 	return args.Get(0).(int64), args.Error(1)
+}
+func (m *mockStore) DeleteFeed(ctx context.Context, id int64) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+func (m *mockStore) DeleteFeedByURL(ctx context.Context, url string) error {
+	args := m.Called(ctx, url)
+	return args.Error(0)
 }
 func (m *mockStore) UpdateFeedLastPoll(ctx context.Context, id int64) error {
 	args := m.Called(ctx, id)
@@ -54,6 +66,10 @@ func (m *mockStore) GetUsersForFeed(ctx context.Context, feedID int64) ([]models
 	return args.Get(0).([]models.User), args.Error(1)
 }
 func (m *mockStore) Subscribe(ctx context.Context, userID int64, feedID int64) error {
+	args := m.Called(ctx, userID, feedID)
+	return args.Error(0)
+}
+func (m *mockStore) Unsubscribe(ctx context.Context, userID int64, feedID int64) error {
 	args := m.Called(ctx, userID, feedID)
 	return args.Error(0)
 }
@@ -105,7 +121,7 @@ func TestWatcher_HandleResponse(t *testing.T) {
 
 	// Mock Mailer behavior
 	mPool.On("Submit", mock.MatchedBy(func(req mailer.MailRequest) bool {
-		isSubjectSafe := req.Subject == "[Example] Safe Title"
+		isSubjectSafe := req.Subject == "[Example & Feed] Safe Title & it's test"
 		
 		hasRealImg := strings.Contains(req.Body, "http://example.com/real.jpg")
 		noTrackerImg := !strings.Contains(req.Body, "tracker.gif")
@@ -121,9 +137,9 @@ func TestWatcher_HandleResponse(t *testing.T) {
 	rss := `<?xml version="1.0" encoding="UTF-8" ?>
 <rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
 <channel>
-  <title>Example &lt;script&gt;Feed&lt;/script&gt;</title>
+  <title>Example &amp; Feed &lt;script&gt;Feed&lt;/script&gt;</title>
   <item>
-    <title>Safe Title &lt;img src="x" onerror="alert(1)"&gt;</title>
+    <title>Safe Title &amp; it's test &lt;img src="x" onerror="alert(1)"&gt;</title>
     <link>http://example.com/item1</link>
     <guid>item-1</guid>
     <description>Safe &lt;b&gt;Description&lt;/b&gt;</description>
@@ -146,3 +162,4 @@ func TestWatcher_HandleResponse(t *testing.T) {
 	store.AssertExpectations(t)
 	mPool.AssertExpectations(t)
 }
+

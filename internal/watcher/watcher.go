@@ -45,6 +45,7 @@ type Watcher struct {
 	contentPol      *bluemonday.Policy
 	currentInterval time.Duration
 	mu              sync.Mutex
+	cancel          context.CancelFunc
 }
 
 const maxBackoff = 24 * time.Hour
@@ -79,8 +80,26 @@ func New(feed models.Feed, store db.Store, c CrawlerPool, m MailerPool, interval
 	}
 }
 
+// Stop cancels the watcher loop.
+func (w *Watcher) Stop() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.cancel != nil {
+		w.logger.Info("stopping watcher")
+		w.cancel()
+		w.cancel = nil
+	}
+}
+
 // Run starts the watcher loop.
 func (w *Watcher) Run(ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
+	w.mu.Lock()
+	w.cancel = cancel
+	w.mu.Unlock()
+
+	defer w.Stop()
+
 	initialWait := w.getJitter()
 	if !w.feed.LastPoll.IsZero() {
 		nextScheduledPoll := w.feed.LastPoll.Add(w.interval)
@@ -233,8 +252,8 @@ func (w *Watcher) HandleResponse(ctx context.Context, resp crawler.CrawlResponse
 
 // FormatItem sanitizes and formats a feed item for an email.
 func (w *Watcher) FormatItem(feedTitle string, item *gofeed.Item) (subject, body string) {
-	safeTitle := strings.TrimSpace(w.strictPol.Sanitize(item.Title))
-	safeFeedTitle := strings.TrimSpace(w.strictPol.Sanitize(feedTitle))
+	safeTitle := html.UnescapeString(strings.TrimSpace(w.strictPol.Sanitize(item.Title)))
+	safeFeedTitle := html.UnescapeString(strings.TrimSpace(w.strictPol.Sanitize(feedTitle)))
 	safeLink := strings.TrimSpace(w.strictPol.Sanitize(item.Link))
 
 	// Use Content if available, otherwise Description.

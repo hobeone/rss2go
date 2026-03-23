@@ -144,6 +144,36 @@ func (s *Store) GetFeed(ctx context.Context, id int64) (*models.Feed, error) {
 	return &f, nil
 }
 
+func (s *Store) GetFeedByURL(ctx context.Context, url string) (*models.Feed, error) {
+	query := "SELECT id, url, title, last_poll, last_error_time, last_error_code, last_error_snippet FROM feeds WHERE url = ?"
+	s.logger.Debug("executing query", "query", query, "args", []any{url})
+	var f models.Feed
+	var lastPoll, lastErrorTime sql.NullTime
+	var lastErrorCode sql.NullInt64
+	var lastErrorSnippet sql.NullString
+	err := s.db.QueryRowContext(ctx, query, url).
+		Scan(&f.ID, &f.URL, &f.Title, &lastPoll, &lastErrorTime, &lastErrorCode, &lastErrorSnippet)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if lastPoll.Valid {
+		f.LastPoll = lastPoll.Time
+	}
+	if lastErrorTime.Valid {
+		f.LastErrorTime = lastErrorTime.Time
+	}
+	if lastErrorCode.Valid {
+		f.LastErrorCode = int(lastErrorCode.Int64)
+	}
+	if lastErrorSnippet.Valid {
+		f.LastErrorSnippet = lastErrorSnippet.String
+	}
+	return &f, nil
+}
+
 func (s *Store) AddFeed(ctx context.Context, url string, title string) (int64, error) {
 	query := "INSERT INTO feeds (url, title) VALUES (?, ?) ON CONFLICT(url) DO UPDATE SET title=excluded.title"
 	s.logger.Debug("executing exec", "query", query, "args", []any{url, title})
@@ -152,6 +182,20 @@ func (s *Store) AddFeed(ctx context.Context, url string, title string) (int64, e
 		return 0, err
 	}
 	return res.LastInsertId()
+}
+
+func (s *Store) DeleteFeed(ctx context.Context, id int64) error {
+	query := "DELETE FROM feeds WHERE id = ?"
+	s.logger.Debug("executing exec", "query", query, "args", []any{id})
+	_, err := s.db.ExecContext(ctx, query, id)
+	return err
+}
+
+func (s *Store) DeleteFeedByURL(ctx context.Context, url string) error {
+	query := "DELETE FROM feeds WHERE url = ?"
+	s.logger.Debug("executing exec", "query", query, "args", []any{url})
+	_, err := s.db.ExecContext(ctx, query, url)
+	return err
 }
 
 func (s *Store) UpdateFeedLastPoll(ctx context.Context, id int64) error {
@@ -228,6 +272,13 @@ func (s *Store) GetUsersForFeed(ctx context.Context, feedID int64) ([]models.Use
 
 func (s *Store) Subscribe(ctx context.Context, userID int64, feedID int64) error {
 	query := "INSERT INTO subscriptions (user_id, feed_id) VALUES (?, ?) ON CONFLICT DO NOTHING"
+	s.logger.Debug("executing exec", "query", query, "args", []any{userID, feedID})
+	_, err := s.db.ExecContext(ctx, query, userID, feedID)
+	return err
+}
+
+func (s *Store) Unsubscribe(ctx context.Context, userID int64, feedID int64) error {
+	query := "DELETE FROM subscriptions WHERE user_id = ? AND feed_id = ?"
 	s.logger.Debug("executing exec", "query", query, "args", []any{userID, feedID})
 	_, err := s.db.ExecContext(ctx, query, userID, feedID)
 	return err

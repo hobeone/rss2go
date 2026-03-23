@@ -12,7 +12,10 @@ type Store interface {
 	GetFeeds(ctx context.Context) ([]models.Feed, error)
 	GetFeedsWithErrors(ctx context.Context) ([]models.Feed, error)
 	GetFeed(ctx context.Context, id int64) (*models.Feed, error)
+	GetFeedByURL(ctx context.Context, url string) (*models.Feed, error)
 	AddFeed(ctx context.Context, url string, title string) (int64, error)
+	DeleteFeed(ctx context.Context, id int64) error
+	DeleteFeedByURL(ctx context.Context, url string) error
 	UpdateFeedLastPoll(ctx context.Context, id int64) error
 	UpdateFeedError(ctx context.Context, id int64, code int, snippet string) error
 
@@ -23,6 +26,7 @@ type Store interface {
 
 	// Subscription operations
 	Subscribe(ctx context.Context, userID int64, feedID int64) error
+	Unsubscribe(ctx context.Context, userID int64, feedID int64) error
 
 	// Item operations
 	IsSeen(ctx context.Context, feedID int64, guid string) (bool, error)

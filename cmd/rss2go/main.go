@@ -7,10 +7,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/hobe/rss2go"
 	"github.com/hobe/rss2go/internal/config"
 	"github.com/hobe/rss2go/internal/crawler"
+	"github.com/hobe/rss2go/internal/db"
 	"github.com/hobe/rss2go/internal/db/sqlite"
 	"github.com/hobe/rss2go/internal/mailer"
 	"github.com/hobe/rss2go/internal/metrics"
@@ -34,50 +36,74 @@ var (
 		RunE:  runDaemon,
 	}
 
-	addFeedCmd = &cobra.Command{
-		Use:   "add-feed [url] [title]",
+	feedCmd = &cobra.Command{
+		Use:   "feed",
+		Short: "Manage RSS feeds",
+	}
+
+	feedAddCmd = &cobra.Command{
+		Use:   "add [url] [title]",
 		Short: "Add a new RSS feed",
 		Args:  cobra.ExactArgs(2),
 		RunE:  runAddFeed,
 	}
 
-	addUserCmd = &cobra.Command{
-		Use:   "add-user [email]",
-		Short: "Add a new user",
+	feedDelCmd = &cobra.Command{
+		Use:   "del [feed-id or url]",
+		Short: "Delete an RSS feed",
 		Args:  cobra.ExactArgs(1),
-		RunE:  runAddUser,
+		RunE:  runDelFeed,
 	}
 
-	subscribeCmd = &cobra.Command{
-		Use:   "subscribe [email] [feed-id]",
-		Short: "Subscribe a user to a feed",
-		Args:  cobra.ExactArgs(2),
-		RunE:  runSubscribe,
-	}
-
-	listFeedsCmd = &cobra.Command{
-		Use:   "list-feeds",
+	feedListCmd = &cobra.Command{
+		Use:   "list",
 		Short: "List all RSS feeds",
 		RunE:  runListFeeds,
 	}
 
-	testFeedCmd = &cobra.Command{
-		Use:   "test-feed [url] [email]",
+	feedTestCmd = &cobra.Command{
+		Use:   "test [url] [email]",
 		Short: "Test a feed by sending its first item to an email",
 		Args:  cobra.ExactArgs(2),
 		RunE:  runTestFeed,
 	}
 
-	listErrorsCmd = &cobra.Command{
-		Use:   "list-errors",
+	feedErrorsCmd = &cobra.Command{
+		Use:   "errors",
 		Short: "List feeds with recorded errors",
 		RunE:  runListErrors,
 	}
 
-	catchupCmd = &cobra.Command{
+	feedCatchupCmd = &cobra.Command{
 		Use:   "catchup [feed-id]",
 		Short: "Mark all items in a feed (or all feeds) as seen without mailing",
 		RunE:  runCatchup,
+	}
+
+	userCmd = &cobra.Command{
+		Use:   "user",
+		Short: "Manage users and subscriptions",
+	}
+
+	userAddCmd = &cobra.Command{
+		Use:   "add [email]",
+		Short: "Add a new user",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runAddUser,
+	}
+
+	userSubscribeCmd = &cobra.Command{
+		Use:   "subscribe [email] [feed-id or url]",
+		Short: "Subscribe a user to a feed",
+		Args:  cobra.ExactArgs(2),
+		RunE:  runSubscribe,
+	}
+
+	userUnsubscribeCmd = &cobra.Command{
+		Use:   "unsubscribe [email] [feed-id or url]",
+		Short: "Unsubscribe a user from a feed",
+		Args:  cobra.ExactArgs(2),
+		RunE:  runUnsubscribe,
 	}
 )
 
@@ -86,16 +112,27 @@ var catchupAll bool
 func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./rss2go.yaml)")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "", "override log level (debug, info, warn, error)")
+	
 	rootCmd.AddCommand(daemonCmd)
-	rootCmd.AddCommand(addFeedCmd)
-	rootCmd.AddCommand(addUserCmd)
-	rootCmd.AddCommand(subscribeCmd)
-	rootCmd.AddCommand(listFeedsCmd)
-	rootCmd.AddCommand(testFeedCmd)
-	rootCmd.AddCommand(listErrorsCmd)
+	
+	// Feed commands
+	feedCmd.AddCommand(feedAddCmd)
+	feedCmd.AddCommand(feedDelCmd)
+	feedCmd.AddCommand(feedListCmd)
+	feedCmd.AddCommand(feedTestCmd)
+	feedCmd.AddCommand(feedErrorsCmd)
+	
+	feedCatchupCmd.Flags().BoolVar(&catchupAll, "all", false, "catchup all feeds")
+	feedCmd.AddCommand(feedCatchupCmd)
+	
+	rootCmd.AddCommand(feedCmd)
 
-	catchupCmd.Flags().BoolVar(&catchupAll, "all", false, "catchup all feeds")
-	rootCmd.AddCommand(catchupCmd)
+	// User commands
+	userCmd.AddCommand(userAddCmd)
+	userCmd.AddCommand(userSubscribeCmd)
+	userCmd.AddCommand(userUnsubscribeCmd)
+	
+	rootCmd.AddCommand(userCmd)
 }
 
 func main() {
@@ -175,6 +212,49 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 	}
 
 	logger.Info("daemon started", "feeds_count", len(feeds))
+
+	// Resync loop
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				currentFeeds, err := store.GetFeeds(ctx)
+				if err != nil {
+					logger.Error("failed to sync feeds", "error", err)
+					continue
+				}
+
+				// Find new feeds
+				dbFeedsMap := make(map[int64]models.Feed)
+				for _, f := range currentFeeds {
+					dbFeedsMap[f.ID] = f
+					if _, ok := registry.GetWatcher(f.ID); !ok {
+						logger.Info("sync: starting new watcher", "feed_id", f.ID, "url", f.URL)
+						w := watcher.New(f, store, cPool, mPool, cfg.PollInterval, cfg.PollJitter, logger)
+						registry.Register(w)
+						go w.Run(ctx)
+					}
+				}
+
+				// Find removed feeds
+				activeFeedIDs := registry.GetActiveFeedIDs()
+				for _, id := range activeFeedIDs {
+					if _, exists := dbFeedsMap[id]; !exists {
+						logger.Info("sync: stopping removed watcher", "feed_id", id)
+						if w, ok := registry.GetWatcher(id); ok {
+							w.Stop()
+						}
+						registry.Unregister(id)
+					}
+				}
+			}
+		}
+	}()
+
 	<-ctx.Done()
 	logger.Info("shutting down")
 
@@ -199,6 +279,37 @@ func runAddFeed(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	fmt.Printf("Added feed: %s (ID: %d)\n", args[1], id)
+	return nil
+}
+
+func runDelFeed(cmd *cobra.Command, args []string) error {
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		return err
+	}
+	logger := getLogger(cfg)
+
+	store, err := getStore(logger)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	arg := args[0]
+	var id int64
+	// Try parsing as ID first
+	if _, err := fmt.Sscanf(arg, "%d", &id); err == nil {
+		if err := store.DeleteFeed(context.Background(), id); err != nil {
+			return err
+		}
+		fmt.Printf("Deleted feed with ID: %d\n", id)
+	} else {
+		// Assume it's a URL
+		if err := store.DeleteFeedByURL(context.Background(), arg); err != nil {
+			return err
+		}
+		fmt.Printf("Deleted feed with URL: %s\n", arg)
+	}
 	return nil
 }
 
@@ -237,12 +348,10 @@ func runSubscribe(cmd *cobra.Command, args []string) error {
 	defer store.Close()
 
 	email := args[0]
-	var feedID int64
-	if _, err := fmt.Sscanf(args[1], "%d", &feedID); err != nil {
-		return fmt.Errorf("invalid feed ID: %s", args[1])
-	}
+	feedArg := args[1]
 
-	user, err := store.GetUserByEmail(context.Background(), email)
+	ctx := context.Background()
+	user, err := store.GetUserByEmail(ctx, email)
 	if err != nil {
 		return err
 	}
@@ -250,11 +359,70 @@ func runSubscribe(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("user not found: %s", email)
 	}
 
-	if err := store.Subscribe(context.Background(), user.ID, feedID); err != nil {
+	feedID, err := getFeedID(ctx, store, feedArg)
+	if err != nil {
+		return err
+	}
+
+	if err := store.Subscribe(ctx, user.ID, feedID); err != nil {
 		return err
 	}
 	fmt.Printf("Subscribed %s to feed ID %d\n", email, feedID)
 	return nil
+}
+
+func runUnsubscribe(cmd *cobra.Command, args []string) error {
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		return err
+	}
+	logger := getLogger(cfg)
+
+	store, err := getStore(logger)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	email := args[0]
+	feedArg := args[1]
+
+	ctx := context.Background()
+	user, err := store.GetUserByEmail(ctx, email)
+	if err != nil {
+		return err
+	}
+	if user == nil {
+		return fmt.Errorf("user not found: %s", email)
+	}
+
+	feedID, err := getFeedID(ctx, store, feedArg)
+	if err != nil {
+		return err
+	}
+
+	if err := store.Unsubscribe(ctx, user.ID, feedID); err != nil {
+		return err
+	}
+	fmt.Printf("Unsubscribed %s from feed ID %d\n", email, feedID)
+	return nil
+}
+
+func getFeedID(ctx context.Context, store db.Store, arg string) (int64, error) {
+	var id int64
+	if _, err := fmt.Sscanf(arg, "%d", &id); err == nil {
+		return id, nil
+	}
+
+	// Assume it's a URL
+	f, err := store.GetFeedByURL(ctx, arg)
+	if err != nil {
+		return 0, err
+	}
+	if f == nil {
+		return 0, fmt.Errorf("feed not found with URL: %s", arg)
+	}
+	return f.ID, nil
 }
 
 func runListFeeds(cmd *cobra.Command, args []string) error {

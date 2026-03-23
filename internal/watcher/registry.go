@@ -32,6 +32,32 @@ func (r *Registry) Register(w *Watcher) {
 	r.watchers[w.feed.ID] = w
 }
 
+// Unregister removes a watcher from the registry.
+func (r *Registry) Unregister(feedID int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.watchers, feedID)
+}
+
+// GetWatcher retrieves a watcher by feed ID.
+func (r *Registry) GetWatcher(feedID int64) (*Watcher, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	w, ok := r.watchers[feedID]
+	return w, ok
+}
+
+// GetActiveFeedIDs returns a list of all currently registered feed IDs.
+func (r *Registry) GetActiveFeedIDs() []int64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	ids := make([]int64, 0, len(r.watchers))
+	for id := range r.watchers {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
 // Start starts the response router loop.
 func (r *Registry) Start(ctx context.Context) {
 	r.logger.Info("starting response router")

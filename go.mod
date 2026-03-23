@@ -1,4 +1,4 @@
-module github.com/hobe/rss2go
+module github.com/hobeone/rss2go
 
 go 1.25.0
 
