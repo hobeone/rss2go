@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/hobe/rss2go/internal/crawler"
+	"github.com/hobeone/rss2go/internal/crawler"
 )
 
 // Registry manages multiple watchers and routes crawl responses.

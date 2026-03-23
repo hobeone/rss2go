@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hobe/rss2go/internal/config"
-	"github.com/hobe/rss2go/internal/metrics"
+	"github.com/hobeone/rss2go/internal/config"
+	"github.com/hobeone/rss2go/internal/metrics"
 	"github.com/stretchr/testify/assert"
 )
 

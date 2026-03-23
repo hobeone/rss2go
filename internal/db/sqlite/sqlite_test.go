@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/hobe/rss2go"
+	"github.com/hobeone/rss2go"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -7,9 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hobe/rss2go/internal/crawler"
-	"github.com/hobe/rss2go/internal/mailer"
-	"github.com/hobe/rss2go/internal/models"
+	"github.com/hobeone/rss2go/internal/crawler"
+	"github.com/hobeone/rss2go/internal/mailer"
+	"github.com/hobeone/rss2go/internal/models"
+	"github.com/mmcdole/gofeed"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -161,5 +162,34 @@ func TestWatcher_HandleResponse(t *testing.T) {
 
 	store.AssertExpectations(t)
 	mPool.AssertExpectations(t)
+}
+
+func TestWatcher_FormatItem_Sanitization(t *testing.T) {
+	feed := models.Feed{ID: 1, URL: "http://example.com/rss", Title: "Example"}
+	store := new(mockStore)
+	cPool := new(mockCrawler)
+	mPool := new(mockMailer)
+	logger := slog.New(slog.DiscardHandler)
+
+	w := New(feed, store, cPool, mPool, time.Hour, 0, logger)
+
+	item := &gofeed.Item{
+		Title: "Test",
+		Content: `<img src="javascript:alert(1)" alt="bad">
+				 <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==" alt="data">
+				 <img src="http://example.com/good.jpg" alt="good">`,
+	}
+
+	_, body := w.FormatItem("Example", item)
+
+	if strings.Contains(body, "javascript:alert") {
+		t.Errorf("body contains javascript in img src: %s", body)
+	}
+	if strings.Contains(body, "data:image") {
+		t.Errorf("body contains data URI in img src: %s", body)
+	}
+	if !strings.Contains(body, "http://example.com/good.jpg") {
+		t.Errorf("body missing good image URL: %s", body)
+	}
 }
 

@@ -13,11 +13,11 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/hobe/rss2go/internal/crawler"
-	"github.com/hobe/rss2go/internal/db"
-	"github.com/hobe/rss2go/internal/mailer"
-	"github.com/hobe/rss2go/internal/metrics"
-	"github.com/hobe/rss2go/internal/models"
+	"github.com/hobeone/rss2go/internal/crawler"
+	"github.com/hobeone/rss2go/internal/db"
+	"github.com/hobeone/rss2go/internal/mailer"
+	"github.com/hobeone/rss2go/internal/metrics"
+	"github.com/hobeone/rss2go/internal/models"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/mmcdole/gofeed"
 )
@@ -59,7 +59,7 @@ func New(feed models.Feed, store db.Store, c CrawlerPool, m MailerPool, interval
 	// Let's build a strict safe HTML policy from scratch or modify UGC.
 	// A simpler safe policy:
 	contentPol := bluemonday.NewPolicy()
-	contentPol.AllowStandardURLs()
+	contentPol.AllowURLSchemes("http", "https")
 	contentPol.AllowAttrs("href").OnElements("a")
 	contentPol.RequireNoReferrerOnLinks(true)
 	contentPol.RequireParseableURLs(true)

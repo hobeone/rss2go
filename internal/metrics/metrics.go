@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"sync/atomic"
 
-	"github.com/hobe/rss2go/internal/config"
+	"github.com/hobeone/rss2go/internal/config"
 	"log/slog"
 )
 

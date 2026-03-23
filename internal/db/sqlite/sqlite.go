@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/hobe/rss2go/internal/models"
+	"github.com/hobeone/rss2go/internal/models"
 	_ "modernc.org/sqlite"
 )
 

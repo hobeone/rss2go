@@ -3,7 +3,7 @@ package db
 import (
 	"context"
 
-	"github.com/hobe/rss2go/internal/models"
+	"github.com/hobeone/rss2go/internal/models"
 )
 
 // Store defines the methods needed to persist data for rss2go.
