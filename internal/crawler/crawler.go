@@ -111,9 +111,14 @@ func (p *Pool) fetch(ctx context.Context, url string) ([]byte, int, error) {
 		"duration", duration,
 	)
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBodySize))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBodySize+1))
 	if err != nil {
 		return nil, resp.StatusCode, err
+	}
+
+	if len(body) > MaxResponseBodySize {
+		p.logger.Error("response body exceeded limit", "url", url, "limit", MaxResponseBodySize)
+		body = body[:MaxResponseBodySize]
 	}
 
 	if resp.StatusCode != http.StatusOK {
