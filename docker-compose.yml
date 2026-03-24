@@ -5,15 +5,18 @@ services:
       dockerfile: Dockerfile
     image: rss2go:latest
     container_name: rss2go-daemon
+    depends_on:
+      rss2go-scraper:
+        condition: service_started
     restart: unless-stopped
     volumes:
-      - ./data/config:/app/config:ro
-      - ./data/db:/app/db
-    command: ["daemon", "--config", "/app/config/rss2go.yaml"]
+      - ./rss2go_docker.yaml:/app/rss2go.yaml
+      - ./rss2go.db:/app/rss2go.db
+    command: ["daemon", "--config", "/app/rss2go.yaml"]
     networks:
       - rss2go-network
 
-  scraper:
+  rss2go-scraper:
     image: rss2go:latest
     container_name: rss2go-scraper
     restart: unless-stopped

@@ -1,4 +1,4 @@
-FROM golang:1.26-alpine AS builder
+FROM golang:1.26.1-alpine AS builder
 
 WORKDIR /src
 
@@ -24,7 +24,7 @@ RUN adduser -D rss2go
 
 # Directory for configuration and database
 RUN mkdir -p /app/config /app/db && \
-    chown -R rss2go:rss2go /app/config /app/db
+    chown -R rss2go:rss2go /app
 
 USER rss2go
 
@@ -33,7 +33,7 @@ COPY --from=builder /app/rss2go /usr/local/bin/rss2go
 COPY --from=builder /app/scraper /usr/local/bin/scraper
 
 # Default volumes
-VOLUME ["/app/config", "/app/db"]
+#VOLUME ["/app/config", "/app/db"]
 
 # Entrypoint will be overridden by docker-compose for the scraper
 ENTRYPOINT ["/usr/local/bin/rss2go"]
