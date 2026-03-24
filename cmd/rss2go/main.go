@@ -55,6 +55,13 @@ var (
 		RunE:  runDelFeed,
 	}
 
+	feedUpdateCmd = &cobra.Command{
+		Use:   "update [feed-id]",
+		Short: "Update an RSS feed's URL or title",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runUpdateFeed,
+	}
+
 	feedListCmd = &cobra.Command{
 		Use:   "list",
 		Short: "List all RSS feeds",
@@ -107,7 +114,11 @@ var (
 	}
 )
 
-var catchupAll bool
+var (
+	catchupAll  bool
+	updateURL   string
+	updateTitle string
+)
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./rss2go.yaml)")
@@ -118,6 +129,9 @@ func init() {
 	// Feed commands
 	feedCmd.AddCommand(feedAddCmd)
 	feedCmd.AddCommand(feedDelCmd)
+	feedUpdateCmd.Flags().StringVar(&updateURL, "url", "", "New URL for the feed")
+	feedUpdateCmd.Flags().StringVar(&updateTitle, "title", "", "New title for the feed")
+	feedCmd.AddCommand(feedUpdateCmd)
 	feedCmd.AddCommand(feedListCmd)
 	feedCmd.AddCommand(feedTestCmd)
 	feedCmd.AddCommand(feedErrorsCmd)
@@ -228,15 +242,27 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 					continue
 				}
 
-				// Find new feeds
+				// Find new or updated feeds
 				dbFeedsMap := make(map[int64]models.Feed)
 				for _, f := range currentFeeds {
 					dbFeedsMap[f.ID] = f
-					if _, ok := registry.GetWatcher(f.ID); !ok {
+					if w, ok := registry.GetWatcher(f.ID); !ok {
 						logger.Info("sync: starting new watcher", "feed_id", f.ID, "url", f.URL)
 						w := watcher.New(f, store, cPool, mPool, cfg.PollInterval, cfg.PollJitter, logger)
 						registry.Register(w)
 						go w.Run(ctx)
+					} else {
+						// Check if metadata has changed
+						currentFeed := w.Feed()
+						if currentFeed.URL != f.URL || currentFeed.Title != f.Title {
+							logger.Info("sync: feed metadata changed, restarting watcher", "feed_id", f.ID)
+							w.Stop()
+							registry.Unregister(f.ID)
+
+							newW := watcher.New(f, store, cPool, mPool, cfg.PollInterval, cfg.PollJitter, logger)
+							registry.Register(newW)
+							go newW.Run(ctx)
+						}
 					}
 				}
 
@@ -310,6 +336,43 @@ func runDelFeed(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Printf("Deleted feed with URL: %s\n", arg)
 	}
+	return nil
+}
+
+func runUpdateFeed(cmd *cobra.Command, args []string) error {
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		return err
+	}
+	logger := getLogger(cfg)
+
+	store, err := getStore(logger)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	var id int64
+	if _, err := fmt.Sscanf(args[0], "%d", &id); err != nil {
+		return fmt.Errorf("invalid feed ID: %s", args[0])
+	}
+
+	var urlPtr, titlePtr *string
+	if cmd.Flags().Changed("url") {
+		urlPtr = &updateURL
+	}
+	if cmd.Flags().Changed("title") {
+		titlePtr = &updateTitle
+	}
+
+	if urlPtr == nil && titlePtr == nil {
+		return fmt.Errorf("at least one of --url or --title must be provided")
+	}
+
+	if err := store.UpdateFeed(context.Background(), id, urlPtr, titlePtr); err != nil {
+		return err
+	}
+	fmt.Printf("Updated feed ID: %d\n", id)
 	return nil
 }
 

@@ -85,6 +85,11 @@ func New(feed models.Feed, store db.Store, c CrawlerPool, m MailerPool, interval
 	}
 }
 
+// Feed returns the feed model associated with the watcher.
+func (w *Watcher) Feed() models.Feed {
+	return w.feed
+}
+
 // Stop cancels the watcher loop.
 func (w *Watcher) Stop() {
 	w.mu.Lock()

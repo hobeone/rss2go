@@ -110,6 +110,25 @@ func TestStore(t *testing.T) {
 	assert.Equal(t, 0, fClear.LastErrorCode)
 	assert.Equal(t, "", fClear.LastErrorSnippet)
 	assert.True(t, fClear.LastErrorTime.IsZero())
+
+	// Test UpdateFeed
+	newTitle := "Updated Title"
+	err = store.UpdateFeed(ctx, id, nil, &newTitle)
+	assert.NoError(t, err)
+	fUpdatedTitle, _ := store.GetFeed(ctx, id)
+	assert.Equal(t, newTitle, fUpdatedTitle.Title)
+	assert.Equal(t, "https://example.com/rss", fUpdatedTitle.URL)
+
+	newURL := "https://example.com/new-rss"
+	err = store.UpdateFeed(ctx, id, &newURL, nil)
+	assert.NoError(t, err)
+	fUpdatedURL, _ := store.GetFeed(ctx, id)
+	assert.Equal(t, newURL, fUpdatedURL.URL)
+	assert.Equal(t, newTitle, fUpdatedURL.Title)
+
+	// No changes
+	err = store.UpdateFeed(ctx, id, nil, nil)
+	assert.NoError(t, err)
 }
 
 func TestStore_Errors(t *testing.T) {

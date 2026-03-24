@@ -184,6 +184,30 @@ func (s *Store) AddFeed(ctx context.Context, url string, title string) (int64, e
 	return res.LastInsertId()
 }
 
+func (s *Store) UpdateFeed(ctx context.Context, id int64, url *string, title *string) error {
+	if url == nil && title == nil {
+		return nil
+	}
+
+	query := "UPDATE feeds SET "
+	var args []any
+	if url != nil {
+		query += "url = ?, "
+		args = append(args, *url)
+	}
+	if title != nil {
+		query += "title = ?, "
+		args = append(args, *title)
+	}
+	query = query[:len(query)-2] // Remove trailing comma and space
+	query += " WHERE id = ?"
+	args = append(args, id)
+
+	s.logger.Debug("executing exec", "query", query, "args", args)
+	_, err := s.db.ExecContext(ctx, query, args...)
+	return err
+}
+
 func (s *Store) DeleteFeed(ctx context.Context, id int64) error {
 	query := "DELETE FROM feeds WHERE id = ?"
 	s.logger.Debug("executing exec", "query", query, "args", []any{id})

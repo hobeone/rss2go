@@ -38,6 +38,10 @@ func (m *mockStore) AddFeed(ctx context.Context, url string, title string) (int6
 	args := m.Called(ctx, url, title)
 	return args.Get(0).(int64), args.Error(1)
 }
+func (m *mockStore) UpdateFeed(ctx context.Context, id int64, url *string, title *string) error {
+	args := m.Called(ctx, id, url, title)
+	return args.Error(0)
+}
 func (m *mockStore) DeleteFeed(ctx context.Context, id int64) error {
 	args := m.Called(ctx, id)
 	return args.Error(0)

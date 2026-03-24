@@ -14,6 +14,7 @@ type Store interface {
 	GetFeed(ctx context.Context, id int64) (*models.Feed, error)
 	GetFeedByURL(ctx context.Context, url string) (*models.Feed, error)
 	AddFeed(ctx context.Context, url string, title string) (int64, error)
+	UpdateFeed(ctx context.Context, id int64, url *string, title *string) error
 	DeleteFeed(ctx context.Context, id int64) error
 	DeleteFeedByURL(ctx context.Context, url string) error
 	UpdateFeedLastPoll(ctx context.Context, id int64) error
