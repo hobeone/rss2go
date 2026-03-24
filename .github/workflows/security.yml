@@ -17,17 +17,10 @@ jobs:
     name: govulncheck
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: 'stable'
-          cache: true
-
-      - name: Run govulncheck
+      - id: govulncheck
         uses: golang/govulncheck-action@v1
+        with:
+           go-package: ./...
 
   gosec:
     name: gosec
