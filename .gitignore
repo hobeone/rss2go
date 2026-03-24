@@ -6,3 +6,4 @@ feeds
 file.csv
 insert.sql
 *.db*
+.env

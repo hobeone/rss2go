@@ -9,10 +9,13 @@ services:
       rss2go-scraper:
         condition: service_started
     restart: unless-stopped
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
     volumes:
       - ./rss2go_docker.yaml:/app/rss2go.yaml
       - ./rss2go.db:/app/rss2go.db
-    command: ["daemon", "--config", "/app/rss2go.yaml"]
+    command: ["rss2go", "daemon", "--config", "/app/rss2go.yaml"]
     networks:
       - rss2go-network
 
@@ -20,8 +23,11 @@ services:
     image: rss2go:latest
     container_name: rss2go-scraper
     restart: unless-stopped
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
     # Scraper listens on :8282
-    entrypoint: ["/usr/local/bin/scraper"]
+    command: ["scraper"]
     ports:
       - "8282:8282"
     networks:

@@ -17,23 +17,25 @@ RUN GOOS=linux go build -v -o /app/scraper cmd/scraper/main.go
 FROM alpine:latest
 
 # Certificates for HTTPS and timezone data
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata su-exec
 
-# Create a non-privileged user
+# Create a non-privileged user (will be adjusted by entrypoint)
 RUN adduser -D rss2go
 
 # Directory for configuration and database
 RUN mkdir -p /app/config /app/db && \
     chown -R rss2go:rss2go /app
 
-USER rss2go
-
 # Copy binaries
 COPY --from=builder /app/rss2go /usr/local/bin/rss2go
 COPY --from=builder /app/scraper /usr/local/bin/scraper
 
+# Copy entrypoint script
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 # Default volumes
 #VOLUME ["/app/config", "/app/db"]
 
-# Entrypoint will be overridden by docker-compose for the scraper
-ENTRYPOINT ["/usr/local/bin/rss2go"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["/usr/local/bin/rss2go", "daemon", "--config", "/app/rss2go.yaml"]
