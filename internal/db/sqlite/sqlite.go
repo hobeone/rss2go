@@ -22,11 +22,11 @@ func New(dbPath string, logger *slog.Logger) (*Store, error) {
 	dsn := fmt.Sprintf("%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)", dbPath)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
-		return nil, fmt.Errorf("error opening database: %w", err)
+		return nil, fmt.Errorf("error opening database: %s, %w", dsn, err)
 	}
 
 	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("error pinging database: %w", err)
+		return nil, fmt.Errorf("error pinging database: %s, %w", dsn, err)
 	}
 
 	// Configure connection pool to prevent connection exhaustion and help with write locks
