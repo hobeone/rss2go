@@ -164,10 +164,11 @@ func (p *Pool) persistentSMTPSender(req MailRequest) error {
 	return nil
 }
 
+//nolint:errcheck
 func (p *Pool) closeSMTP() {
 	if p.smtpConn != nil {
 		p.logger.Debug("closing SMTP connection")
-		p.smtpConn.Close() // #nosec G104 - cleanup during connection reset
+		p.smtpConn.Close() // #nosec G104
 		p.smtpConn = nil
 	}
 }
