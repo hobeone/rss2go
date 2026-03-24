@@ -167,12 +167,13 @@ func (p *Pool) persistentSMTPSender(req MailRequest) error {
 func (p *Pool) closeSMTP() {
 	if p.smtpConn != nil {
 		p.logger.Debug("closing SMTP connection")
-		p.smtpConn.Close() //nolint:errcheck
+		p.smtpConn.Close() // #nosec G104 - cleanup during connection reset
 		p.smtpConn = nil
 	}
 }
 
 func (p *Pool) sendSendmail(req MailRequest) error {
+	// #nosec G204 - sendmail path is part of application configuration
 	cmd := exec.Command(p.config.Sendmail, "-t")
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

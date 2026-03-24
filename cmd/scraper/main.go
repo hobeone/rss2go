@@ -89,5 +89,12 @@ func main() {
 	http.HandleFunc("/escapecollective", escapecollective)
 
 	log.Println("Scraper listening on :8282...")
-	log.Fatal(http.ListenAndServe(":8282", nil))
+	server := &http.Server{
+		Addr:         ":8282",
+		Handler:      nil,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+	log.Fatal(server.ListenAndServe())
 }

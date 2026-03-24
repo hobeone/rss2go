@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync/atomic"
+	"time"
 
 	"github.com/hobeone/rss2go/internal/config"
 	"log/slog"
@@ -39,7 +40,14 @@ func Start(cfg *config.Config, logger *slog.Logger) {
 
 	logger.Info("starting metrics server", "addr", cfg.MetricsAddr)
 	go func() {
-		if err := http.ListenAndServe(cfg.MetricsAddr, mux); err != nil {
+		server := &http.Server{
+			Addr:         cfg.MetricsAddr,
+			Handler:      mux,
+			ReadTimeout:  5 * time.Second,
+			WriteTimeout: 10 * time.Second,
+			IdleTimeout:  120 * time.Second,
+		}
+		if err := server.ListenAndServe(); err != nil {
 			logger.Error("metrics server failed", "error", err)
 		}
 	}()

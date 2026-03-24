@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"html"
 	"log/slog"
-	"math/rand"
+	"math/rand/v2"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -335,5 +335,6 @@ func (w *Watcher) getJitter() time.Duration {
 	if w.jitter == 0 {
 		return 0
 	}
-	return time.Duration(rand.Int63n(int64(w.jitter)))
+	// #nosec G404 - cryptographic security not required for polling jitter
+	return time.Duration(rand.Int64N(int64(w.jitter)))
 }
