@@ -122,12 +122,7 @@ docker-compose up -d --build
 ```
 
 ### 2. Usage with Scraper
-The scraper service runs on `http://scraper:8282`. To subscribe to a site that doesn't have a native feed (e.g., Escape Collective):
-
-```bash
-# Add the feed via the scraper proxy
-./rss2go feed add "http://scraper:8282/escapecollective" "Escape Collective"
-```
+The scraper service runs on `http://scraper:8282`. To subscribe to a site that doesn't have a native feed add code to the scraper command to support it.
 
 ---
 
