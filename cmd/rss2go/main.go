@@ -123,9 +123,9 @@ var (
 func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./rss2go.yaml)")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "", "override log level (debug, info, warn, error)")
-	
+
 	rootCmd.AddCommand(daemonCmd)
-	
+
 	// Feed commands
 	feedCmd.AddCommand(feedAddCmd)
 	feedCmd.AddCommand(feedDelCmd)
@@ -135,17 +135,17 @@ func init() {
 	feedCmd.AddCommand(feedListCmd)
 	feedCmd.AddCommand(feedTestCmd)
 	feedCmd.AddCommand(feedErrorsCmd)
-	
+
 	feedCatchupCmd.Flags().BoolVar(&catchupAll, "all", false, "catchup all feeds")
 	feedCmd.AddCommand(feedCatchupCmd)
-	
+
 	rootCmd.AddCommand(feedCmd)
 
 	// User commands
 	userCmd.AddCommand(userAddCmd)
 	userCmd.AddCommand(userSubscribeCmd)
 	userCmd.AddCommand(userUnsubscribeCmd)
-	
+
 	rootCmd.AddCommand(userCmd)
 }
 

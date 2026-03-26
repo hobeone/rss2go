@@ -7,6 +7,7 @@ import (
 	"html"
 	"log/slog"
 	"math/rand/v2"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -69,6 +70,8 @@ func New(feed models.Feed, store db.Store, c CrawlerPool, m MailerPool, interval
 	contentPol.RequireParseableURLs(true)
 	contentPol.AllowElements("b", "i", "u", "strong", "em", "p", "br", "div", "span", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "img")
 	contentPol.AllowAttrs("src", "alt", "title", "width", "height").OnElements("img")
+	contentPol.AllowStyles("max-width").Matching(regexp.MustCompile(`(?i)^100%$`)).OnElements("img")
+	contentPol.AllowStyles("height").Matching(regexp.MustCompile(`(?i)^auto$`)).OnElements("img")
 
 	return &Watcher{
 		feed:            feed,
