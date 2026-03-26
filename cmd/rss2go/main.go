@@ -209,7 +209,7 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 	mPool := mailer.NewPool(cfg.MailerPoolSize, cfg, logger)
 	defer mPool.Close()
 
-	metrics.Start(cfg, logger)
+	metrics.Start(ctx, cfg, logger)
 
 	registry := watcher.NewRegistry(cPool, logger)
 	go registry.Start(ctx)
