@@ -2,17 +2,21 @@ FROM golang:1.26.1-alpine AS builder
 
 WORKDIR /src
 
-# Basic build requirements for CGO (if needed, though modernc sqlite doesn't)
-RUN apk add --no-cache build-base
+# git is required for automatic VCS stamping (ReadBuildInfo)
+RUN apk add --no-cache build-base git
 
 # Cache dependencies
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy source and build
+# Copy source (including .git) and build
 COPY . .
-RUN GOOS=linux go build -v -o /app/rss2go ./cmd/rss2go
-RUN GOOS=linux go build -v -o /app/scraper ./cmd/scraper
+
+# Ensure git works even if directory ownership differs
+RUN git config --global --add safe.directory /src
+
+RUN GOOS=linux go build -v -buildvcs=true -o /app/rss2go cmd/rss2go/main.go
+RUN GOOS=linux go build -v -buildvcs=true -o /app/scraper cmd/scraper/main.go
 
 FROM alpine:latest
 
