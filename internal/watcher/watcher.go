@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -44,6 +45,7 @@ type Watcher struct {
 	jitter          time.Duration
 	strictPol       *bluemonday.Policy
 	contentPol      *bluemonday.Policy
+	maxImageWidth   int
 	currentInterval time.Duration
 	mu              sync.Mutex
 	cancel          context.CancelFunc
@@ -56,7 +58,7 @@ const (
 )
 
 // New creates a new feed watcher.
-func New(feed models.Feed, store db.Store, c CrawlerPool, m MailerPool, interval, jitter time.Duration, logger *slog.Logger) *Watcher {
+func New(feed models.Feed, store db.Store, c CrawlerPool, m MailerPool, interval, jitter time.Duration, maxImageWidth int, logger *slog.Logger) *Watcher {
 
 	// Strict policy for titles and subjects (no HTML)
 	strictPol := bluemonday.StrictPolicy()
@@ -83,6 +85,7 @@ func New(feed models.Feed, store db.Store, c CrawlerPool, m MailerPool, interval
 		jitter:          jitter,
 		strictPol:       strictPol,
 		contentPol:      contentPol,
+		maxImageWidth:   maxImageWidth,
 		currentInterval: interval,
 		parser:          gofeed.NewParser(),
 	}
@@ -280,7 +283,7 @@ func (w *Watcher) FormatItem(feedTitle string, item *gofeed.Item) (subject, body
 		content = "<i>[Content omitted: item too large to process safely]</i>"
 	} else {
 		// Pre-process to clean content, remove trackers, and handle embedded elements
-		content = cleanFeedContent(content)
+		content = cleanFeedContent(content, w.maxImageWidth)
 	}
 
 	safeContent := strings.TrimSpace(w.contentPol.Sanitize(content))
@@ -290,7 +293,7 @@ func (w *Watcher) FormatItem(feedTitle string, item *gofeed.Item) (subject, body
 	return
 }
 
-func cleanFeedContent(htmlStr string) string {
+func cleanFeedContent(htmlStr string, maxWidth int) string {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlStr))
 	if err != nil {
 		return htmlStr // Fallback to returning original string if parsing fails
@@ -315,16 +318,30 @@ func cleanFeedContent(htmlStr string) string {
 		}
 	})
 
-	// Remove tracking images
+	// Remove tracking images and strip large dimensions
 	doc.Find("img").Each(func(i int, s *goquery.Selection) {
-		width, _ := s.Attr("width")
-		height, _ := s.Attr("height")
+		widthStr, _ := s.Attr("width")
+		heightStr, _ := s.Attr("height")
 		src, _ := s.Attr("src")
 
-		// Remove if width or height is 1 or 0
-		if width == "1" || width == "0" || height == "1" || height == "0" {
+		// Remove if width or height is 1 or 0 (likely tracking pixel)
+		if widthStr == "1" || widthStr == "0" || heightStr == "1" || heightStr == "0" {
 			s.Remove()
 			return
+		}
+
+		// Strip width/height if they exceed maxWidth
+		if maxWidth > 0 {
+			if w, err := strconv.Atoi(widthStr); err == nil && w > maxWidth {
+				s.RemoveAttr("width")
+				s.RemoveAttr("height")
+			}
+			// If height is specified but width isn't, and height is very large, maybe strip it too?
+			// But the prompt specifically mentioned "width and height tags that are too large".
+			if h, err := strconv.Atoi(heightStr); err == nil && h > maxWidth {
+				s.RemoveAttr("width")
+				s.RemoveAttr("height")
+			}
 		}
 
 		// Remove if URL contains common tracking keywords

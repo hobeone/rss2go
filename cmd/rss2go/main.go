@@ -220,7 +220,7 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 	}
 
 	for _, f := range feeds {
-		w := watcher.New(f, store, cPool, mPool, cfg.PollInterval, cfg.PollJitter, logger)
+		w := watcher.New(f, store, cPool, mPool, cfg.PollInterval, cfg.PollJitter, cfg.MaxImageWidth, logger)
 		registry.Register(w)
 		go w.Run(ctx)
 	}
@@ -248,7 +248,7 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 					dbFeedsMap[f.ID] = f
 					if w, ok := registry.GetWatcher(f.ID); !ok {
 						logger.Info("sync: starting new watcher", "feed_id", f.ID, "url", f.URL)
-						w := watcher.New(f, store, cPool, mPool, cfg.PollInterval, cfg.PollJitter, logger)
+						w := watcher.New(f, store, cPool, mPool, cfg.PollInterval, cfg.PollJitter, cfg.MaxImageWidth, logger)
 						registry.Register(w)
 						go w.Run(ctx)
 					} else {
@@ -259,7 +259,7 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 							w.Stop()
 							registry.Unregister(f.ID)
 
-							newW := watcher.New(f, store, cPool, mPool, cfg.PollInterval, cfg.PollJitter, logger)
+							newW := watcher.New(f, store, cPool, mPool, cfg.PollInterval, cfg.PollJitter, cfg.MaxImageWidth, logger)
 							registry.Register(newW)
 							go newW.Run(ctx)
 						}
@@ -541,7 +541,7 @@ func runTestFeed(cmd *cobra.Command, args []string) error {
 	defer mPool.Close()
 
 	// Use a dummy watcher to use its FormatItem logic
-	w := watcher.New(models.Feed{}, nil, nil, nil, 0, 0, logger)
+	w := watcher.New(models.Feed{}, nil, nil, nil, 0, 0, cfg.MaxImageWidth, logger)
 	subject, body := w.FormatItem(feed.Title, item)
 
 	fmt.Printf("Sending first item: %s\n", item.Title)

@@ -28,6 +28,8 @@ type Config struct {
 
 	MailerPoolSize int `mapstructure:"mailer_pool_size"`
 
+	MaxImageWidth int `mapstructure:"max_image_width"`
+
 	MetricsAddr string `mapstructure:"metrics_addr"`
 }
 
@@ -53,6 +55,7 @@ func Load(cfgFile string) (*Config, error) {
 	v.SetDefault("crawler_pool_size", 5)
 	v.SetDefault("crawler_timeout", "30s")
 	v.SetDefault("mailer_pool_size", 2)
+	v.SetDefault("max_image_width", 600)
 	v.SetDefault("smtp_port", 587)
 	v.SetDefault("use_tls", true)
 

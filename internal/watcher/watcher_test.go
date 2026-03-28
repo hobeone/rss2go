@@ -113,7 +113,7 @@ func TestWatcher_HandleResponse(t *testing.T) {
 	mPool := new(mockMailer)
 	logger := slog.New(slog.DiscardHandler)
 
-	w := New(feed, store, cPool, mPool, time.Hour, 0, logger)
+	w := New(feed, store, cPool, mPool, time.Hour, 0, 600, logger)
 
 	ctx := context.Background()
 
@@ -175,7 +175,7 @@ func TestWatcher_FormatItem_Sanitization(t *testing.T) {
 	mPool := new(mockMailer)
 	logger := slog.New(slog.DiscardHandler)
 
-	w := New(feed, store, cPool, mPool, time.Hour, 0, logger)
+	w := New(feed, store, cPool, mPool, time.Hour, 0, 600, logger)
 
 	item := &gofeed.Item{
 		Title: "Test",
@@ -199,7 +199,7 @@ func TestWatcher_FormatItem_Sanitization(t *testing.T) {
 
 func TestWatcher_FormatItem_LargeContent(t *testing.T) {
 	feed := models.Feed{ID: 1, URL: "http://example.com/rss", Title: "Example"}
-	w := New(feed, nil, nil, nil, time.Hour, 0, slog.New(slog.DiscardHandler))
+	w := New(feed, nil, nil, nil, time.Hour, 0, 600, slog.New(slog.DiscardHandler))
 
 	// Create content > MaxItemContentSize
 	largeContent := strings.Repeat("a", MaxItemContentSize+100)
@@ -214,6 +214,52 @@ func TestWatcher_FormatItem_LargeContent(t *testing.T) {
 	}
 	if strings.Contains(body, largeContent) {
 		t.Errorf("large content should not be present in the body")
+	}
+}
+
+func TestWatcher_FormatItem_ImageWidth(t *testing.T) {
+	feed := models.Feed{ID: 1, URL: "http://example.com/rss", Title: "Example"}
+	// Max width 600
+	w := New(feed, nil, nil, nil, time.Hour, 0, 600, slog.New(slog.DiscardHandler))
+
+	tests := []struct {
+		name     string
+		content  string
+		expected string
+	}{
+		{
+			name:     "SmallImage",
+			content:  `<img src="http://example.com/a.jpg" width="100" height="100">`,
+			expected: `width="100" height="100"`,
+		},
+		{
+			name:     "LargeWidthImage",
+			content:  `<img src="http://example.com/b.jpg" width="800" height="400">`,
+			expected: `<img src="http://example.com/b.jpg"/>`, // both should be stripped, self-closing
+		},
+		{
+			name:     "LargeHeightImage",
+			content:  `<img src="http://example.com/c.jpg" width="400" height="1200">`,
+			expected: `<img src="http://example.com/c.jpg"/>`, // both should be stripped, self-closing
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			item := &gofeed.Item{
+				Title:   "Test",
+				Content: tt.content,
+			}
+			_, body := w.FormatItem("Example", item)
+			if !strings.Contains(body, tt.expected) {
+				t.Errorf("expected %q in body, got %q", tt.expected, body)
+			}
+			if tt.name != "SmallImage" {
+				if strings.Contains(body, "width=") || strings.Contains(body, "height=") {
+					t.Errorf("expected width/height to be stripped, but found them in body: %q", body)
+				}
+			}
+		})
 	}
 }
 
