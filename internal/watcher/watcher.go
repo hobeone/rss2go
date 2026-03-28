@@ -243,7 +243,7 @@ func (w *Watcher) HandleResponse(ctx context.Context, resp crawler.CrawlResponse
 			continue
 		}
 
-		subject, body := w.FormatItem(feed.Title, itm)
+		subject, body := w.FormatItem(w.feed.Title, itm)
 
 		w.logger.Info("new item found", "title", itm.Title, "guid", guid)
 		w.mailer.Submit(mailer.MailRequest{
