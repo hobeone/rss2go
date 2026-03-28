@@ -9,6 +9,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gorilla/feeds"
+	"github.com/hobeone/rss2go/internal/version"
 	dateparser "github.com/markusmobius/go-dateparser"
 )
 
@@ -86,6 +87,7 @@ func escapecollective(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	fmt.Println(version.Info())
 	http.HandleFunc("/escapecollective", escapecollective)
 
 	log.Println("Scraper listening on :8282...")

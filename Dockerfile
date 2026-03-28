@@ -11,8 +11,8 @@ RUN go mod download
 
 # Copy source and build
 COPY . .
-RUN GOOS=linux go build -v -o /app/rss2go cmd/rss2go/main.go
-RUN GOOS=linux go build -v -o /app/scraper cmd/scraper/main.go
+RUN GOOS=linux go build -v -o /app/rss2go ./cmd/rss2go
+RUN GOOS=linux go build -v -o /app/scraper ./cmd/scraper
 
 FROM alpine:latest
 

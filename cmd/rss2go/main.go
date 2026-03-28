@@ -17,6 +17,7 @@ import (
 	"github.com/hobeone/rss2go/internal/mailer"
 	"github.com/hobeone/rss2go/internal/metrics"
 	"github.com/hobeone/rss2go/internal/models"
+	"github.com/hobeone/rss2go/internal/version"
 	"github.com/hobeone/rss2go/internal/watcher"
 	"github.com/mmcdole/gofeed"
 	"github.com/spf13/cobra"
@@ -150,6 +151,7 @@ func init() {
 }
 
 func main() {
+	fmt.Println(version.Info())
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

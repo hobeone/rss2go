@@ -107,7 +107,7 @@ func (m *mockMailer) Submit(req mailer.MailRequest) {
 }
 
 func TestWatcher_HandleResponse(t *testing.T) {
-	feed := models.Feed{ID: 1, URL: "http://example.com/rss", Title: "Example"}
+	feed := models.Feed{ID: 1, URL: "http://example.com/rss", Title: "Example & Feed"}
 	store := new(mockStore)
 	cPool := new(mockCrawler)
 	mPool := new(mockMailer)
