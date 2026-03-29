@@ -3,7 +3,7 @@ FROM golang:1.26.1-alpine AS builder
 WORKDIR /src
 
 # git is required for automatic VCS stamping (ReadBuildInfo)
-RUN apk add --no-cache build-base git
+RUN apk add --no-cache git
 
 # Cache dependencies
 COPY go.mod go.sum ./
@@ -14,9 +14,8 @@ COPY . .
 
 # Ensure git works even if directory ownership differs
 RUN git config --global --add safe.directory /src
-
-RUN GOOS=linux go build -v -buildvcs=true -o /app/rss2go cmd/rss2go/main.go
-RUN GOOS=linux go build -v -buildvcs=true -o /app/scraper cmd/scraper/main.go
+RUN GOOS=linux go build -v -buildvcs=true -o /app/rss2go ./cmd/rss2go
+RUN GOOS=linux go build -v -buildvcs=true -o /app/scraper ./cmd/scraper
 
 FROM alpine:latest
 
@@ -37,9 +36,6 @@ COPY --from=builder /app/scraper /usr/local/bin/scraper
 # Copy entrypoint script
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
-
-# Default volumes
-#VOLUME ["/app/config", "/app/db"]
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["/usr/local/bin/rss2go", "daemon", "--config", "/app/rss2go.yaml"]
