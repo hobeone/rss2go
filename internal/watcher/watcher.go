@@ -429,6 +429,30 @@ func cleanFeedContent(htmlStr string, maxWidth int) string {
 			s.Remove()
 			return
 		}
+
+		// Strip problematic attributes that can break email layout or are redundant
+		s.RemoveAttr("srcset")
+		s.RemoveAttr("sizes")
+		s.RemoveAttr("decoding")
+		s.RemoveAttr("fetchpriority")
+
+		// Strip width/height if they exceed maxWidth and add responsive styling
+		if maxWidth > 0 {
+			stripped := false
+			if w, err := strconv.Atoi(widthStr); err == nil && w > maxWidth {
+				s.RemoveAttr("width")
+				s.RemoveAttr("height")
+				stripped = true
+			} else if h, err := strconv.Atoi(heightStr); err == nil && h > maxWidth {
+				s.RemoveAttr("width")
+				s.RemoveAttr("height")
+				stripped = true
+			}
+
+			if stripped {
+				s.SetAttr("style", "max-width: 100%; height: auto;")
+			}
+		}
 	})
 
 	htmlStr, _ = doc.Find("body").Html()

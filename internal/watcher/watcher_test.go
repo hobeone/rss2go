@@ -11,6 +11,7 @@ import (
 	"github.com/hobeone/rss2go/internal/mailer"
 	"github.com/hobeone/rss2go/internal/models"
 	"github.com/mmcdole/gofeed"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -296,12 +297,12 @@ func TestWatcher_FormatItem_ImageWidth(t *testing.T) {
 		{
 			name:     "LargeWidthImage",
 			content:  `<img src="http://example.com/b.jpg" width="800" height="400">`,
-			expected: `<img src="http://example.com/b.jpg"/>`, // both should be stripped, self-closing
+			expected: `<img src="http://example.com/b.jpg" style="max-width: 100%; height: auto"/>`, // dimensions stripped, style added, self-closing
 		},
 		{
 			name:     "LargeHeightImage",
 			content:  `<img src="http://example.com/c.jpg" width="400" height="1200">`,
-			expected: `<img src="http://example.com/c.jpg"/>`, // both should be stripped, self-closing
+			expected: `<img src="http://example.com/c.jpg" style="max-width: 100%; height: auto"/>`, // dimensions stripped, style added, self-closing
 		},
 	}
 
@@ -322,4 +323,37 @@ func TestWatcher_FormatItem_ImageWidth(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWatcher_FormatItem_BikerumorFeed(t *testing.T) {
+	feed := models.Feed{ID: 1, URL: "https://bikerumor.com/feed/", Title: "Bikerumor"}
+	w := New(feed, nil, nil, nil, time.Hour, 0, 600, slog.New(slog.DiscardHandler))
+
+	item := &gofeed.Item{
+		Title: "XFusion Teases 2 New 32” Suspension Forks, But When Will They Be Ready?",
+		Link:  "https://bikerumor.com/prototype-32er-xfusion-rezza-34-get-30-suspension-forks/",
+		Content: `<p><img src="https://bikerumor.com/wp-content/uploads/2026/03/IMG_1398-1536x1024.jpeg" width="1536" height="1024" alt="<i>(Photo/Cory Benson)</i>"></p>
+<figure class="wp-block-image size-full"><a href="https://bikerumor.com/wp-content/uploads/2026/03/IMG_1378-scaled.jpeg"><img fetchpriority="high" decoding="async" width="2560" height="1707" src="https://bikerumor.com/wp-content/uploads/2026/03/IMG_1378-scaled.jpeg" alt="XFusion Rezza 32er mockup XC suspension fork up close" class="wp-image-412574 first-image" style="object-fit:full" srcset="https://bikerumor.com/wp-content/uploads/2026/03/IMG_1378-scaled.jpeg 2560w, https://bikerumor.com/wp-content/uploads/2026/03/IMG_1378-297x198.jpeg 297w" sizes="(max-width: 2560px) 100vw, 2560px" /></a><figcaption class="wp-element-caption">(All photos/Cory Benson)</figcaption></figure>`,
+	}
+
+	_, body := w.FormatItem("Bikerumor", item, "")
+
+	// Assertions for large images
+	assert.NotContains(t, body, `width="1536"`)
+	assert.NotContains(t, body, `height="1024"`)
+	assert.NotContains(t, body, `width="2560"`)
+	assert.NotContains(t, body, `height="1707"`)
+	
+	// Assertions for responsive style
+	assert.Contains(t, body, `style="max-width: 100%; height: auto"`)
+	
+	// Assertions for stripped attributes
+	assert.NotContains(t, body, `srcset=`)
+	assert.NotContains(t, body, `sizes=`)
+	assert.NotContains(t, body, `fetchpriority=`)
+	assert.NotContains(t, body, `decoding=`)
+	
+	// Ensure allowed content remains
+	assert.Contains(t, body, `https://bikerumor.com/wp-content/uploads/2026/03/IMG_1398-1536x1024.jpeg`)
+	assert.Contains(t, body, `XFusion Rezza 32er mockup XC suspension fork up close`)
 }
