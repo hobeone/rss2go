@@ -73,8 +73,8 @@ var (
 
 	feedTestCmd = &cobra.Command{
 		Use:   "test [url] [email]",
-		Short: "Test a feed by sending its first item to an email",
-		Args:  cobra.ExactArgs(2),
+		Short: "Test a feed by sending its first item to an email or stdout",
+		Args:  cobra.RangeArgs(1, 2),
 		RunE:  runTestFeed,
 	}
 
@@ -124,6 +124,7 @@ var (
 	feedFullArticle   bool
 	updateFullArticle bool
 	testFullArticle   bool
+	testToStdout      bool
 )
 
 func init() {
@@ -142,6 +143,7 @@ func init() {
 	feedCmd.AddCommand(feedUpdateCmd)
 	feedCmd.AddCommand(feedListCmd)
 	feedTestCmd.Flags().BoolVar(&testFullArticle, "full-article", false, "Test full article extraction")
+	feedTestCmd.Flags().BoolVar(&testToStdout, "stdout", false, "Output to stdout instead of mailing")
 	feedCmd.AddCommand(feedTestCmd)
 	feedCmd.AddCommand(feedErrorsCmd)
 
@@ -530,7 +532,14 @@ func runListFeeds(cmd *cobra.Command, args []string) error {
 
 func runTestFeed(cmd *cobra.Command, args []string) error {
 	feedURL := args[0]
-	email := args[1]
+	var email string
+	if len(args) > 1 {
+		email = args[1]
+	}
+
+	if email == "" && !testToStdout {
+		return fmt.Errorf("email is required when not using --stdout")
+	}
 
 	cfg, err := config.Load(cfgFile)
 	if err != nil {
@@ -555,14 +564,6 @@ func runTestFeed(cmd *cobra.Command, args []string) error {
 	if testFullArticle && item.Link != "" {
 		fmt.Printf("Extracting full article from: %s\n", item.Link)
 		cPool := crawler.NewPool(1, cfg.CrawlerTimeout, logger)
-		// We can't easily use Submit/Responses here without a goroutine, 
-		// but we can just use the underlying fetch for a synchronous test.
-		// Actually, let's just use http.Get for simplicity in the test command 
-		// or use the cPool Submit and wait.
-		
-		// For a CLI test tool, a simple fetch is fine.
-		// But let's stay consistent with the crawler's logic if possible.
-		// Since cPool.fetch is private, we'll use a temporary pool.
 		
 		reqCtx, cancel := context.WithTimeout(context.Background(), cfg.CrawlerTimeout)
 		defer cancel()
@@ -590,14 +591,20 @@ func runTestFeed(cmd *cobra.Command, args []string) error {
 		cPool.Close()
 	}
 
-	mPool := mailer.NewPool(1, cfg, logger)
-	defer mPool.Close()
-
 	// Use a dummy watcher to use its FormatItem logic
 	w := watcher.New(models.Feed{}, nil, nil, nil, 0, 0, cfg.MaxImageWidth, logger)
 	subject, body := w.FormatItem(feed.Title, item, extractedContent)
 
-	fmt.Printf("Sending item: %s\n", item.Title)
+	if testToStdout {
+		fmt.Printf("\nSubject: %s\n", subject)
+		fmt.Printf("Body:\n%s\n", body)
+		return nil
+	}
+
+	mPool := mailer.NewPool(1, cfg, logger)
+	defer mPool.Close()
+
+	fmt.Printf("Sending item: %s to %s\n", item.Title, email)
 
 	err = mPool.Send(mailer.MailRequest{
 		To:      []string{email},
