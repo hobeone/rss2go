@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
@@ -14,6 +15,7 @@ import (
 	"github.com/hobeone/rss2go/internal/crawler"
 	"github.com/hobeone/rss2go/internal/db"
 	"github.com/hobeone/rss2go/internal/db/sqlite"
+	"github.com/hobeone/rss2go/internal/extractor"
 	"github.com/hobeone/rss2go/internal/mailer"
 	"github.com/hobeone/rss2go/internal/metrics"
 	"github.com/hobeone/rss2go/internal/models"
@@ -118,9 +120,10 @@ var (
 var (
 	catchupAll      bool
 	updateURL       string
-	updateTitle     string
-	feedFullArticle bool
+	updateTitle       string
+	feedFullArticle   bool
 	updateFullArticle bool
+	testFullArticle   bool
 )
 
 func init() {
@@ -138,6 +141,7 @@ func init() {
 	feedUpdateCmd.Flags().BoolVar(&updateFullArticle, "full-article", false, "Extract full article content for this feed")
 	feedCmd.AddCommand(feedUpdateCmd)
 	feedCmd.AddCommand(feedListCmd)
+	feedTestCmd.Flags().BoolVar(&testFullArticle, "full-article", false, "Test full article extraction")
 	feedCmd.AddCommand(feedTestCmd)
 	feedCmd.AddCommand(feedErrorsCmd)
 
@@ -547,14 +551,53 @@ func runTestFeed(cmd *cobra.Command, args []string) error {
 
 	item := feed.Items[0]
 
+	var extractedContent string
+	if testFullArticle && item.Link != "" {
+		fmt.Printf("Extracting full article from: %s\n", item.Link)
+		cPool := crawler.NewPool(1, cfg.CrawlerTimeout, logger)
+		// We can't easily use Submit/Responses here without a goroutine, 
+		// but we can just use the underlying fetch for a synchronous test.
+		// Actually, let's just use http.Get for simplicity in the test command 
+		// or use the cPool Submit and wait.
+		
+		// For a CLI test tool, a simple fetch is fine.
+		// But let's stay consistent with the crawler's logic if possible.
+		// Since cPool.fetch is private, we'll use a temporary pool.
+		
+		reqCtx, cancel := context.WithTimeout(context.Background(), cfg.CrawlerTimeout)
+		defer cancel()
+		
+		cPool.Submit(crawler.CrawlRequest{
+			URL:  item.Link,
+			Type: crawler.RequestTypeItem,
+			Ctx:  reqCtx,
+		})
+		
+		select {
+		case resp := <-cPool.Responses():
+			if resp.Error != nil {
+				return fmt.Errorf("failed to fetch full article: %w", resp.Error)
+			}
+			extracted, err := extractor.Extract(bytes.NewReader(resp.Body), item.Link, cfg.CrawlerTimeout)
+			if err != nil {
+				return fmt.Errorf("failed to extract full article: %w", err)
+			}
+			extractedContent = extracted
+			fmt.Println("Full article extracted successfully.")
+		case <-reqCtx.Done():
+			return fmt.Errorf("full article extraction timed out")
+		}
+		cPool.Close()
+	}
+
 	mPool := mailer.NewPool(1, cfg, logger)
 	defer mPool.Close()
 
 	// Use a dummy watcher to use its FormatItem logic
 	w := watcher.New(models.Feed{}, nil, nil, nil, 0, 0, cfg.MaxImageWidth, logger)
-	subject, body := w.FormatItem(feed.Title, item, "")
+	subject, body := w.FormatItem(feed.Title, item, extractedContent)
 
-	fmt.Printf("Sending first item: %s\n", item.Title)
+	fmt.Printf("Sending item: %s\n", item.Title)
 
 	err = mPool.Send(mailer.MailRequest{
 		To:      []string{email},
