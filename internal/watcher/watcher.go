@@ -17,6 +17,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/hobeone/rss2go/internal/crawler"
 	"github.com/hobeone/rss2go/internal/db"
+	"github.com/hobeone/rss2go/internal/extractor"
 	"github.com/hobeone/rss2go/internal/mailer"
 	"github.com/hobeone/rss2go/internal/metrics"
 	"github.com/hobeone/rss2go/internal/models"
@@ -50,6 +51,8 @@ type Watcher struct {
 	mu              sync.Mutex
 	cancel          context.CancelFunc
 	parser          *gofeed.Parser
+	pendingItems    map[string]*gofeed.Item
+	pendingItemsMu  sync.RWMutex
 }
 
 const (
@@ -88,6 +91,7 @@ func New(feed models.Feed, store db.Store, c CrawlerPool, m MailerPool, interval
 		maxImageWidth:   maxImageWidth,
 		currentInterval: interval,
 		parser:          gofeed.NewParser(),
+		pendingItems:    make(map[string]*gofeed.Item),
 	}
 }
 
@@ -157,6 +161,7 @@ func (w *Watcher) crawl(ctx context.Context) {
 	w.crawler.Submit(crawler.CrawlRequest{
 		FeedID: w.feed.ID,
 		URL:    w.feed.URL,
+		Type:   crawler.RequestTypeFeed,
 		Ctx:    ctx,
 	})
 }
@@ -164,6 +169,14 @@ func (w *Watcher) crawl(ctx context.Context) {
 // HandleResponse processes a crawl result.
 // This is called by the orchestrator which listens to the crawler pool.
 func (w *Watcher) HandleResponse(ctx context.Context, resp crawler.CrawlResponse) {
+	if resp.Type == crawler.RequestTypeFeed {
+		w.handleFeedResponse(ctx, resp)
+	} else if resp.Type == crawler.RequestTypeItem {
+		w.handleItemResponse(ctx, resp)
+	}
+}
+
+func (w *Watcher) handleFeedResponse(ctx context.Context, resp crawler.CrawlResponse) {
 	atomic.AddUint64(&metrics.FeedsCrawledTotal, 1)
 	if resp.Error != nil {
 		atomic.AddUint64(&metrics.FeedsCrawledErrors, 1)
@@ -243,17 +256,32 @@ func (w *Watcher) HandleResponse(ctx context.Context, resp crawler.CrawlResponse
 			continue
 		}
 
-		subject, body := w.FormatItem(w.feed.Title, itm)
+		if w.feed.FullArticle && itm.Link != "" {
+			w.logger.Debug("scheduling full article extraction", "guid", guid, "url", itm.Link)
+			w.pendingItemsMu.Lock()
+			w.pendingItems[guid] = itm
+			w.pendingItemsMu.Unlock()
 
-		w.logger.Info("new item found", "title", itm.Title, "guid", guid)
-		w.mailer.Submit(mailer.MailRequest{
-			To:      userEmails,
-			Subject: subject,
-			Body:    body,
-		})
+			w.crawler.Submit(crawler.CrawlRequest{
+				FeedID:   w.feed.ID,
+				URL:      itm.Link,
+				Type:     crawler.RequestTypeItem,
+				ItemGUID: guid,
+				Ctx:      ctx,
+			})
+		} else {
+			subject, body := w.FormatItem(w.feed.Title, itm, "")
 
-		if err := w.store.MarkSeen(ctx, w.feed.ID, guid); err != nil {
-			w.logger.Error("failed to mark item as seen", "guid", guid, "error", err)
+			w.logger.Info("new item found", "title", itm.Title, "guid", guid)
+			w.mailer.Submit(mailer.MailRequest{
+				To:      userEmails,
+				Subject: subject,
+				Body:    body,
+			})
+
+			if err := w.store.MarkSeen(ctx, w.feed.ID, guid); err != nil {
+				w.logger.Error("failed to mark item as seen", "guid", guid, "error", err)
+			}
 		}
 		newItemsCount++
 	}
@@ -265,17 +293,68 @@ func (w *Watcher) HandleResponse(ctx context.Context, resp crawler.CrawlResponse
 	w.logger.Debug("crawl complete", "new_items", newItemsCount)
 }
 
+func (w *Watcher) handleItemResponse(ctx context.Context, resp crawler.CrawlResponse) {
+	w.pendingItemsMu.Lock()
+	itm, ok := w.pendingItems[resp.ItemGUID]
+	delete(w.pendingItems, resp.ItemGUID)
+	w.pendingItemsMu.Unlock()
+
+	if !ok {
+		w.logger.Warn("received item response for non-pending item", "guid", resp.ItemGUID)
+		return
+	}
+
+	users, err := w.store.GetUsersForFeed(ctx, w.feed.ID)
+	if err != nil {
+		w.logger.Error("failed to get users for feed", "error", err)
+		return
+	}
+
+	var userEmails []string
+	for u := range users {
+		userEmails = append(userEmails, users[u].Email)
+	}
+
+	var extractedContent string
+	if resp.Error == nil {
+		extracted, err := extractor.Extract(bytes.NewReader(resp.Body), itm.Link, 30*time.Second)
+		if err != nil {
+			w.logger.Warn("failed to extract content", "url", itm.Link, "error", err)
+		} else {
+			extractedContent = extracted
+		}
+	} else {
+		w.logger.Warn("failed to fetch item for extraction", "url", itm.Link, "error", resp.Error)
+	}
+
+	subject, body := w.FormatItem(w.feed.Title, itm, extractedContent)
+
+	w.logger.Info("new item found (with full article)", "title", itm.Title, "guid", resp.ItemGUID)
+	w.mailer.Submit(mailer.MailRequest{
+		To:      userEmails,
+		Subject: subject,
+		Body:    body,
+	})
+
+	if err := w.store.MarkSeen(ctx, w.feed.ID, resp.ItemGUID); err != nil {
+		w.logger.Error("failed to mark item as seen", "guid", resp.ItemGUID, "error", err)
+	}
+}
+
 // FormatItem sanitizes and formats a feed item for an email.
-func (w *Watcher) FormatItem(feedTitle string, item *gofeed.Item) (subject, body string) {
+func (w *Watcher) FormatItem(feedTitle string, item *gofeed.Item, contentOverride string) (subject, body string) {
 	safeTitle := html.UnescapeString(strings.TrimSpace(w.strictPol.Sanitize(item.Title)))
 	safeFeedTitle := html.UnescapeString(strings.TrimSpace(w.strictPol.Sanitize(feedTitle)))
 	safeLink := strings.TrimSpace(w.strictPol.Sanitize(item.Link))
 
 	// Use Content if available, otherwise Description.
 	// Many feeds use Description for summary and Content for full text.
-	content := item.Content
+	content := contentOverride
 	if content == "" {
-		content = item.Description
+		content = item.Content
+		if content == "" {
+			content = item.Description
+		}
 	}
 
 	if len(content) > MaxItemContentSize {

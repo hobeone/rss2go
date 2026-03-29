@@ -34,12 +34,12 @@ func (m *mockStore) GetFeedByURL(ctx context.Context, url string) (*models.Feed,
 	args := m.Called(ctx, url)
 	return args.Get(0).(*models.Feed), args.Error(1)
 }
-func (m *mockStore) AddFeed(ctx context.Context, url string, title string) (int64, error) {
-	args := m.Called(ctx, url, title)
+func (m *mockStore) AddFeed(ctx context.Context, url string, title string, fullArticle bool) (int64, error) {
+	args := m.Called(ctx, url, title, fullArticle)
 	return args.Get(0).(int64), args.Error(1)
 }
-func (m *mockStore) UpdateFeed(ctx context.Context, id int64, url *string, title *string) error {
-	args := m.Called(ctx, id, url, title)
+func (m *mockStore) UpdateFeed(ctx context.Context, id int64, url *string, title *string, fullArticle *bool) error {
+	args := m.Called(ctx, id, url, title, fullArticle)
 	return args.Error(0)
 }
 func (m *mockStore) DeleteFeed(ctx context.Context, id int64) error {
@@ -161,10 +161,71 @@ func TestWatcher_HandleResponse(t *testing.T) {
 
 	w.HandleResponse(ctx, crawler.CrawlResponse{
 		FeedID: feed.ID,
+		Type:   crawler.RequestTypeFeed,
 		Body:   []byte(rss),
 	})
 
 	store.AssertExpectations(t)
+	mPool.AssertExpectations(t)
+}
+
+func TestWatcher_HandleResponse_FullArticle(t *testing.T) {
+	feed := models.Feed{ID: 1, URL: "http://example.com/rss", Title: "Full", FullArticle: true}
+	store := new(mockStore)
+	cPool := new(mockCrawler)
+	mPool := new(mockMailer)
+	logger := slog.New(slog.DiscardHandler)
+
+	w := New(feed, store, cPool, mPool, time.Hour, 0, 600, logger)
+	ctx := context.Background()
+
+	// 1. Initial Feed Response
+	store.On("GetUsersForFeed", ctx, feed.ID).Return([]models.User{{ID: 1, Email: "user@example.com"}}, nil).Twice()
+	store.On("IsSeen", ctx, feed.ID, "item-1").Return(false, nil)
+	store.On("UpdateFeedLastPoll", ctx, feed.ID).Return(nil)
+	store.On("UpdateFeedError", ctx, feed.ID, 0, "").Return(nil)
+
+	// Expect a crawl request for the item URL
+	cPool.On("Submit", mock.MatchedBy(func(req crawler.CrawlRequest) bool {
+		return req.Type == crawler.RequestTypeItem && req.URL == "http://example.com/item1" && req.ItemGUID == "item-1"
+	})).Return()
+
+	rss := `<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0">
+<channel>
+  <title>Full</title>
+  <item>
+    <title>Item 1</title>
+    <link>http://example.com/item1</link>
+    <guid>item-1</guid>
+    <description>Summary</description>
+  </item>
+</channel>
+</rss>`
+
+	w.HandleResponse(ctx, crawler.CrawlResponse{
+		FeedID: feed.ID,
+		Type:   crawler.RequestTypeFeed,
+		Body:   []byte(rss),
+	})
+
+	// 2. Item Response
+	itemHtml := `<html><body><article><p>Full article content here.</p></article></body></html>`
+	
+	mPool.On("Submit", mock.MatchedBy(func(req mailer.MailRequest) bool {
+		return strings.Contains(req.Body, "Full article content here.") && !strings.Contains(req.Body, "Summary")
+	})).Return()
+	store.On("MarkSeen", ctx, feed.ID, "item-1").Return(nil)
+
+	w.HandleResponse(ctx, crawler.CrawlResponse{
+		FeedID:   feed.ID,
+		Type:     crawler.RequestTypeItem,
+		ItemGUID: "item-1",
+		Body:     []byte(itemHtml),
+	})
+
+	store.AssertExpectations(t)
+	cPool.AssertExpectations(t)
 	mPool.AssertExpectations(t)
 }
 
@@ -184,7 +245,7 @@ func TestWatcher_FormatItem_Sanitization(t *testing.T) {
 				 <img src="http://example.com/good.jpg" alt="good">`,
 	}
 
-	_, body := w.FormatItem("Example", item)
+	_, body := w.FormatItem("Example", item, "")
 
 	if strings.Contains(body, "javascript:alert") {
 		t.Errorf("body contains javascript in img src: %s", body)
@@ -208,7 +269,7 @@ func TestWatcher_FormatItem_LargeContent(t *testing.T) {
 		Content: largeContent,
 	}
 
-	_, body := w.FormatItem("Example", item)
+	_, body := w.FormatItem("Example", item, "")
 	if !strings.Contains(body, "[Content omitted: item too large to process safely]") {
 		t.Errorf("large content should have been replaced by a placeholder")
 	}
@@ -250,7 +311,7 @@ func TestWatcher_FormatItem_ImageWidth(t *testing.T) {
 				Title:   "Test",
 				Content: tt.content,
 			}
-			_, body := w.FormatItem("Example", item)
+			_, body := w.FormatItem("Example", item, "")
 			if !strings.Contains(body, tt.expected) {
 				t.Errorf("expected %q in body, got %q", tt.expected, body)
 			}
@@ -262,4 +323,3 @@ func TestWatcher_FormatItem_ImageWidth(t *testing.T) {
 		})
 	}
 }
-

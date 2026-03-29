@@ -116,9 +116,11 @@ var (
 )
 
 var (
-	catchupAll  bool
-	updateURL   string
-	updateTitle string
+	catchupAll      bool
+	updateURL       string
+	updateTitle     string
+	feedFullArticle bool
+	updateFullArticle bool
 )
 
 func init() {
@@ -128,10 +130,12 @@ func init() {
 	rootCmd.AddCommand(daemonCmd)
 
 	// Feed commands
+	feedAddCmd.Flags().BoolVar(&feedFullArticle, "full-article", false, "Extract full article content for this feed")
 	feedCmd.AddCommand(feedAddCmd)
 	feedCmd.AddCommand(feedDelCmd)
 	feedUpdateCmd.Flags().StringVar(&updateURL, "url", "", "New URL for the feed")
 	feedUpdateCmd.Flags().StringVar(&updateTitle, "title", "", "New title for the feed")
+	feedUpdateCmd.Flags().BoolVar(&updateFullArticle, "full-article", false, "Extract full article content for this feed")
 	feedCmd.AddCommand(feedUpdateCmd)
 	feedCmd.AddCommand(feedListCmd)
 	feedCmd.AddCommand(feedTestCmd)
@@ -256,7 +260,7 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 					} else {
 						// Check if metadata has changed
 						currentFeed := w.Feed()
-						if currentFeed.URL != f.URL || currentFeed.Title != f.Title {
+						if currentFeed.URL != f.URL || currentFeed.Title != f.Title || currentFeed.FullArticle != f.FullArticle {
 							logger.Info("sync: feed metadata changed, restarting watcher", "feed_id", f.ID)
 							w.Stop()
 							registry.Unregister(f.ID)
@@ -302,11 +306,11 @@ func runAddFeed(cmd *cobra.Command, args []string) error {
 	}
 	defer store.Close()
 
-	id, err := store.AddFeed(context.Background(), args[0], args[1])
+	id, err := store.AddFeed(context.Background(), args[0], args[1], feedFullArticle)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Added feed: %s (ID: %d)\n", args[1], id)
+	fmt.Printf("Added feed: %s (ID: %d, full_article: %v)\n", args[1], id, feedFullArticle)
 	return nil
 }
 
@@ -360,18 +364,22 @@ func runUpdateFeed(cmd *cobra.Command, args []string) error {
 	}
 
 	var urlPtr, titlePtr *string
+	var fullArticlePtr *bool
 	if cmd.Flags().Changed("url") {
 		urlPtr = &updateURL
 	}
 	if cmd.Flags().Changed("title") {
 		titlePtr = &updateTitle
 	}
-
-	if urlPtr == nil && titlePtr == nil {
-		return fmt.Errorf("at least one of --url or --title must be provided")
+	if cmd.Flags().Changed("full-article") {
+		fullArticlePtr = &updateFullArticle
 	}
 
-	if err := store.UpdateFeed(context.Background(), id, urlPtr, titlePtr); err != nil {
+	if urlPtr == nil && titlePtr == nil && fullArticlePtr == nil {
+		return fmt.Errorf("at least one of --url, --title, or --full-article must be provided")
+	}
+
+	if err := store.UpdateFeed(context.Background(), id, urlPtr, titlePtr, fullArticlePtr); err != nil {
 		return err
 	}
 	fmt.Printf("Updated feed ID: %d\n", id)
@@ -508,10 +516,10 @@ func runListFeeds(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Printf("%-5s | %-30s | %s\n", "ID", "Title", "URL")
-	fmt.Println("------------------------------------------------------------")
+	fmt.Printf("%-5s | %-30s | %-12s | %s\n", "ID", "Title", "FullArticle", "URL")
+	fmt.Println("-----------------------------------------------------------------------------")
 	for _, f := range feeds {
-		fmt.Printf("%-5d | %-30s | %s\n", f.ID, f.Title, f.URL)
+		fmt.Printf("%-5d | %-30s | %-12v | %s\n", f.ID, f.Title, f.FullArticle, f.URL)
 	}
 	return nil
 }
@@ -544,7 +552,7 @@ func runTestFeed(cmd *cobra.Command, args []string) error {
 
 	// Use a dummy watcher to use its FormatItem logic
 	w := watcher.New(models.Feed{}, nil, nil, nil, 0, 0, cfg.MaxImageWidth, logger)
-	subject, body := w.FormatItem(feed.Title, item)
+	subject, body := w.FormatItem(feed.Title, item, "")
 
 	fmt.Printf("Sending first item: %s\n", item.Title)
 

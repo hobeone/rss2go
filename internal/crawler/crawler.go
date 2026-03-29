@@ -15,16 +15,28 @@ const (
 	MaxResponseBodySize = 10 * 1024 * 1024
 )
 
-// CrawlRequest represents a request to fetch a feed.
+// RequestType defines the type of crawl request.
+type RequestType int
+
+const (
+	RequestTypeFeed RequestType = iota
+	RequestTypeItem
+)
+
+// CrawlRequest represents a request to fetch a feed or an item.
 type CrawlRequest struct {
-	FeedID int64
-	URL    string
-	Ctx    context.Context
+	FeedID   int64
+	URL      string
+	Type     RequestType
+	ItemGUID string // To correlate with the original item
+	Ctx      context.Context
 }
 
 // CrawlResponse represents the result of a fetch.
 type CrawlResponse struct {
 	FeedID     int64
+	Type       RequestType
+	ItemGUID   string
 	StatusCode int
 	Body       []byte
 	Error      error
@@ -62,10 +74,12 @@ func (p *Pool) worker(id int) {
 	defer p.wg.Done()
 	p.logger.Debug("starting worker", "worker_id", id)
 	for req := range p.requests {
-		p.logger.Debug("crawling feed", "feed_id", req.FeedID, "url", req.URL)
+		p.logger.Debug("crawling request", "feed_id", req.FeedID, "type", req.Type, "url", req.URL)
 		body, code, err := p.fetch(req.Ctx, req.URL)
 		p.responses <- CrawlResponse{
 			FeedID:     req.FeedID,
+			Type:       req.Type,
+			ItemGUID:   req.ItemGUID,
 			StatusCode: code,
 			Body:       body,
 			Error:      err,

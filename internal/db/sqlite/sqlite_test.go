@@ -29,7 +29,7 @@ func TestStore(t *testing.T) {
 	ctx := context.Background()
 
 	// Test AddFeed
-	id, err := store.AddFeed(ctx, "https://example.com/rss", "Example Feed")
+	id, err := store.AddFeed(ctx, "https://example.com/rss", "Example Feed", false)
 	assert.NoError(t, err)
 	assert.NotZero(t, id)
 
@@ -38,6 +38,7 @@ func TestStore(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, feeds, 1)
 	assert.Equal(t, "https://example.com/rss", feeds[0].URL)
+	assert.False(t, feeds[0].FullArticle)
 
 	// Test AddUser
 	uid, err := store.AddUser(ctx, "user@example.com")
@@ -113,21 +114,27 @@ func TestStore(t *testing.T) {
 
 	// Test UpdateFeed
 	newTitle := "Updated Title"
-	err = store.UpdateFeed(ctx, id, nil, &newTitle)
+	err = store.UpdateFeed(ctx, id, nil, &newTitle, nil)
 	assert.NoError(t, err)
 	fUpdatedTitle, _ := store.GetFeed(ctx, id)
 	assert.Equal(t, newTitle, fUpdatedTitle.Title)
 	assert.Equal(t, "https://example.com/rss", fUpdatedTitle.URL)
 
 	newURL := "https://example.com/new-rss"
-	err = store.UpdateFeed(ctx, id, &newURL, nil)
+	err = store.UpdateFeed(ctx, id, &newURL, nil, nil)
 	assert.NoError(t, err)
 	fUpdatedURL, _ := store.GetFeed(ctx, id)
 	assert.Equal(t, newURL, fUpdatedURL.URL)
 	assert.Equal(t, newTitle, fUpdatedURL.Title)
 
+	fullArticle := true
+	err = store.UpdateFeed(ctx, id, nil, nil, &fullArticle)
+	assert.NoError(t, err)
+	fUpdatedFA, _ := store.GetFeed(ctx, id)
+	assert.True(t, fUpdatedFA.FullArticle)
+
 	// No changes
-	err = store.UpdateFeed(ctx, id, nil, nil)
+	err = store.UpdateFeed(ctx, id, nil, nil, nil)
 	assert.NoError(t, err)
 }
 
@@ -149,7 +156,7 @@ func TestStore_Errors(t *testing.T) {
 	_, err = store.GetFeed(ctx, 1)
 	assert.Error(t, err)
 
-	_, err = store.AddFeed(ctx, "url", "title")
+	_, err = store.AddFeed(ctx, "url", "title", false)
 	assert.Error(t, err)
 
 	err = store.UpdateFeedLastPoll(ctx, 1)
@@ -184,5 +191,3 @@ func TestNew_Error(t *testing.T) {
 	_, err := New("/etc", logger)
 	assert.Error(t, err)
 }
-
-
