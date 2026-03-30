@@ -1,0 +1,24 @@
+# Database location
+db_path: "rss2go.db"
+
+# Log level: debug, info, warn, error
+log_level: "info"
+
+# Polling settings
+poll_interval: "1h"
+poll_jitter: "1m"
+
+# Crawler settings
+crawler_pool_size: 5
+crawler_timeout: "30s"
+
+# Image settings
+max_image_width: 600
+
+# Mailer settings (SMTP)
+smtp_server: "smtp.gmail.com"
+smtp_port: 587
+smtp_user: "YOUR USER NAME@gmail.com"
+smtp_pass: "YOUR APP PASSWORD"
+smtp_sender: "YOUR USER NAME@gmail.com"
+use_tls: true
