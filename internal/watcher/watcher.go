@@ -36,7 +36,9 @@ type MailerPool interface {
 	Submit(mailer.MailRequest)
 }
 
-// Watcher manages the polling of a single feed.
+// Watcher handles crawl responses and email formatting for a single feed.
+// Scheduling and goroutine lifecycle are managed by the Scheduler; Watcher
+// itself is goroutine-free.
 type Watcher struct {
 	feed            models.Feed
 	store           db.Store
@@ -48,9 +50,7 @@ type Watcher struct {
 	strictPol       *bluemonday.Policy
 	contentPol      *bluemonday.Policy
 	maxImageWidth   int
-	currentInterval time.Duration
-	mu              sync.Mutex
-	cancel          context.CancelFunc
+	currentInterval time.Duration // backoff state; only touched by handleFeedResponse
 	parser          *gofeed.Parser
 	pendingItems    map[string]*gofeed.Item
 	pendingItemsMu  sync.RWMutex
@@ -101,62 +101,6 @@ func (w *Watcher) Feed() models.Feed {
 	return w.feed
 }
 
-// Stop cancels the watcher loop.
-func (w *Watcher) Stop() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.cancel != nil {
-		w.logger.Info("stopping watcher")
-		w.cancel()
-		w.cancel = nil
-	}
-}
-
-// Run starts the watcher loop.
-func (w *Watcher) Run(ctx context.Context) {
-	ctx, cancel := context.WithCancel(ctx)
-	w.mu.Lock()
-	w.cancel = cancel
-	w.mu.Unlock()
-
-	defer w.Stop()
-
-	initialWait := w.getJitter()
-	if !w.feed.LastPoll.IsZero() {
-		nextScheduledPoll := w.feed.LastPoll.Add(w.interval)
-		wait := time.Until(nextScheduledPoll)
-		if wait > 0 {
-			initialWait += wait
-		}
-	}
-
-	w.logger.Info("starting watcher", "next_poll", time.Now().Add(initialWait))
-
-	// Initial wait (last poll offset + jitter)
-	select {
-	case <-time.After(initialWait):
-	case <-ctx.Done():
-		return
-	}
-
-	for {
-		w.crawl(ctx)
-
-		w.mu.Lock()
-		wait := w.currentInterval
-		w.mu.Unlock()
-
-		w.logger.Info("poll triggered", "next_poll", time.Now().Add(wait))
-
-		select {
-		case <-time.After(wait):
-		case <-ctx.Done():
-			w.logger.Info("watcher shutting down")
-			return
-		}
-	}
-}
-
 func (w *Watcher) crawl(ctx context.Context) {
 	w.logger.Debug("triggering crawl")
 	w.crawler.Submit(crawler.CrawlRequest{
@@ -169,23 +113,25 @@ func (w *Watcher) crawl(ctx context.Context) {
 	})
 }
 
-// HandleResponse processes a crawl result.
-// This is called by the orchestrator which listens to the crawler pool.
-func (w *Watcher) HandleResponse(ctx context.Context, resp crawler.CrawlResponse) {
+// HandleResponse processes a crawl result. For feed responses it returns the
+// next poll interval and true; for item responses it returns (0, false).
+// The Scheduler uses the returned interval to reschedule the feed.
+func (w *Watcher) HandleResponse(ctx context.Context, resp crawler.CrawlResponse) (time.Duration, bool) {
 	if resp.Type == crawler.RequestTypeFeed {
-		w.handleFeedResponse(ctx, resp)
-	} else if resp.Type == crawler.RequestTypeItem {
-		w.handleItemResponse(ctx, resp)
+		return w.handleFeedResponse(ctx, resp), true
 	}
+	w.handleItemResponse(ctx, resp)
+	return 0, false
 }
 
-func (w *Watcher) handleFeedResponse(ctx context.Context, resp crawler.CrawlResponse) {
+// handleFeedResponse processes a feed crawl result and returns the next poll
+// interval (normal interval on success, exponentially backed-off on error).
+func (w *Watcher) handleFeedResponse(ctx context.Context, resp crawler.CrawlResponse) time.Duration {
 	atomic.AddUint64(&metrics.FeedsCrawledTotal, 1)
 	if resp.Error != nil {
 		atomic.AddUint64(&metrics.FeedsCrawledErrors, 1)
 		w.logger.Error("crawl failed", "error", resp.Error)
 
-		// Record error in DB
 		snippet := ""
 		if len(resp.Body) > 0 {
 			maxLen := min(len(resp.Body), 500)
@@ -198,21 +144,15 @@ func (w *Watcher) handleFeedResponse(ctx context.Context, resp crawler.CrawlResp
 			w.logger.Error("failed to update feed error in DB", "error", err)
 		}
 
-		w.mu.Lock()
 		w.currentInterval *= 2
 		if w.currentInterval > maxBackoff {
 			w.currentInterval = maxBackoff
 		}
-		newInterval := w.currentInterval
-		w.mu.Unlock()
-
-		w.logger.Warn("backing off due to error", "new_interval", newInterval)
-		return
+		w.logger.Warn("backing off due to error", "new_interval", w.currentInterval)
+		return w.currentInterval
 	}
 
-	w.mu.Lock()
 	w.currentInterval = w.interval
-	w.mu.Unlock()
 
 	// Clear error in DB on success
 	if err := w.store.UpdateFeedError(ctx, w.feed.ID, 0, ""); err != nil {
@@ -224,7 +164,7 @@ func (w *Watcher) handleFeedResponse(ctx context.Context, resp crawler.CrawlResp
 		if err := w.store.UpdateFeedLastPoll(ctx, w.feed.ID, w.feed.ETag, w.feed.LastModified); err != nil {
 			w.logger.Error("failed to update last poll time", "error", err)
 		}
-		return
+		return w.currentInterval
 	}
 
 	w.feed.ETag = resp.ETag
@@ -233,18 +173,18 @@ func (w *Watcher) handleFeedResponse(ctx context.Context, resp crawler.CrawlResp
 	feed, err := w.parser.Parse(bytes.NewReader(resp.Body))
 	if err != nil {
 		w.logger.Error("failed to parse feed", "error", err)
-		return
+		return w.currentInterval
 	}
 
 	users, err := w.store.GetUsersForFeed(ctx, w.feed.ID)
 	if err != nil {
 		w.logger.Error("failed to get users for feed", "error", err)
-		return
+		return w.currentInterval
 	}
 
 	if len(users) == 0 {
 		w.logger.Debug("no users subscribed to feed")
-		return
+		return w.currentInterval
 	}
 
 	var userEmails []string
@@ -305,6 +245,7 @@ func (w *Watcher) handleFeedResponse(ctx context.Context, resp crawler.CrawlResp
 	}
 
 	w.logger.Debug("crawl complete", "new_items", newItemsCount)
+	return w.currentInterval
 }
 
 func (w *Watcher) handleItemResponse(ctx context.Context, resp crawler.CrawlResponse) {
