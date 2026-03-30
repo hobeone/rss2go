@@ -51,8 +51,8 @@ func (m *mockStore) DeleteFeedByURL(ctx context.Context, url string) error {
 	args := m.Called(ctx, url)
 	return args.Error(0)
 }
-func (m *mockStore) UpdateFeedLastPoll(ctx context.Context, id int64) error {
-	args := m.Called(ctx, id)
+func (m *mockStore) UpdateFeedLastPoll(ctx context.Context, id int64, etag string, lastModified string) error {
+	args := m.Called(ctx, id, etag, lastModified)
 	return args.Error(0)
 }
 func (m *mockStore) UpdateFeedError(ctx context.Context, id int64, code int, snippet string) error {
@@ -122,7 +122,7 @@ func TestWatcher_HandleResponse(t *testing.T) {
 	store.On("GetUsersForFeed", ctx, feed.ID).Return([]models.User{{ID: 1, Email: "user@example.com"}}, nil)
 	store.On("IsSeen", ctx, feed.ID, "item-1").Return(false, nil)
 	store.On("MarkSeen", ctx, feed.ID, "item-1").Return(nil)
-	store.On("UpdateFeedLastPoll", ctx, feed.ID).Return(nil)
+	store.On("UpdateFeedLastPoll", ctx, feed.ID, mock.Anything, mock.Anything).Return(nil)
 	store.On("UpdateFeedError", ctx, feed.ID, 0, "").Return(nil)
 
 	// Mock Mailer behavior
@@ -183,7 +183,7 @@ func TestWatcher_HandleResponse_FullArticle(t *testing.T) {
 	// 1. Initial Feed Response
 	store.On("GetUsersForFeed", ctx, feed.ID).Return([]models.User{{ID: 1, Email: "user@example.com"}}, nil).Twice()
 	store.On("IsSeen", ctx, feed.ID, "item-1").Return(false, nil)
-	store.On("UpdateFeedLastPoll", ctx, feed.ID).Return(nil)
+	store.On("UpdateFeedLastPoll", ctx, feed.ID, mock.Anything, mock.Anything).Return(nil)
 	store.On("UpdateFeedError", ctx, feed.ID, 0, "").Return(nil)
 
 	// Expect a crawl request for the item URL
@@ -285,24 +285,46 @@ func TestWatcher_FormatItem_ImageWidth(t *testing.T) {
 	w := New(feed, nil, nil, nil, time.Hour, 0, 600, slog.New(slog.DiscardHandler))
 
 	tests := []struct {
-		name     string
-		content  string
-		expected string
+		name          string
+		content       string
+		expectedBody  string
+		expectedStyle bool
+		expectStrip   bool
 	}{
 		{
-			name:     "SmallImage",
-			content:  `<img src="http://example.com/a.jpg" width="100" height="100">`,
-			expected: `width="100" height="100"`,
+			name:          "SmallImage",
+			content:       `<img src="http://example.com/a.jpg" width="100" height="100">`,
+			expectedBody:  `width="100" height="100"`,
+			expectedStyle: false,
+			expectStrip:   false,
 		},
 		{
-			name:     "LargeWidthImage",
-			content:  `<img src="http://example.com/b.jpg" width="800" height="400">`,
-			expected: `<img src="http://example.com/b.jpg" style="max-width: 100%; height: auto"/>`, // dimensions stripped, style added, self-closing
+			name:          "MediumImage",
+			content:       `<img src="http://example.com/m.jpg" width="400" height="400">`,
+			expectedBody:  `width="400" height="400"`,
+			expectedStyle: true,
+			expectStrip:   false,
 		},
 		{
-			name:     "LargeHeightImage",
-			content:  `<img src="http://example.com/c.jpg" width="400" height="1200">`,
-			expected: `<img src="http://example.com/c.jpg" style="max-width: 100%; height: auto"/>`, // dimensions stripped, style added, self-closing
+			name:          "LargeWidthImage",
+			content:       `<img src="http://example.com/b.jpg" width="800" height="400">`,
+			expectedBody:  `<img src="http://example.com/b.jpg"`,
+			expectedStyle: true,
+			expectStrip:   true,
+		},
+		{
+			name:          "LargeHeightImage",
+			content:       `<img src="http://example.com/c.jpg" width="400" height="1200">`,
+			expectedBody:  `<img src="http://example.com/c.jpg"`,
+			expectedStyle: true,
+			expectStrip:   true,
+		},
+		{
+			name:          "UnknownSizeImage",
+			content:       `<img src="http://example.com/u.jpg">`,
+			expectedBody:  `<img src="http://example.com/u.jpg"`,
+			expectedStyle: true,
+			expectStrip:   false,
 		},
 	}
 
@@ -313,13 +335,19 @@ func TestWatcher_FormatItem_ImageWidth(t *testing.T) {
 				Content: tt.content,
 			}
 			_, body := w.FormatItem("Example", item, "")
-			if !strings.Contains(body, tt.expected) {
-				t.Errorf("expected %q in body, got %q", tt.expected, body)
+			if !strings.Contains(body, tt.expectedBody) {
+				t.Errorf("expected %q in body, got %q", tt.expectedBody, body)
 			}
-			if tt.name != "SmallImage" {
-				if strings.Contains(body, "width=") || strings.Contains(body, "height=") {
-					t.Errorf("expected width/height to be stripped, but found them in body: %q", body)
-				}
+			hasStyle := strings.Contains(body, `style="max-width: 100%; height: auto"`)
+			if hasStyle != tt.expectedStyle {
+				t.Errorf("expected style presence: %v, got %v in body: %q", tt.expectedStyle, hasStyle, body)
+			}
+			hasWidth := strings.Contains(body, "width=")
+			if tt.expectStrip && hasWidth {
+				t.Errorf("expected width to be stripped, but it was found in body: %q", body)
+			}
+			if !tt.expectStrip && strings.Contains(tt.content, "width=") && !hasWidth {
+				t.Errorf("expected width to be preserved, but it was missing from body: %q", body)
 			}
 		})
 	}

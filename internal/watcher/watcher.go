@@ -7,6 +7,7 @@ import (
 	"html"
 	"log/slog"
 	"math/rand/v2"
+	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
@@ -159,10 +160,12 @@ func (w *Watcher) Run(ctx context.Context) {
 func (w *Watcher) crawl(ctx context.Context) {
 	w.logger.Debug("triggering crawl")
 	w.crawler.Submit(crawler.CrawlRequest{
-		FeedID: w.feed.ID,
-		URL:    w.feed.URL,
-		Type:   crawler.RequestTypeFeed,
-		Ctx:    ctx,
+		FeedID:       w.feed.ID,
+		URL:          w.feed.URL,
+		Type:         crawler.RequestTypeFeed,
+		Ctx:          ctx,
+		ETag:         w.feed.ETag,
+		LastModified: w.feed.LastModified,
 	})
 }
 
@@ -215,6 +218,17 @@ func (w *Watcher) handleFeedResponse(ctx context.Context, resp crawler.CrawlResp
 	if err := w.store.UpdateFeedError(ctx, w.feed.ID, 0, ""); err != nil {
 		w.logger.Error("failed to clear feed error in DB", "error", err)
 	}
+
+	if resp.StatusCode == http.StatusNotModified {
+		w.logger.Debug("feed not modified since last poll")
+		if err := w.store.UpdateFeedLastPoll(ctx, w.feed.ID, w.feed.ETag, w.feed.LastModified); err != nil {
+			w.logger.Error("failed to update last poll time", "error", err)
+		}
+		return
+	}
+
+	w.feed.ETag = resp.ETag
+	w.feed.LastModified = resp.LastModified
 
 	feed, err := w.parser.Parse(bytes.NewReader(resp.Body))
 	if err != nil {
@@ -286,7 +300,7 @@ func (w *Watcher) handleFeedResponse(ctx context.Context, resp crawler.CrawlResp
 		newItemsCount++
 	}
 
-	if err := w.store.UpdateFeedLastPoll(ctx, w.feed.ID); err != nil {
+	if err := w.store.UpdateFeedLastPoll(ctx, w.feed.ID, w.feed.ETag, w.feed.LastModified); err != nil {
 		w.logger.Error("failed to update last poll time", "error", err)
 	}
 
@@ -397,7 +411,7 @@ func cleanFeedContent(htmlStr string, maxWidth int) string {
 		}
 	})
 
-	// Remove tracking images and strip large dimensions
+	// Process images: remove tracking pixels, strip large dimensions, and add responsive styling
 	doc.Find("img").Each(func(i int, s *goquery.Selection) {
 		widthStr, _ := s.Attr("width")
 		heightStr, _ := s.Attr("height")
@@ -407,20 +421,6 @@ func cleanFeedContent(htmlStr string, maxWidth int) string {
 		if widthStr == "1" || widthStr == "0" || heightStr == "1" || heightStr == "0" {
 			s.Remove()
 			return
-		}
-
-		// Strip width/height if they exceed maxWidth
-		if maxWidth > 0 {
-			if w, err := strconv.Atoi(widthStr); err == nil && w > maxWidth {
-				s.RemoveAttr("width")
-				s.RemoveAttr("height")
-			}
-			// If height is specified but width isn't, and height is very large, maybe strip it too?
-			// But the prompt specifically mentioned "width and height tags that are too large".
-			if h, err := strconv.Atoi(heightStr); err == nil && h > maxWidth {
-				s.RemoveAttr("width")
-				s.RemoveAttr("height")
-			}
 		}
 
 		// Remove if URL contains common tracking keywords
@@ -436,20 +436,31 @@ func cleanFeedContent(htmlStr string, maxWidth int) string {
 		s.RemoveAttr("decoding")
 		s.RemoveAttr("fetchpriority")
 
-		// Strip width/height if they exceed maxWidth and add responsive styling
+		// Responsive sizing logic
 		if maxWidth > 0 {
-			stripped := false
-			if w, err := strconv.Atoi(widthStr); err == nil && w > maxWidth {
-				s.RemoveAttr("width")
-				s.RemoveAttr("height")
-				stripped = true
-			} else if h, err := strconv.Atoi(heightStr); err == nil && h > maxWidth {
-				s.RemoveAttr("width")
-				s.RemoveAttr("height")
-				stripped = true
+			w, wErr := strconv.Atoi(widthStr)
+			h, hErr := strconv.Atoi(heightStr)
+
+			// Define what we consider a "small image" (e.g., icons, buttons)
+			// Small images should not have max-width: 100% forced on them
+			isSmall := false
+			if wErr == nil && hErr == nil && w <= 150 && h <= 150 {
+				isSmall = true
 			}
 
-			if stripped {
+			if !isSmall {
+				// Strip width/height if they exceed maxWidth
+				if wErr == nil && w > maxWidth {
+					s.RemoveAttr("width")
+					s.RemoveAttr("height")
+				} else if hErr == nil && h > maxWidth {
+					s.RemoveAttr("width")
+					s.RemoveAttr("height")
+				}
+
+				// Add responsive styling to everything except small images.
+				// This includes images with no dimensions (which might be large)
+				// and medium images (to ensure they fit on mobile).
 				s.SetAttr("style", "max-width: 100%; height: auto;")
 			}
 		}
