@@ -731,7 +731,7 @@ func runCatchup(cmd *cobra.Command, args []string) error {
 			markedCount++
 		}
 
-		if err := store.UpdateFeedLastPoll(ctx, f.ID); err != nil {
+		if err := store.UpdateFeedLastPoll(ctx, f.ID, f.ETag, f.LastModified); err != nil {
 			fmt.Printf("  Failed to update last poll time: %v\n", err)
 		}
 		// Also clear errors

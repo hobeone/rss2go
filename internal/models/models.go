@@ -12,6 +12,8 @@ type Feed struct {
 	LastErrorCode  int       `json:"last_error_code"`
 	LastErrorSnippet string    `json:"last_error_snippet"`
 	FullArticle      bool      `json:"full_article"`
+	ETag             string    `json:"etag"`
+	LastModified     string    `json:"last_modified"`
 }
 
 // User represents a subscriber.

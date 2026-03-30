@@ -25,21 +25,25 @@ const (
 
 // CrawlRequest represents a request to fetch a feed or an item.
 type CrawlRequest struct {
-	FeedID   int64
-	URL      string
-	Type     RequestType
-	ItemGUID string // To correlate with the original item
-	Ctx      context.Context
+	FeedID       int64
+	URL          string
+	Type         RequestType
+	ItemGUID     string // To correlate with the original item
+	Ctx          context.Context
+	ETag         string
+	LastModified string
 }
 
 // CrawlResponse represents the result of a fetch.
 type CrawlResponse struct {
-	FeedID     int64
-	Type       RequestType
-	ItemGUID   string
-	StatusCode int
-	Body       []byte
-	Error      error
+	FeedID       int64
+	Type         RequestType
+	ItemGUID     string
+	StatusCode   int
+	Body         []byte
+	Error        error
+	ETag         string
+	LastModified string
 }
 
 // Pool is a pool of workers for fetching RSS feeds.
@@ -75,19 +79,21 @@ func (p *Pool) worker(id int) {
 	p.logger.Debug("starting worker", "worker_id", id)
 	for req := range p.requests {
 		p.logger.Debug("crawling request", "feed_id", req.FeedID, "type", req.Type, "url", req.URL)
-		body, code, err := p.fetch(req.Ctx, req.URL)
+		body, code, etag, lastModified, err := p.fetch(req.Ctx, req.URL, req.ETag, req.LastModified)
 		p.responses <- CrawlResponse{
-			FeedID:     req.FeedID,
-			Type:       req.Type,
-			ItemGUID:   req.ItemGUID,
-			StatusCode: code,
-			Body:       body,
-			Error:      err,
+			FeedID:       req.FeedID,
+			Type:         req.Type,
+			ItemGUID:     req.ItemGUID,
+			StatusCode:   code,
+			Body:         body,
+			Error:        err,
+			ETag:         etag,
+			LastModified: lastModified,
 		}
 	}
 }
 
-func (p *Pool) fetch(ctx context.Context, url string) ([]byte, int, error) {
+func (p *Pool) fetch(ctx context.Context, url string, etag string, lastModified string) ([]byte, int, string, string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -98,11 +104,18 @@ func (p *Pool) fetch(ctx context.Context, url string) ([]byte, int, error) {
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, "", "", err
 	}
 
 	req.Header.Set("User-Agent", "rss2go/2.0")
 	req.Header.Set("Accept", "application/rss+xml, application/atom+xml, text/xml;q=0.9, */*;q=0.8")
+
+	if etag != "" {
+		req.Header.Set("If-None-Match", etag)
+	}
+	if lastModified != "" {
+		req.Header.Set("If-Modified-Since", lastModified)
+	}
 
 	p.logger.Debug("sending request", "url", url, "timeout", p.timeout)
 	start := time.Now()
@@ -113,7 +126,7 @@ func (p *Pool) fetch(ctx context.Context, url string) ([]byte, int, error) {
 		} else {
 			p.logger.Debug("request failed", "url", url, "error", err, "duration", time.Since(start))
 		}
-		return nil, 0, err
+		return nil, 0, "", "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -125,9 +138,14 @@ func (p *Pool) fetch(ctx context.Context, url string) ([]byte, int, error) {
 		"duration", duration,
 	)
 
+	if resp.StatusCode == http.StatusNotModified {
+		p.logger.Debug("feed not modified", "url", url)
+		return nil, resp.StatusCode, "", "", nil
+	}
+
 	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBodySize+1))
 	if err != nil {
-		return nil, resp.StatusCode, err
+		return nil, resp.StatusCode, "", "", err
 	}
 
 	if len(body) > MaxResponseBodySize {
@@ -136,11 +154,11 @@ func (p *Pool) fetch(ctx context.Context, url string) ([]byte, int, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return body, resp.StatusCode, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return body, resp.StatusCode, "", "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	p.logger.Debug("read complete", "url", url, "bytes", len(body))
-	return body, resp.StatusCode, nil
+	return body, resp.StatusCode, resp.Header.Get("ETag"), resp.Header.Get("Last-Modified"), nil
 }
 
 // Submit sends a crawl request to the pool.

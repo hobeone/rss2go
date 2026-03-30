@@ -80,7 +80,7 @@ func (s *Store) GetFeeds(ctx context.Context) ([]models.Feed, error) {
 }
 
 func (s *Store) GetFeedsWithErrors(ctx context.Context) ([]models.Feed, error) {
-	query := "SELECT id, url, title, last_poll, last_error_time, last_error_code, last_error_snippet, full_article FROM feeds WHERE last_error_time IS NOT NULL OR last_error_code != 0"
+	query := "SELECT id, url, title, last_poll, last_error_time, last_error_code, last_error_snippet, full_article, etag, last_modified FROM feeds WHERE last_error_time IS NOT NULL OR last_error_code != 0"
 	s.logger.Debug("executing query", "query", query)
 	rows, err := s.db.QueryContext(ctx, query)
 	if err != nil {
@@ -93,8 +93,8 @@ func (s *Store) GetFeedsWithErrors(ctx context.Context) ([]models.Feed, error) {
 		var f models.Feed
 		var lastPoll, lastErrorTime sql.NullTime
 		var lastErrorCode sql.NullInt64
-		var lastErrorSnippet sql.NullString
-		if err := rows.Scan(&f.ID, &f.URL, &f.Title, &lastPoll, &lastErrorTime, &lastErrorCode, &lastErrorSnippet, &f.FullArticle); err != nil {
+		var lastErrorSnippet, etag, lastModified sql.NullString
+		if err := rows.Scan(&f.ID, &f.URL, &f.Title, &lastPoll, &lastErrorTime, &lastErrorCode, &lastErrorSnippet, &f.FullArticle, &etag, &lastModified); err != nil {
 			return nil, err
 		}
 		if lastPoll.Valid {
@@ -108,6 +108,12 @@ func (s *Store) GetFeedsWithErrors(ctx context.Context) ([]models.Feed, error) {
 		}
 		if lastErrorSnippet.Valid {
 			f.LastErrorSnippet = lastErrorSnippet.String
+		}
+		if etag.Valid {
+			f.ETag = etag.String
+		}
+		if lastModified.Valid {
+			f.LastModified = lastModified.String
 		}
 		feeds = append(feeds, f)
 	}
@@ -145,14 +151,14 @@ func (s *Store) GetFeed(ctx context.Context, id int64) (*models.Feed, error) {
 }
 
 func (s *Store) GetFeedByURL(ctx context.Context, url string) (*models.Feed, error) {
-	query := "SELECT id, url, title, last_poll, last_error_time, last_error_code, last_error_snippet, full_article FROM feeds WHERE url = ?"
+	query := "SELECT id, url, title, last_poll, last_error_time, last_error_code, last_error_snippet, full_article, etag, last_modified FROM feeds WHERE url = ?"
 	s.logger.Debug("executing query", "query", query, "args", []any{url})
 	var f models.Feed
 	var lastPoll, lastErrorTime sql.NullTime
 	var lastErrorCode sql.NullInt64
-	var lastErrorSnippet sql.NullString
+	var lastErrorSnippet, etag, lastModified sql.NullString
 	err := s.db.QueryRowContext(ctx, query, url).
-		Scan(&f.ID, &f.URL, &f.Title, &lastPoll, &lastErrorTime, &lastErrorCode, &lastErrorSnippet, &f.FullArticle)
+		Scan(&f.ID, &f.URL, &f.Title, &lastPoll, &lastErrorTime, &lastErrorCode, &lastErrorSnippet, &f.FullArticle, &etag, &lastModified)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -170,6 +176,12 @@ func (s *Store) GetFeedByURL(ctx context.Context, url string) (*models.Feed, err
 	}
 	if lastErrorSnippet.Valid {
 		f.LastErrorSnippet = lastErrorSnippet.String
+	}
+	if etag.Valid {
+		f.ETag = etag.String
+	}
+	if lastModified.Valid {
+		f.LastModified = lastModified.String
 	}
 	return &f, nil
 }
@@ -226,11 +238,11 @@ func (s *Store) DeleteFeedByURL(ctx context.Context, url string) error {
 	return err
 }
 
-func (s *Store) UpdateFeedLastPoll(ctx context.Context, id int64) error {
-	query := "UPDATE feeds SET last_poll = ? WHERE id = ?"
+func (s *Store) UpdateFeedLastPoll(ctx context.Context, id int64, etag string, lastModified string) error {
+	query := "UPDATE feeds SET last_poll = ?, etag = ?, last_modified = ? WHERE id = ?"
 	now := time.Now()
-	s.logger.Debug("executing exec", "query", query, "args", []any{now, id})
-	_, err := s.db.ExecContext(ctx, query, now, id)
+	s.logger.Debug("executing exec", "query", query, "args", []any{now, etag, lastModified, id})
+	_, err := s.db.ExecContext(ctx, query, now, etag, lastModified, id)
 	return err
 }
 

@@ -78,7 +78,7 @@ func TestStore(t *testing.T) {
 	assert.Nil(t, fNil)
 
 	// Test UpdateFeedLastPoll
-	err = store.UpdateFeedLastPoll(ctx, id)
+	err = store.UpdateFeedLastPoll(ctx, id, "etag", "last_modified")
 	assert.NoError(t, err)
 	fUpdated, err := store.GetFeed(ctx, id)
 	assert.NoError(t, err)
@@ -159,7 +159,7 @@ func TestStore_Errors(t *testing.T) {
 	_, err = store.AddFeed(ctx, "url", "title", false)
 	assert.Error(t, err)
 
-	err = store.UpdateFeedLastPoll(ctx, 1)
+	err = store.UpdateFeedLastPoll(ctx, 1, "", "")
 	assert.Error(t, err)
 
 	err = store.UpdateFeedError(ctx, 1, 500, "snippet")

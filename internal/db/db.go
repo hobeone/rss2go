@@ -17,7 +17,7 @@ type Store interface {
 	UpdateFeed(ctx context.Context, id int64, url *string, title *string, fullArticle *bool) error
 	DeleteFeed(ctx context.Context, id int64) error
 	DeleteFeedByURL(ctx context.Context, url string) error
-	UpdateFeedLastPoll(ctx context.Context, id int64) error
+	UpdateFeedLastPoll(ctx context.Context, id int64, etag string, lastModified string) error
 	UpdateFeedError(ctx context.Context, id int64, code int, snippet string) error
 
 	// User operations
