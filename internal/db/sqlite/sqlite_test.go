@@ -95,8 +95,8 @@ func TestStore(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Nil(t, uNil)
 
-	// Test UpdateFeedError
-	err = store.UpdateFeedError(ctx, id, 500, "Internal Server Error")
+	// Test SetFeedError
+	err = store.SetFeedError(ctx, id, 500, "Internal Server Error")
 	assert.NoError(t, err)
 	fErr, err := store.GetFeed(ctx, id)
 	assert.NoError(t, err)
@@ -104,8 +104,8 @@ func TestStore(t *testing.T) {
 	assert.Equal(t, "Internal Server Error", fErr.LastErrorSnippet)
 	assert.False(t, fErr.LastErrorTime.IsZero())
 
-	// Test Clear Error
-	err = store.UpdateFeedError(ctx, id, 0, "")
+	// Test ClearFeedError
+	err = store.ClearFeedError(ctx, id)
 	assert.NoError(t, err)
 	fClear, err := store.GetFeed(ctx, id)
 	assert.NoError(t, err)
@@ -261,7 +261,7 @@ func TestStore_Errors(t *testing.T) {
 	err = store.UpdateFeedLastPoll(ctx, 1, "", "")
 	assert.Error(t, err)
 
-	err = store.UpdateFeedError(ctx, 1, 500, "snippet")
+	err = store.SetFeedError(ctx, 1, 500, "snippet")
 	assert.Error(t, err)
 
 	_, err = store.AddUser(ctx, "email")

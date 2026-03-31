@@ -104,13 +104,7 @@ func init() {
 }
 
 func runAddFeed(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load(cfgFile)
-	if err != nil {
-		return err
-	}
-	logger := getLogger(cfg)
-
-	store, err := getStore(logger)
+	_, _, store, err := setup()
 	if err != nil {
 		return err
 	}
@@ -125,13 +119,7 @@ func runAddFeed(cmd *cobra.Command, args []string) error {
 }
 
 func runDelFeed(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load(cfgFile)
-	if err != nil {
-		return err
-	}
-	logger := getLogger(cfg)
-
-	store, err := getStore(logger)
+	_, _, store, err := setup()
 	if err != nil {
 		return err
 	}
@@ -154,13 +142,7 @@ func runDelFeed(cmd *cobra.Command, args []string) error {
 }
 
 func runUpdateFeed(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load(cfgFile)
-	if err != nil {
-		return err
-	}
-	logger := getLogger(cfg)
-
-	store, err := getStore(logger)
+	_, _, store, err := setup()
 	if err != nil {
 		return err
 	}
@@ -195,13 +177,7 @@ func runUpdateFeed(cmd *cobra.Command, args []string) error {
 }
 
 func runListFeeds(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load(cfgFile)
-	if err != nil {
-		return err
-	}
-	logger := getLogger(cfg)
-
-	store, err := getStore(logger)
+	_, _, store, err := setup()
 	if err != nil {
 		return err
 	}
@@ -308,13 +284,7 @@ func runTestFeed(cmd *cobra.Command, args []string) error {
 }
 
 func runListErrors(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load(cfgFile)
-	if err != nil {
-		return err
-	}
-	logger := getLogger(cfg)
-
-	store, err := getStore(logger)
+	_, _, store, err := setup()
 	if err != nil {
 		return err
 	}
@@ -345,13 +315,7 @@ func runListErrors(cmd *cobra.Command, args []string) error {
 }
 
 func runCatchup(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load(cfgFile)
-	if err != nil {
-		return err
-	}
-	logger := getLogger(cfg)
-
-	store, err := getStore(logger)
+	_, _, store, err := setup()
 	if err != nil {
 		return err
 	}
@@ -420,7 +384,7 @@ func runCatchup(cmd *cobra.Command, args []string) error {
 		if err := store.UpdateFeedLastPoll(ctx, f.ID, f.ETag, f.LastModified); err != nil {
 			fmt.Printf("  Failed to update last poll time: %v\n", err)
 		}
-		if err := store.UpdateFeedError(ctx, f.ID, 0, ""); err != nil {
+		if err := store.ClearFeedError(ctx, f.ID); err != nil {
 			fmt.Printf("  Failed to clear feed error: %v\n", err)
 		}
 

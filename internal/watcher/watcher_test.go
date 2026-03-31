@@ -30,11 +30,13 @@ func (m *mockStore) GetFeedsWithErrors(ctx context.Context) ([]models.Feed, erro
 }
 func (m *mockStore) GetFeed(ctx context.Context, id int64) (*models.Feed, error) {
 	args := m.Called(ctx, id)
-	return args.Get(0).(*models.Feed), args.Error(1)
+	f, _ := args.Get(0).(*models.Feed)
+	return f, args.Error(1)
 }
 func (m *mockStore) GetFeedByURL(ctx context.Context, url string) (*models.Feed, error) {
 	args := m.Called(ctx, url)
-	return args.Get(0).(*models.Feed), args.Error(1)
+	f, _ := args.Get(0).(*models.Feed)
+	return f, args.Error(1)
 }
 func (m *mockStore) AddFeed(ctx context.Context, url string, title string, fullArticle bool) (int64, error) {
 	args := m.Called(ctx, url, title, fullArticle)
@@ -56,8 +58,12 @@ func (m *mockStore) UpdateFeedLastPoll(ctx context.Context, id int64, etag strin
 	args := m.Called(ctx, id, etag, lastModified)
 	return args.Error(0)
 }
-func (m *mockStore) UpdateFeedError(ctx context.Context, id int64, code int, snippet string) error {
+func (m *mockStore) SetFeedError(ctx context.Context, id int64, code int, snippet string) error {
 	args := m.Called(ctx, id, code, snippet)
+	return args.Error(0)
+}
+func (m *mockStore) ClearFeedError(ctx context.Context, id int64) error {
+	args := m.Called(ctx, id)
 	return args.Error(0)
 }
 func (m *mockStore) AddUser(ctx context.Context, email string) (int64, error) {
@@ -66,7 +72,8 @@ func (m *mockStore) AddUser(ctx context.Context, email string) (int64, error) {
 }
 func (m *mockStore) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
 	args := m.Called(ctx, email)
-	return args.Get(0).(*models.User), args.Error(1)
+	u, _ := args.Get(0).(*models.User)
+	return u, args.Error(1)
 }
 func (m *mockStore) GetUsersForFeed(ctx context.Context, feedID int64) ([]models.User, error) {
 	args := m.Called(ctx, feedID)
@@ -98,7 +105,8 @@ func (m *mockStore) EnqueueEmail(ctx context.Context, recipients []string, subje
 }
 func (m *mockStore) ClaimPendingEmail(ctx context.Context) (*models.OutboxEntry, error) {
 	args := m.Called(ctx)
-	return args.Get(0).(*models.OutboxEntry), args.Error(1)
+	e, _ := args.Get(0).(*models.OutboxEntry)
+	return e, args.Error(1)
 }
 func (m *mockStore) MarkEmailDelivered(ctx context.Context, id int64) error {
 	args := m.Called(ctx, id)
@@ -148,7 +156,7 @@ func TestWatcher_HandleResponse(t *testing.T) {
 	store.On("IsSeen", ctx, feed.ID, "item-1").Return(false, nil)
 	store.On("MarkSeen", ctx, feed.ID, "item-1").Return(nil)
 	store.On("UpdateFeedLastPoll", ctx, feed.ID, mock.Anything, mock.Anything).Return(nil)
-	store.On("UpdateFeedError", ctx, feed.ID, 0, "").Return(nil)
+	store.On("ClearFeedError", ctx, feed.ID).Return(nil)
 	store.On("UpdateFeedBackoff", ctx, feed.ID, mock.Anything).Return(nil)
 
 	// Mock Mailer behavior
@@ -206,7 +214,7 @@ func TestWatcher_HandleResponse_BackoffPersisted(t *testing.T) {
 	w := New(feed, store, cPool, mPool, time.Hour, 0, 600, logger)
 	ctx := context.Background()
 
-	store.On("UpdateFeedError", ctx, feed.ID, 429, mock.Anything).Return(nil)
+	store.On("SetFeedError", ctx, feed.ID, 429, mock.Anything).Return(nil)
 	store.On("UpdateFeedBackoff", ctx, feed.ID, mock.MatchedBy(func(t time.Time) bool {
 		// backoff_until should be in the future
 		return t.After(time.Now())
@@ -239,7 +247,7 @@ func TestWatcher_HandleResponse_FullArticle(t *testing.T) {
 	store.On("GetUsersForFeed", ctx, feed.ID).Return([]models.User{{ID: 1, Email: "user@example.com"}}, nil).Twice()
 	store.On("IsSeen", ctx, feed.ID, "item-1").Return(false, nil)
 	store.On("UpdateFeedLastPoll", ctx, feed.ID, mock.Anything, mock.Anything).Return(nil)
-	store.On("UpdateFeedError", ctx, feed.ID, 0, "").Return(nil)
+	store.On("ClearFeedError", ctx, feed.ID).Return(nil)
 	store.On("UpdateFeedBackoff", ctx, feed.ID, mock.Anything).Return(nil)
 
 	// Expect a crawl request for the item URL

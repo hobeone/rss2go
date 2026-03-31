@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hobeone/rss2go/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -44,13 +43,7 @@ func init() {
 }
 
 func runAddUser(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load(cfgFile)
-	if err != nil {
-		return err
-	}
-	logger := getLogger(cfg)
-
-	store, err := getStore(logger)
+	_, _, store, err := setup()
 	if err != nil {
 		return err
 	}
@@ -65,13 +58,7 @@ func runAddUser(cmd *cobra.Command, args []string) error {
 }
 
 func runSubscribe(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load(cfgFile)
-	if err != nil {
-		return err
-	}
-	logger := getLogger(cfg)
-
-	store, err := getStore(logger)
+	_, _, store, err := setup()
 	if err != nil {
 		return err
 	}
@@ -99,13 +86,7 @@ func runSubscribe(cmd *cobra.Command, args []string) error {
 }
 
 func runUnsubscribe(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load(cfgFile)
-	if err != nil {
-		return err
-	}
-	logger := getLogger(cfg)
-
-	store, err := getStore(logger)
+	_, _, store, err := setup()
 	if err != nil {
 		return err
 	}

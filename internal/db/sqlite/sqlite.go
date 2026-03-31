@@ -54,7 +54,7 @@ func (s *Store) GetFeeds(ctx context.Context) ([]models.Feed, error) {
 	}
 	defer rows.Close()
 
-	var feeds []models.Feed
+	feeds := make([]models.Feed, 0, 32)
 	for rows.Next() {
 		var f models.Feed
 		var lastPoll, lastErrorTime, backoffUntil sql.NullTime
@@ -92,7 +92,7 @@ func (s *Store) GetFeedsWithErrors(ctx context.Context) ([]models.Feed, error) {
 	}
 	defer rows.Close()
 
-	var feeds []models.Feed
+	feeds := make([]models.Feed, 0, 16)
 	for rows.Next() {
 		var f models.Feed
 		var lastPoll, lastErrorTime sql.NullTime
@@ -253,18 +253,17 @@ func (s *Store) UpdateFeedLastPoll(ctx context.Context, id int64, etag string, l
 	return err
 }
 
-func (s *Store) UpdateFeedError(ctx context.Context, id int64, code int, snippet string) error {
-	var query string
-	var args []any
-	if code == 0 && snippet == "" {
-		query = "UPDATE feeds SET last_error_time = NULL, last_error_code = NULL, last_error_snippet = NULL WHERE id = ?"
-		args = []any{id}
-	} else {
-		query = "UPDATE feeds SET last_error_time = ?, last_error_code = ?, last_error_snippet = ? WHERE id = ?"
-		args = []any{time.Now(), code, snippet, id}
-	}
-	s.logger.Debug("executing exec", "query", query, "args", args)
-	_, err := s.db.ExecContext(ctx, query, args...)
+func (s *Store) SetFeedError(ctx context.Context, id int64, code int, snippet string) error {
+	query := "UPDATE feeds SET last_error_time = ?, last_error_code = ?, last_error_snippet = ? WHERE id = ?"
+	s.logger.Debug("executing exec", "query", query, "args", []any{time.Now(), code, snippet, id})
+	_, err := s.db.ExecContext(ctx, query, time.Now(), code, snippet, id)
+	return err
+}
+
+func (s *Store) ClearFeedError(ctx context.Context, id int64) error {
+	query := "UPDATE feeds SET last_error_time = NULL, last_error_code = NULL, last_error_snippet = NULL WHERE id = ?"
+	s.logger.Debug("executing exec", "query", query, "args", []any{id})
+	_, err := s.db.ExecContext(ctx, query, id)
 	return err
 }
 
@@ -321,7 +320,7 @@ func (s *Store) GetUsersForFeed(ctx context.Context, feedID int64) ([]models.Use
 	}
 	defer rows.Close()
 
-	var users []models.User
+	users := make([]models.User, 0, 8)
 	for rows.Next() {
 		var u models.User
 		if err := rows.Scan(&u.ID, &u.Email); err != nil {

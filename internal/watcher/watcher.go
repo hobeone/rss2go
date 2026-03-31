@@ -101,6 +101,20 @@ func (w *Watcher) Feed() models.Feed {
 	return w.feed
 }
 
+// getUserEmails fetches the subscriber list for this feed and returns their
+// email addresses. Pre-allocates the slice to avoid repeated appends.
+func (w *Watcher) getUserEmails(ctx context.Context) ([]string, error) {
+	users, err := w.store.GetUsersForFeed(ctx, w.feed.ID)
+	if err != nil {
+		return nil, err
+	}
+	emails := make([]string, len(users))
+	for i, u := range users {
+		emails[i] = u.Email
+	}
+	return emails, nil
+}
+
 func (w *Watcher) crawl(ctx context.Context) {
 	w.logger.Debug("triggering crawl")
 	w.crawler.Submit(crawler.CrawlRequest{
@@ -140,7 +154,7 @@ func (w *Watcher) handleFeedResponse(ctx context.Context, resp crawler.CrawlResp
 			snippet = resp.Error.Error()
 		}
 
-		if err := w.store.UpdateFeedError(ctx, w.feed.ID, resp.StatusCode, snippet); err != nil {
+		if err := w.store.SetFeedError(ctx, w.feed.ID, resp.StatusCode, snippet); err != nil {
 			w.logger.Error("failed to update feed error in DB", "error", err)
 		}
 
@@ -167,7 +181,7 @@ func (w *Watcher) handleFeedResponse(ctx context.Context, resp crawler.CrawlResp
 	}
 
 	// Clear error in DB on success
-	if err := w.store.UpdateFeedError(ctx, w.feed.ID, 0, ""); err != nil {
+	if err := w.store.ClearFeedError(ctx, w.feed.ID); err != nil {
 		w.logger.Error("failed to clear feed error in DB", "error", err)
 	}
 
@@ -188,20 +202,15 @@ func (w *Watcher) handleFeedResponse(ctx context.Context, resp crawler.CrawlResp
 		return w.currentInterval
 	}
 
-	users, err := w.store.GetUsersForFeed(ctx, w.feed.ID)
+	userEmails, err := w.getUserEmails(ctx)
 	if err != nil {
 		w.logger.Error("failed to get users for feed", "error", err)
 		return w.currentInterval
 	}
 
-	if len(users) == 0 {
+	if len(userEmails) == 0 {
 		w.logger.Debug("no users subscribed to feed")
 		return w.currentInterval
-	}
-
-	var userEmails []string
-	for u := range users {
-		userEmails = append(userEmails, users[u].Email)
 	}
 
 	newItemsCount := 0
@@ -271,15 +280,10 @@ func (w *Watcher) handleItemResponse(ctx context.Context, resp crawler.CrawlResp
 		return
 	}
 
-	users, err := w.store.GetUsersForFeed(ctx, w.feed.ID)
+	userEmails, err := w.getUserEmails(ctx)
 	if err != nil {
 		w.logger.Error("failed to get users for feed", "error", err)
 		return
-	}
-
-	var userEmails []string
-	for u := range users {
-		userEmails = append(userEmails, users[u].Email)
 	}
 
 	var extractedContent string

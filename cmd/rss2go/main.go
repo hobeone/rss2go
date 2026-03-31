@@ -66,6 +66,21 @@ func getStore(logger *slog.Logger) (*sqlite.Store, error) {
 	return store, nil
 }
 
+// setup loads config, initialises the logger, and opens the SQLite store.
+// Callers must defer store.Close() on success.
+func setup() (*config.Config, *slog.Logger, *sqlite.Store, error) {
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	logger := getLogger(cfg)
+	store, err := getStore(logger)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return cfg, logger, store, nil
+}
+
 // getFeedID resolves a feed ID from either a numeric string or a URL.
 func getFeedID(ctx context.Context, store db.Store, arg string) (int64, error) {
 	var id int64

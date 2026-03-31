@@ -41,10 +41,11 @@ type Pool struct {
 	sender Sender
 
 	// outbox mode (store != nil)
-	store   db.Store
-	notifyC chan struct{}
-	done    chan struct{}
-	wg      sync.WaitGroup
+	store        db.Store
+	notifyC      chan struct{}
+	outboxCtx    context.Context
+	outboxCancel context.CancelFunc
+	wg           sync.WaitGroup
 
 	// legacy mode (store == nil)
 	requests chan MailRequest
@@ -78,8 +79,8 @@ func NewPool(size int, cfg *config.Config, store db.Store, logger *slog.Logger) 
 			p.logger.Error("failed to reset delivering→pending on startup", "error", err)
 		}
 
+		p.outboxCtx, p.outboxCancel = context.WithCancel(context.Background())
 		p.notifyC = make(chan struct{}, 1)
-		p.done = make(chan struct{})
 
 		p.wg.Add(size)
 		for i := range size {
@@ -121,7 +122,7 @@ func (p *Pool) outboxWorker(id int) {
 	p.logger.Debug("outbox worker started", "worker_id", id)
 	for {
 		select {
-		case <-p.done:
+		case <-p.outboxCtx.Done():
 			p.logger.Debug("outbox worker stopping", "worker_id", id)
 			return
 		case <-p.notifyC:
@@ -136,9 +137,11 @@ func (p *Pool) outboxWorker(id int) {
 
 func (p *Pool) drainOutbox() {
 	for {
-		entry, err := p.store.ClaimPendingEmail(context.Background())
+		entry, err := p.store.ClaimPendingEmail(p.outboxCtx)
 		if err != nil {
-			p.logger.Error("failed to claim pending email from outbox", "error", err)
+			if p.outboxCtx.Err() == nil {
+				p.logger.Error("failed to claim pending email from outbox", "error", err)
+			}
 			return
 		}
 		if entry == nil {
@@ -148,13 +151,13 @@ func (p *Pool) drainOutbox() {
 		err = p.Send(MailRequest{To: entry.Recipients, Subject: entry.Subject, Body: entry.Body})
 		if err != nil {
 			p.logger.Error("failed to deliver outbox email", "id", entry.ID, "error", err)
-			if rerr := p.store.ResetEmailToPending(context.Background(), entry.ID); rerr != nil {
+			if rerr := p.store.ResetEmailToPending(p.outboxCtx, entry.ID); rerr != nil {
 				p.logger.Error("failed to reset outbox email to pending", "id", entry.ID, "error", rerr)
 			}
 			return
 		}
 
-		if merr := p.store.MarkEmailDelivered(context.Background(), entry.ID); merr != nil {
+		if merr := p.store.MarkEmailDelivered(p.outboxCtx, entry.ID); merr != nil {
 			p.logger.Error("failed to mark outbox email delivered", "id", entry.ID, "error", merr)
 		}
 	}
@@ -254,11 +257,12 @@ func (p *Pool) persistentSMTPSender(req MailRequest) error {
 	return nil
 }
 
-//nolint:errcheck
 func (p *Pool) closeSMTP() {
 	if p.smtpConn != nil {
 		p.logger.Debug("closing SMTP connection")
-		p.smtpConn.Close() // #nosec G104
+		if err := p.smtpConn.Close(); err != nil {
+			p.logger.Debug("SMTP close error", "error", err)
+		}
 		p.smtpConn = nil
 	}
 }
@@ -281,21 +285,24 @@ func (p *Pool) sendSendmail(req MailRequest) error {
 		errChan <- werr
 	}()
 
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("sendmail command failed: %w", err)
-	}
+	// Always read from errChan: when the process exits (cmd.Run returns),
+	// its stdin pipe breaks, causing the Write goroutine to unblock and send.
+	runErr := cmd.Run()
+	writeErr := <-errChan
 
-	if err := <-errChan; err != nil {
-		return fmt.Errorf("failed to write to sendmail stdin: %w", err)
+	if runErr != nil {
+		return fmt.Errorf("sendmail command failed: %w", runErr)
 	}
-
+	if writeErr != nil {
+		return fmt.Errorf("failed to write to sendmail stdin: %w", writeErr)
+	}
 	return nil
 }
 
 // Close shuts down the pool and waits for in-flight work to finish.
 func (p *Pool) Close() {
 	if p.store != nil {
-		close(p.done)
+		p.outboxCancel()
 		p.wg.Wait()
 	} else {
 		close(p.requests)

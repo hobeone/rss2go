@@ -63,6 +63,7 @@ type Scheduler struct {
 	maxImageWidth int
 	logger        *slog.Logger
 	wakeC         chan struct{} // non-blocking signal to interrupt sleep
+	handlerWg     sync.WaitGroup // tracks in-flight HandleResponse goroutines
 }
 
 // NewScheduler creates a Scheduler.
@@ -193,6 +194,7 @@ func (s *Scheduler) Run(ctx context.Context) {
 			// Heap changed; recalculate delay at top of loop.
 		case <-ctx.Done():
 			s.logger.Info("scheduler shutting down")
+			s.handlerWg.Wait() // drain in-flight HandleResponse calls before returning
 			return
 		}
 	}
@@ -267,7 +269,9 @@ func (s *Scheduler) routeResponses(ctx context.Context) {
 				continue
 			}
 
+			s.handlerWg.Add(1)
 			go func(w *Watcher, resp crawler.CrawlResponse) {
+				defer s.handlerWg.Done()
 				interval, isFeed := w.HandleResponse(ctx, resp)
 				if isFeed {
 					s.reschedFeed(resp.FeedID, interval)
