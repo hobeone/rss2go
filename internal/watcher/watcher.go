@@ -144,11 +144,17 @@ func (w *Watcher) handleFeedResponse(ctx context.Context, resp crawler.CrawlResp
 			w.logger.Error("failed to update feed error in DB", "error", err)
 		}
 
-		w.currentInterval *= 2
-		if w.currentInterval > maxBackoff {
-			w.currentInterval = maxBackoff
+		if resp.RetryAfter > 0 {
+			// Server told us exactly how long to wait; honour it.
+			w.currentInterval = resp.RetryAfter
+			w.logger.Warn("rate limited, honouring Retry-After", "retry_after", resp.RetryAfter)
+		} else {
+			w.currentInterval *= 2
+			if w.currentInterval > maxBackoff {
+				w.currentInterval = maxBackoff
+			}
+			w.logger.Warn("backing off due to error", "new_interval", w.currentInterval)
 		}
-		w.logger.Warn("backing off due to error", "new_interval", w.currentInterval)
 		return w.currentInterval
 	}
 

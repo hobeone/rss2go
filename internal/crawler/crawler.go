@@ -6,6 +6,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -44,6 +46,7 @@ type CrawlResponse struct {
 	Error        error
 	ETag         string
 	LastModified string
+	RetryAfter   time.Duration // non-zero when the server sent a Retry-After header (429/503)
 }
 
 // Pool is a pool of workers for fetching RSS feeds.
@@ -79,7 +82,7 @@ func (p *Pool) worker(id int) {
 	p.logger.Debug("starting worker", "worker_id", id)
 	for req := range p.requests {
 		p.logger.Debug("crawling request", "feed_id", req.FeedID, "type", req.Type, "url", req.URL)
-		body, code, etag, lastModified, err := p.fetch(req.Ctx, req.URL, req.ETag, req.LastModified)
+		body, code, etag, lastModified, retryAfter, err := p.fetch(req.Ctx, req.URL, req.ETag, req.LastModified)
 		p.responses <- CrawlResponse{
 			FeedID:       req.FeedID,
 			Type:         req.Type,
@@ -89,11 +92,12 @@ func (p *Pool) worker(id int) {
 			Error:        err,
 			ETag:         etag,
 			LastModified: lastModified,
+			RetryAfter:   retryAfter,
 		}
 	}
 }
 
-func (p *Pool) fetch(ctx context.Context, url string, etag string, lastModified string) ([]byte, int, string, string, error) {
+func (p *Pool) fetch(ctx context.Context, url string, etag string, lastModified string) ([]byte, int, string, string, time.Duration, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -104,7 +108,7 @@ func (p *Pool) fetch(ctx context.Context, url string, etag string, lastModified 
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, 0, "", "", err
+		return nil, 0, "", "", 0, err
 	}
 
 	req.Header.Set("User-Agent", "rss2go/2.0")
@@ -126,7 +130,7 @@ func (p *Pool) fetch(ctx context.Context, url string, etag string, lastModified 
 		} else {
 			p.logger.Debug("request failed", "url", url, "error", err, "duration", time.Since(start))
 		}
-		return nil, 0, "", "", err
+		return nil, 0, "", "", 0, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -140,12 +144,21 @@ func (p *Pool) fetch(ctx context.Context, url string, etag string, lastModified 
 
 	if resp.StatusCode == http.StatusNotModified {
 		p.logger.Debug("feed not modified", "url", url)
-		return nil, resp.StatusCode, "", "", nil
+		return nil, resp.StatusCode, "", "", 0, nil
+	}
+
+	// Parse Retry-After on rate-limit and service-unavailable responses.
+	var retryAfter time.Duration
+	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable {
+		retryAfter = parseRetryAfter(resp.Header.Get("Retry-After"))
+		if retryAfter > 0 {
+			p.logger.Warn("rate limited by server", "url", url, "retry_after", retryAfter)
+		}
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBodySize+1))
 	if err != nil {
-		return nil, resp.StatusCode, "", "", err
+		return nil, resp.StatusCode, "", "", retryAfter, err
 	}
 
 	if len(body) > MaxResponseBodySize {
@@ -154,11 +167,33 @@ func (p *Pool) fetch(ctx context.Context, url string, etag string, lastModified 
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return body, resp.StatusCode, "", "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return body, resp.StatusCode, "", "", retryAfter, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	p.logger.Debug("read complete", "url", url, "bytes", len(body))
-	return body, resp.StatusCode, resp.Header.Get("ETag"), resp.Header.Get("Last-Modified"), nil
+	return body, resp.StatusCode, resp.Header.Get("ETag"), resp.Header.Get("Last-Modified"), 0, nil
+}
+
+// parseRetryAfter parses the value of a Retry-After HTTP header, which may be
+// either an integer number of seconds or an HTTP-date (RFC 7231 §7.1.3).
+func parseRetryAfter(header string) time.Duration {
+	if header == "" {
+		return 0
+	}
+	// Integer seconds form: "Retry-After: 120"
+	if secs, err := strconv.Atoi(strings.TrimSpace(header)); err == nil {
+		if secs > 0 {
+			return time.Duration(secs) * time.Second
+		}
+		return 0
+	}
+	// HTTP-date form: "Retry-After: Fri, 01 Jan 2027 00:00:00 GMT"
+	if t, err := http.ParseTime(header); err == nil {
+		if d := time.Until(t); d > 0 {
+			return d
+		}
+	}
+	return 0
 }
 
 // Submit sends a crawl request to the pool.
