@@ -106,15 +106,24 @@ func (s *Scheduler) Register(feed models.Feed) {
 	w := New(feed, s.store, s.crawlerPool, s.mailerPool, s.interval, s.jitter, s.maxImageWidth, s.logger)
 	s.watchers[feed.ID] = w
 
-	// Respect last_poll so we don't storm the crawler on startup: the initial
-	// poll time is max(last_poll+interval, now) plus a per-feed jitter offset.
-	nextPoll := time.Now()
-	if !feed.LastPoll.IsZero() {
-		if scheduled := feed.LastPoll.Add(s.interval); scheduled.After(nextPoll) {
-			nextPoll = scheduled
+	// Determine the initial poll time, honouring any persisted backoff first.
+	// If backoff_until is in the future, use it directly (no jitter — this is
+	// a hard "don't retry before" constraint). Otherwise schedule from
+	// max(last_poll+interval, now) with the usual per-feed jitter.
+	now := time.Now()
+	var nextPoll time.Time
+	if !feed.BackoffUntil.IsZero() && feed.BackoffUntil.After(now) {
+		nextPoll = feed.BackoffUntil
+		s.logger.Info("resuming feed under backoff", "feed_id", feed.ID, "backoff_until", feed.BackoffUntil)
+	} else {
+		nextPoll = now
+		if !feed.LastPoll.IsZero() {
+			if scheduled := feed.LastPoll.Add(s.interval); scheduled.After(nextPoll) {
+				nextPoll = scheduled
+			}
 		}
+		nextPoll = nextPoll.Add(w.getJitter())
 	}
-	nextPoll = nextPoll.Add(w.getJitter())
 
 	e := &schedEntry{feedID: feed.ID, nextPoll: nextPoll}
 	s.entries[feed.ID] = e

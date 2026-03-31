@@ -2,6 +2,7 @@ package watcher
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
@@ -87,6 +88,10 @@ func (m *mockStore) MarkSeen(ctx context.Context, feedID int64, guid string) err
 	args := m.Called(ctx, feedID, guid)
 	return args.Error(0)
 }
+func (m *mockStore) UpdateFeedBackoff(ctx context.Context, id int64, backoffUntil time.Time) error {
+	args := m.Called(ctx, id, backoffUntil)
+	return args.Error(0)
+}
 func (m *mockStore) Close() error {
 	return nil
 }
@@ -124,6 +129,7 @@ func TestWatcher_HandleResponse(t *testing.T) {
 	store.On("MarkSeen", ctx, feed.ID, "item-1").Return(nil)
 	store.On("UpdateFeedLastPoll", ctx, feed.ID, mock.Anything, mock.Anything).Return(nil)
 	store.On("UpdateFeedError", ctx, feed.ID, 0, "").Return(nil)
+	store.On("UpdateFeedBackoff", ctx, feed.ID, mock.Anything).Return(nil)
 
 	// Mock Mailer behavior
 	mPool.On("Submit", mock.MatchedBy(func(req mailer.MailRequest) bool {
@@ -170,6 +176,35 @@ func TestWatcher_HandleResponse(t *testing.T) {
 	mPool.AssertExpectations(t)
 }
 
+func TestWatcher_HandleResponse_BackoffPersisted(t *testing.T) {
+	feed := models.Feed{ID: 1, URL: "http://example.com/rss", Title: "Example"}
+	store := new(mockStore)
+	cPool := new(mockCrawler)
+	mPool := new(mockMailer)
+	logger := slog.New(slog.DiscardHandler)
+
+	w := New(feed, store, cPool, mPool, time.Hour, 0, 600, logger)
+	ctx := context.Background()
+
+	store.On("UpdateFeedError", ctx, feed.ID, 429, mock.Anything).Return(nil)
+	store.On("UpdateFeedBackoff", ctx, feed.ID, mock.MatchedBy(func(t time.Time) bool {
+		// backoff_until should be in the future
+		return t.After(time.Now())
+	})).Return(nil)
+
+	interval, isFeed := w.HandleResponse(ctx, crawler.CrawlResponse{
+		FeedID:     feed.ID,
+		Type:       crawler.RequestTypeFeed,
+		StatusCode: 429,
+		RetryAfter: 2 * time.Minute,
+		Error:      fmt.Errorf("unexpected status code: 429"),
+	})
+
+	assert.True(t, isFeed)
+	assert.Equal(t, 2*time.Minute, interval)
+	store.AssertExpectations(t)
+}
+
 func TestWatcher_HandleResponse_FullArticle(t *testing.T) {
 	feed := models.Feed{ID: 1, URL: "http://example.com/rss", Title: "Full", FullArticle: true}
 	store := new(mockStore)
@@ -185,6 +220,7 @@ func TestWatcher_HandleResponse_FullArticle(t *testing.T) {
 	store.On("IsSeen", ctx, feed.ID, "item-1").Return(false, nil)
 	store.On("UpdateFeedLastPoll", ctx, feed.ID, mock.Anything, mock.Anything).Return(nil)
 	store.On("UpdateFeedError", ctx, feed.ID, 0, "").Return(nil)
+	store.On("UpdateFeedBackoff", ctx, feed.ID, mock.Anything).Return(nil)
 
 	// Expect a crawl request for the item URL
 	cPool.On("Submit", mock.MatchedBy(func(req crawler.CrawlRequest) bool {

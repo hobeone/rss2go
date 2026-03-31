@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/hobeone/rss2go/internal/models"
 )
@@ -19,6 +20,7 @@ type Store interface {
 	DeleteFeedByURL(ctx context.Context, url string) error
 	UpdateFeedLastPoll(ctx context.Context, id int64, etag string, lastModified string) error
 	UpdateFeedError(ctx context.Context, id int64, code int, snippet string) error
+	UpdateFeedBackoff(ctx context.Context, id int64, backoffUntil time.Time) error
 
 	// User operations
 	AddUser(ctx context.Context, email string) (int64, error)

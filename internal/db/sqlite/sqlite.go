@@ -45,7 +45,7 @@ func (s *Store) Close() error {
 }
 
 func (s *Store) GetFeeds(ctx context.Context) ([]models.Feed, error) {
-	query := "SELECT id, url, title, last_poll, last_error_time, last_error_code, last_error_snippet, full_article FROM feeds"
+	query := "SELECT id, url, title, last_poll, last_error_time, last_error_code, last_error_snippet, full_article, backoff_until FROM feeds"
 	s.logger.Debug("executing query", "query", query)
 	rows, err := s.db.QueryContext(ctx, query)
 	if err != nil {
@@ -56,10 +56,10 @@ func (s *Store) GetFeeds(ctx context.Context) ([]models.Feed, error) {
 	var feeds []models.Feed
 	for rows.Next() {
 		var f models.Feed
-		var lastPoll, lastErrorTime sql.NullTime
+		var lastPoll, lastErrorTime, backoffUntil sql.NullTime
 		var lastErrorCode sql.NullInt64
 		var lastErrorSnippet sql.NullString
-		if err := rows.Scan(&f.ID, &f.URL, &f.Title, &lastPoll, &lastErrorTime, &lastErrorCode, &lastErrorSnippet, &f.FullArticle); err != nil {
+		if err := rows.Scan(&f.ID, &f.URL, &f.Title, &lastPoll, &lastErrorTime, &lastErrorCode, &lastErrorSnippet, &f.FullArticle, &backoffUntil); err != nil {
 			return nil, err
 		}
 		if lastPoll.Valid {
@@ -73,6 +73,9 @@ func (s *Store) GetFeeds(ctx context.Context) ([]models.Feed, error) {
 		}
 		if lastErrorSnippet.Valid {
 			f.LastErrorSnippet = lastErrorSnippet.String
+		}
+		if backoffUntil.Valid {
+			f.BackoffUntil = backoffUntil.Time
 		}
 		feeds = append(feeds, f)
 	}
@@ -121,14 +124,14 @@ func (s *Store) GetFeedsWithErrors(ctx context.Context) ([]models.Feed, error) {
 }
 
 func (s *Store) GetFeed(ctx context.Context, id int64) (*models.Feed, error) {
-	query := "SELECT id, url, title, last_poll, last_error_time, last_error_code, last_error_snippet, full_article FROM feeds WHERE id = ?"
+	query := "SELECT id, url, title, last_poll, last_error_time, last_error_code, last_error_snippet, full_article, backoff_until FROM feeds WHERE id = ?"
 	s.logger.Debug("executing query", "query", query, "args", []any{id})
 	var f models.Feed
-	var lastPoll, lastErrorTime sql.NullTime
+	var lastPoll, lastErrorTime, backoffUntil sql.NullTime
 	var lastErrorCode sql.NullInt64
 	var lastErrorSnippet sql.NullString
 	err := s.db.QueryRowContext(ctx, query, id).
-		Scan(&f.ID, &f.URL, &f.Title, &lastPoll, &lastErrorTime, &lastErrorCode, &lastErrorSnippet, &f.FullArticle)
+		Scan(&f.ID, &f.URL, &f.Title, &lastPoll, &lastErrorTime, &lastErrorCode, &lastErrorSnippet, &f.FullArticle, &backoffUntil)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -146,6 +149,9 @@ func (s *Store) GetFeed(ctx context.Context, id int64) (*models.Feed, error) {
 	}
 	if lastErrorSnippet.Valid {
 		f.LastErrorSnippet = lastErrorSnippet.String
+	}
+	if backoffUntil.Valid {
+		f.BackoffUntil = backoffUntil.Time
 	}
 	return &f, nil
 }
@@ -255,6 +261,21 @@ func (s *Store) UpdateFeedError(ctx context.Context, id int64, code int, snippet
 	} else {
 		query = "UPDATE feeds SET last_error_time = ?, last_error_code = ?, last_error_snippet = ? WHERE id = ?"
 		args = []any{time.Now(), code, snippet, id}
+	}
+	s.logger.Debug("executing exec", "query", query, "args", args)
+	_, err := s.db.ExecContext(ctx, query, args...)
+	return err
+}
+
+func (s *Store) UpdateFeedBackoff(ctx context.Context, id int64, backoffUntil time.Time) error {
+	var query string
+	var args []any
+	if backoffUntil.IsZero() {
+		query = "UPDATE feeds SET backoff_until = NULL WHERE id = ?"
+		args = []any{id}
+	} else {
+		query = "UPDATE feeds SET backoff_until = ? WHERE id = ?"
+		args = []any{backoffUntil, id}
 	}
 	s.logger.Debug("executing exec", "query", query, "args", args)
 	_, err := s.db.ExecContext(ctx, query, args...)

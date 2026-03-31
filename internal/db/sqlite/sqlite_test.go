@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/hobeone/rss2go"
 	"github.com/stretchr/testify/assert"
@@ -136,6 +137,28 @@ func TestStore(t *testing.T) {
 	// No changes
 	err = store.UpdateFeed(ctx, id, nil, nil, nil)
 	assert.NoError(t, err)
+
+	// Test UpdateFeedBackoff — set, persist, and clear
+	backoffTime := time.Now().Add(30 * time.Minute).Truncate(time.Second)
+	err = store.UpdateFeedBackoff(ctx, id, backoffTime)
+	assert.NoError(t, err)
+	fBackoff, err := store.GetFeed(ctx, id)
+	assert.NoError(t, err)
+	assert.False(t, fBackoff.BackoffUntil.IsZero())
+	assert.WithinDuration(t, backoffTime, fBackoff.BackoffUntil, time.Second)
+
+	// Verify GetFeeds also returns it
+	allFeeds, err := store.GetFeeds(ctx)
+	assert.NoError(t, err)
+	assert.Len(t, allFeeds, 1)
+	assert.False(t, allFeeds[0].BackoffUntil.IsZero())
+
+	// Clear the backoff
+	err = store.UpdateFeedBackoff(ctx, id, time.Time{})
+	assert.NoError(t, err)
+	fCleared, err := store.GetFeed(ctx, id)
+	assert.NoError(t, err)
+	assert.True(t, fCleared.BackoffUntil.IsZero())
 }
 
 func TestStore_Errors(t *testing.T) {

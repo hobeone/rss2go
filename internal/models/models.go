@@ -14,6 +14,7 @@ type Feed struct {
 	FullArticle      bool      `json:"full_article"`
 	ETag             string    `json:"etag"`
 	LastModified     string    `json:"last_modified"`
+	BackoffUntil     time.Time `json:"backoff_until"`
 }
 
 // User represents a subscriber.

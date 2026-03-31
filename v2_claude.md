@@ -30,9 +30,9 @@ Add a `subscriptions.digest` column (`boolean`) and a `subscriptions.digest_inte
 
 `seen_items` uses GUID as the key. Some feeds rotate GUIDs on edits, causing re-delivery. A `content_hash` column (SHA-256 of title+link) as a secondary dedup key in `IsSeen`/`MarkSeen` would eliminate this class of duplicates.
 
-### 6. Persist backoff state across restarts
+### ~~6. Persist backoff state across restarts~~ ✓ Done
 
-The current exponential backoff lives only in watcher memory (`watcher.go` local state). A restart resets it, causing an immediate retry storm on startup. Adding a `backoff_until` column to the `feeds` table would survive process restarts and preserve backoff state.
+~~The current exponential backoff lives only in watcher memory (`watcher.go` local state). A restart resets it, causing an immediate retry storm on startup. Adding a `backoff_until` column to the `feeds` table would survive process restarts and preserve backoff state.~~
 
 ---
 

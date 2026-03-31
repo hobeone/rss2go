@@ -155,10 +155,16 @@ func (w *Watcher) handleFeedResponse(ctx context.Context, resp crawler.CrawlResp
 			}
 			w.logger.Warn("backing off due to error", "new_interval", w.currentInterval)
 		}
+		if err := w.store.UpdateFeedBackoff(ctx, w.feed.ID, time.Now().Add(w.currentInterval)); err != nil {
+			w.logger.Error("failed to persist backoff", "error", err)
+		}
 		return w.currentInterval
 	}
 
 	w.currentInterval = w.interval
+	if err := w.store.UpdateFeedBackoff(ctx, w.feed.ID, time.Time{}); err != nil {
+		w.logger.Error("failed to clear backoff state", "error", err)
+	}
 
 	// Clear error in DB on success
 	if err := w.store.UpdateFeedError(ctx, w.feed.ID, 0, ""); err != nil {
