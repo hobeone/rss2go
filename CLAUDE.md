@@ -5,9 +5,10 @@
 These apply to any code change, no exceptions:
 
 1. **Run tests**: `go test ./...` — all tests must pass
-2. **Run go fix**: `go fix ./...` — keep the codebase compliant with automated Go fixes
-3. **Verify build**: `go build ./cmd/rss2go/... ./cmd/scraper/...` — no missing imports or compile errors
-4. **Database migrations**: schema changes MUST be a new file in `migrations/` using the next sequence number (e.g. `004_description.sql`). Never modify existing migration files.
+2. **Run go vet**: `go vet ./...` — must report no issues; catches bugs the compiler misses (bad printf verbs, mutex copies, unreachable code, etc.)
+3. **Run go fix**: `go fix ./...` — rewrites deprecated API usages; keep the codebase current
+4. **Verify build**: `go build ./cmd/rss2go/... ./cmd/scraper/...` — no missing imports or compile errors
+5. **Database migrations**: schema changes MUST be a new file in `migrations/` using the next sequence number (e.g. `004_description.sql`). Never modify existing migration files.
 
 ## Project Layout
 
