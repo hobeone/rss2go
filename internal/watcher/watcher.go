@@ -33,7 +33,7 @@ type CrawlerPool interface {
 
 // MailerPool defines the interface for submitting mail requests.
 type MailerPool interface {
-	Submit(mailer.MailRequest)
+	Submit(ctx context.Context, req mailer.MailRequest)
 }
 
 // Watcher handles crawl responses and email formatting for a single feed.
@@ -239,7 +239,7 @@ func (w *Watcher) handleFeedResponse(ctx context.Context, resp crawler.CrawlResp
 			subject, body := w.FormatItem(w.feed.Title, itm, "")
 
 			w.logger.Info("new item found", "title", itm.Title, "guid", guid)
-			w.mailer.Submit(mailer.MailRequest{
+			w.mailer.Submit(ctx, mailer.MailRequest{
 				To:      userEmails,
 				Subject: subject,
 				Body:    body,
@@ -297,7 +297,7 @@ func (w *Watcher) handleItemResponse(ctx context.Context, resp crawler.CrawlResp
 	subject, body := w.FormatItem(w.feed.Title, itm, extractedContent)
 
 	w.logger.Info("new item found (with full article)", "title", itm.Title, "guid", resp.ItemGUID)
-	w.mailer.Submit(mailer.MailRequest{
+	w.mailer.Submit(ctx, mailer.MailRequest{
 		To:      userEmails,
 		Subject: subject,
 		Body:    body,

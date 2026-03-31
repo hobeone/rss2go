@@ -1,6 +1,7 @@
 package mailer
 
 import (
+	"context"
 	"log/slog"
 	"sync/atomic"
 	"testing"
@@ -14,11 +15,12 @@ import (
 func TestPool_WorkerAndMetrics(t *testing.T) {
 	cfg := &config.Config{}
 	logger := slog.New(slog.DiscardHandler)
-	
+
 	// Reset metrics
 	atomic.StoreUint64(&metrics.EmailsSentTotal, 0)
 
-	p := NewPool(1, cfg, logger)
+	// nil store → legacy channel mode
+	p := NewPool(1, cfg, nil, logger)
 	defer p.Close()
 
 	done := make(chan struct{})
@@ -36,7 +38,7 @@ func TestPool_WorkerAndMetrics(t *testing.T) {
 		Body:    "Body",
 	}
 
-	p.Submit(req)
+	p.Submit(context.Background(), req)
 
 	select {
 	case <-done:
@@ -46,16 +48,16 @@ func TestPool_WorkerAndMetrics(t *testing.T) {
 
 	assert.Equal(t, req.To, sentReq.To)
 	assert.Equal(t, req.Subject, sentReq.Subject)
-	
+
 	// Check metrics
 	assert.Equal(t, uint64(1), atomic.LoadUint64(&metrics.EmailsSentTotal))
 }
 
 func TestPool_DefaultSenderRouting(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
-	
+
 	t.Run("NoConfig", func(t *testing.T) {
-		p := NewPool(1, &config.Config{}, logger)
+		p := NewPool(1, &config.Config{}, nil, logger)
 		defer p.Close()
 		err := p.defaultSender(MailRequest{})
 		assert.Error(t, err)
@@ -63,22 +65,18 @@ func TestPool_DefaultSenderRouting(t *testing.T) {
 	})
 
 	t.Run("SMTPConfigured", func(t *testing.T) {
-		p := NewPool(1, &config.Config{SMTPServer: "localhost"}, logger)
+		p := NewPool(1, &config.Config{SMTPServer: "localhost"}, nil, logger)
 		defer p.Close()
-		// It will fail because localhost:0 is likely refused or we don't have a mock server,
-		// but we want to ensure it routes to sendSMTP and returns an SMTP-related error or connection error,
-		// rather than "no mailer configured".
 		err := p.defaultSender(MailRequest{To: []string{"a@b.com"}})
 		assert.Error(t, err)
 		assert.NotContains(t, err.Error(), "no mailer configured")
 	})
 
 	t.Run("SendmailConfigured", func(t *testing.T) {
-		p := NewPool(1, &config.Config{Sendmail: "/bin/false"}, logger) // Use a command that exits with error
+		p := NewPool(1, &config.Config{Sendmail: "/bin/false"}, nil, logger)
 		defer p.Close()
 		err := p.defaultSender(MailRequest{To: []string{"a@b.com"}})
 		assert.Error(t, err)
 		assert.NotContains(t, err.Error(), "no mailer configured")
 	})
 }
-

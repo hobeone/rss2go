@@ -92,6 +92,26 @@ func (m *mockStore) UpdateFeedBackoff(ctx context.Context, id int64, backoffUnti
 	args := m.Called(ctx, id, backoffUntil)
 	return args.Error(0)
 }
+func (m *mockStore) EnqueueEmail(ctx context.Context, recipients []string, subject, body string) error {
+	args := m.Called(ctx, recipients, subject, body)
+	return args.Error(0)
+}
+func (m *mockStore) ClaimPendingEmail(ctx context.Context) (*models.OutboxEntry, error) {
+	args := m.Called(ctx)
+	return args.Get(0).(*models.OutboxEntry), args.Error(1)
+}
+func (m *mockStore) MarkEmailDelivered(ctx context.Context, id int64) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+func (m *mockStore) ResetEmailToPending(ctx context.Context, id int64) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+func (m *mockStore) ResetDeliveringToPending(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
+}
 func (m *mockStore) Close() error {
 	return nil
 }
@@ -108,8 +128,8 @@ type mockMailer struct {
 	mock.Mock
 }
 
-func (m *mockMailer) Submit(req mailer.MailRequest) {
-	m.Called(req)
+func (m *mockMailer) Submit(ctx context.Context, req mailer.MailRequest) {
+	m.Called(ctx, req)
 }
 
 func TestWatcher_HandleResponse(t *testing.T) {
@@ -132,13 +152,13 @@ func TestWatcher_HandleResponse(t *testing.T) {
 	store.On("UpdateFeedBackoff", ctx, feed.ID, mock.Anything).Return(nil)
 
 	// Mock Mailer behavior
-	mPool.On("Submit", mock.MatchedBy(func(req mailer.MailRequest) bool {
+	mPool.On("Submit", mock.Anything, mock.MatchedBy(func(req mailer.MailRequest) bool {
 		isSubjectSafe := req.Subject == "[Example & Feed] Safe Title & it's test"
-		
+
 		hasRealImg := strings.Contains(req.Body, "http://example.com/real.jpg")
 		noTrackerImg := !strings.Contains(req.Body, "tracker.gif")
 		noBadScript := !strings.Contains(req.Body, "bad")
-		
+
 		// New assertions for iframe and feedsportal
 		hasIframeReplacement := strings.Contains(req.Body, "Embedded Content: https://www.youtube.com/embed/123")
 		noFeedsPortal := !strings.Contains(req.Body, "da.feedsportal.com")
@@ -249,7 +269,7 @@ func TestWatcher_HandleResponse_FullArticle(t *testing.T) {
 	// 2. Item Response
 	itemHtml := `<html><body><article><p>Full article content here.</p></article></body></html>`
 	
-	mPool.On("Submit", mock.MatchedBy(func(req mailer.MailRequest) bool {
+	mPool.On("Submit", mock.Anything, mock.MatchedBy(func(req mailer.MailRequest) bool {
 		return strings.Contains(req.Body, "Full article content here.") && !strings.Contains(req.Body, "Summary")
 	})).Return()
 	store.On("MarkSeen", ctx, feed.ID, "item-1").Return(nil)

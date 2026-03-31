@@ -29,6 +29,17 @@ type Subscription struct {
 	FeedID int64 `json:"feed_id"`
 }
 
+// OutboxEntry is a pending or delivered email in the transactional outbox.
+type OutboxEntry struct {
+	ID          int64     `json:"id"`
+	Recipients  []string  `json:"recipients"`
+	Subject     string    `json:"subject"`
+	Body        string    `json:"body"`
+	Status      string    `json:"status"`
+	CreatedAt   time.Time `json:"created_at"`
+	DeliveredAt time.Time `json:"delivered_at"`
+}
+
 // Item represents a single RSS entry.
 type Item struct {
 	FeedID      int64     `json:"feed_id"`

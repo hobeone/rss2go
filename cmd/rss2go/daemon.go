@@ -48,7 +48,7 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 	cPool := crawler.NewPool(cfg.CrawlerPoolSize, cfg.CrawlerTimeout, logger)
 	defer cPool.Close()
 
-	mPool := mailer.NewPool(cfg.MailerPoolSize, cfg, logger)
+	mPool := mailer.NewPool(cfg.MailerPoolSize, cfg, store, logger)
 	defer mPool.Close()
 
 	metrics.Start(ctx, cfg, logger)

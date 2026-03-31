@@ -290,7 +290,7 @@ func runTestFeed(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	mPool := mailer.NewPool(1, cfg, logger)
+	mPool := mailer.NewPool(1, cfg, nil, logger)
 	defer mPool.Close()
 
 	fmt.Printf("Sending item: %s to %s\n", item.Title, email)

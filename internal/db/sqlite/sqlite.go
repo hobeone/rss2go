@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/hobeone/rss2go/internal/models"
@@ -342,6 +343,62 @@ func (s *Store) Unsubscribe(ctx context.Context, userID int64, feedID int64) err
 	query := "DELETE FROM subscriptions WHERE user_id = ? AND feed_id = ?"
 	s.logger.Debug("executing exec", "query", query, "args", []any{userID, feedID})
 	_, err := s.db.ExecContext(ctx, query, userID, feedID)
+	return err
+}
+
+func (s *Store) EnqueueEmail(ctx context.Context, recipients []string, subject, body string) error {
+	query := "INSERT INTO outbox (recipients, subject, body) VALUES (?, ?, ?)"
+	joined := strings.Join(recipients, "\n")
+	s.logger.Debug("executing exec", "query", query)
+	_, err := s.db.ExecContext(ctx, query, joined, subject, body)
+	return err
+}
+
+// ClaimPendingEmail atomically claims one pending outbox row by transitioning
+// it to status='delivering'. Returns nil, nil when the queue is empty.
+func (s *Store) ClaimPendingEmail(ctx context.Context) (*models.OutboxEntry, error) {
+	query := `UPDATE outbox SET status = 'delivering'
+WHERE id = (SELECT id FROM outbox WHERE status = 'pending' ORDER BY created_at LIMIT 1)
+RETURNING id, recipients, subject, body, created_at`
+	s.logger.Debug("executing query", "query", query)
+	var e models.OutboxEntry
+	var joined string
+	var createdAt sql.NullTime
+	err := s.db.QueryRowContext(ctx, query).Scan(&e.ID, &joined, &e.Subject, &e.Body, &createdAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	e.Recipients = strings.Split(joined, "\n")
+	if createdAt.Valid {
+		e.CreatedAt = createdAt.Time
+	}
+	e.Status = "delivering"
+	return &e, nil
+}
+
+func (s *Store) MarkEmailDelivered(ctx context.Context, id int64) error {
+	query := "UPDATE outbox SET status = 'delivered', delivered_at = ? WHERE id = ?"
+	s.logger.Debug("executing exec", "query", query, "args", []any{time.Now(), id})
+	_, err := s.db.ExecContext(ctx, query, time.Now(), id)
+	return err
+}
+
+func (s *Store) ResetEmailToPending(ctx context.Context, id int64) error {
+	query := "UPDATE outbox SET status = 'pending' WHERE id = ?"
+	s.logger.Debug("executing exec", "query", query, "args", []any{id})
+	_, err := s.db.ExecContext(ctx, query, id)
+	return err
+}
+
+// ResetDeliveringToPending resets any rows stuck in 'delivering' status back
+// to 'pending'. Called once on startup to recover from a prior crash.
+func (s *Store) ResetDeliveringToPending(ctx context.Context) error {
+	query := "UPDATE outbox SET status = 'pending' WHERE status = 'delivering'"
+	s.logger.Debug("executing exec", "query", query)
+	_, err := s.db.ExecContext(ctx, query)
 	return err
 }
 

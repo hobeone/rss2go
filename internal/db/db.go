@@ -35,6 +35,13 @@ type Store interface {
 	IsSeen(ctx context.Context, feedID int64, guid string) (bool, error)
 	MarkSeen(ctx context.Context, feedID int64, guid string) error
 
+	// Outbox operations
+	EnqueueEmail(ctx context.Context, recipients []string, subject, body string) error
+	ClaimPendingEmail(ctx context.Context) (*models.OutboxEntry, error)
+	MarkEmailDelivered(ctx context.Context, id int64) error
+	ResetEmailToPending(ctx context.Context, id int64) error
+	ResetDeliveringToPending(ctx context.Context) error
+
 	// Lifecycle
 	Close() error
 }

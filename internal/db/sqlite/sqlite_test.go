@@ -161,6 +161,82 @@ func TestStore(t *testing.T) {
 	assert.True(t, fCleared.BackoffUntil.IsZero())
 }
 
+func TestStore_Outbox(t *testing.T) {
+	dbPath := "test_outbox.db"
+	defer func() {
+		if err := os.Remove(dbPath); err != nil {
+			t.Errorf("failed to remove test db: %v", err)
+		}
+	}()
+
+	logger := slog.New(slog.DiscardHandler)
+	store, err := New(dbPath, logger)
+	assert.NoError(t, err)
+	defer store.Close()
+
+	err = store.Migrate(rss2go.MigrationsFS)
+	assert.NoError(t, err)
+
+	ctx := context.Background()
+
+	// Queue is empty initially.
+	entry, err := store.ClaimPendingEmail(ctx)
+	assert.NoError(t, err)
+	assert.Nil(t, entry)
+
+	// Enqueue two emails.
+	recipients := []string{"a@example.com", "b@example.com"}
+	err = store.EnqueueEmail(ctx, recipients, "Subject 1", "Body 1")
+	assert.NoError(t, err)
+	err = store.EnqueueEmail(ctx, recipients, "Subject 2", "Body 2")
+	assert.NoError(t, err)
+
+	// Claim the first one — should be status 'delivering'.
+	e1, err := store.ClaimPendingEmail(ctx)
+	assert.NoError(t, err)
+	assert.NotNil(t, e1)
+	assert.Equal(t, "Subject 1", e1.Subject)
+	assert.Equal(t, "delivering", e1.Status)
+	assert.Equal(t, recipients, e1.Recipients)
+
+	// Reset back to pending and re-claim.
+	err = store.ResetEmailToPending(ctx, e1.ID)
+	assert.NoError(t, err)
+
+	// Now there are two pending; first is still e1.
+	e1again, err := store.ClaimPendingEmail(ctx)
+	assert.NoError(t, err)
+	assert.NotNil(t, e1again)
+	assert.Equal(t, e1.ID, e1again.ID)
+
+	// Mark it delivered.
+	err = store.MarkEmailDelivered(ctx, e1again.ID)
+	assert.NoError(t, err)
+
+	// Second email can now be claimed.
+	e2, err := store.ClaimPendingEmail(ctx)
+	assert.NoError(t, err)
+	assert.NotNil(t, e2)
+	assert.Equal(t, "Subject 2", e2.Subject)
+
+	// Mark as delivering, then simulate crash recovery via ResetDeliveringToPending.
+	err = store.ResetDeliveringToPending(ctx)
+	assert.NoError(t, err)
+
+	e2recovered, err := store.ClaimPendingEmail(ctx)
+	assert.NoError(t, err)
+	assert.NotNil(t, e2recovered)
+	assert.Equal(t, e2.ID, e2recovered.ID)
+
+	err = store.MarkEmailDelivered(ctx, e2recovered.ID)
+	assert.NoError(t, err)
+
+	// Queue is empty again.
+	empty, err := store.ClaimPendingEmail(ctx)
+	assert.NoError(t, err)
+	assert.Nil(t, empty)
+}
+
 func TestStore_Errors(t *testing.T) {
 	dbPath := "test_errors.db"
 	logger := slog.New(slog.DiscardHandler)
@@ -204,6 +280,21 @@ func TestStore_Errors(t *testing.T) {
 	assert.Error(t, err)
 
 	err = store.MarkSeen(ctx, 1, "guid")
+	assert.Error(t, err)
+
+	err = store.EnqueueEmail(ctx, []string{"a@b.com"}, "s", "b")
+	assert.Error(t, err)
+
+	_, err = store.ClaimPendingEmail(ctx)
+	assert.Error(t, err)
+
+	err = store.MarkEmailDelivered(ctx, 1)
+	assert.Error(t, err)
+
+	err = store.ResetEmailToPending(ctx, 1)
+	assert.Error(t, err)
+
+	err = store.ResetDeliveringToPending(ctx)
 	assert.Error(t, err)
 }
 

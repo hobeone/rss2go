@@ -6,9 +6,9 @@ Generated from codebase analysis against RSS2GO_SPEC.md.
 
 ## High Impact
 
-### 1. DB-backed outbox for emails
+### ~~1. DB-backed outbox for emails~~ ✓ Done
 
-Currently `MailRequest` objects live only in a buffered channel — a crash loses undelivered emails. A v2 `outbox` table (`id, feed_id, user_id, subject, body, status, created_at`) would let the mailer pool drain persisted jobs and mark them delivered, achieving at-least-once semantics with no added code complexity.
+~~Currently `MailRequest` objects live only in a buffered channel — a crash loses undelivered emails. A v2 `outbox` table (`id, feed_id, user_id, subject, body, status, created_at`) would let the mailer pool drain persisted jobs and mark them delivered, achieving at-least-once semantics with no added code complexity.~~
 
 ### 2. HTTP management API
 
