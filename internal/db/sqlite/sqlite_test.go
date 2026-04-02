@@ -30,7 +30,7 @@ func TestStore(t *testing.T) {
 	ctx := context.Background()
 
 	// Test AddFeed
-	id, err := store.AddFeed(ctx, "https://example.com/rss", "Example Feed", false)
+	id, err := store.AddFeed(ctx, "https://example.com/rss", "Example Feed", false, "readability", "")
 	assert.NoError(t, err)
 	assert.NotZero(t, id)
 
@@ -115,27 +115,35 @@ func TestStore(t *testing.T) {
 
 	// Test UpdateFeed
 	newTitle := "Updated Title"
-	err = store.UpdateFeed(ctx, id, nil, &newTitle, nil)
+	err = store.UpdateFeed(ctx, id, nil, &newTitle, nil, nil, nil)
 	assert.NoError(t, err)
 	fUpdatedTitle, _ := store.GetFeed(ctx, id)
 	assert.Equal(t, newTitle, fUpdatedTitle.Title)
 	assert.Equal(t, "https://example.com/rss", fUpdatedTitle.URL)
 
 	newURL := "https://example.com/new-rss"
-	err = store.UpdateFeed(ctx, id, &newURL, nil, nil)
+	err = store.UpdateFeed(ctx, id, &newURL, nil, nil, nil, nil)
 	assert.NoError(t, err)
 	fUpdatedURL, _ := store.GetFeed(ctx, id)
 	assert.Equal(t, newURL, fUpdatedURL.URL)
 	assert.Equal(t, newTitle, fUpdatedURL.Title)
 
 	fullArticle := true
-	err = store.UpdateFeed(ctx, id, nil, nil, &fullArticle)
+	err = store.UpdateFeed(ctx, id, nil, nil, &fullArticle, nil, nil)
 	assert.NoError(t, err)
 	fUpdatedFA, _ := store.GetFeed(ctx, id)
 	assert.True(t, fUpdatedFA.FullArticle)
 
+	strategy := "selector"
+	selConfig := "article.post-body"
+	err = store.UpdateFeed(ctx, id, nil, nil, nil, &strategy, &selConfig)
+	assert.NoError(t, err)
+	fUpdatedExt, _ := store.GetFeed(ctx, id)
+	assert.Equal(t, "selector", fUpdatedExt.ExtractionStrategy)
+	assert.Equal(t, "article.post-body", fUpdatedExt.ExtractionConfig)
+
 	// No changes
-	err = store.UpdateFeed(ctx, id, nil, nil, nil)
+	err = store.UpdateFeed(ctx, id, nil, nil, nil, nil, nil)
 	assert.NoError(t, err)
 
 	// Test UpdateFeedBackoff — set, persist, and clear
@@ -255,7 +263,7 @@ func TestStore_Errors(t *testing.T) {
 	_, err = store.GetFeed(ctx, 1)
 	assert.Error(t, err)
 
-	_, err = store.AddFeed(ctx, "url", "title", false)
+	_, err = store.AddFeed(ctx, "url", "title", false, "readability", "")
 	assert.Error(t, err)
 
 	err = store.UpdateFeedLastPoll(ctx, 1, "", "")

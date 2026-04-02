@@ -1,0 +1,9 @@
+{
+  "url": "https://www.oglaf.com/sparkle-and-drama/",
+  "captured_at": "2026-04-02T19:47:48Z",
+  "strategy": "selector",
+  "config": ".content",
+  "expected_contains": [
+    "https://media.oglaf.com/story/ttsparkleanddrama.jpg"
+  ]
+}

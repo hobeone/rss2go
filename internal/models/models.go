@@ -11,8 +11,10 @@ type Feed struct {
 	LastErrorTime  time.Time `json:"last_error_time"`
 	LastErrorCode  int       `json:"last_error_code"`
 	LastErrorSnippet string    `json:"last_error_snippet"`
-	FullArticle      bool      `json:"full_article"`
-	ETag             string    `json:"etag"`
+	FullArticle        bool      `json:"full_article"`
+	ExtractionStrategy string    `json:"extraction_strategy"`
+	ExtractionConfig   string    `json:"extraction_config"`
+	ETag               string    `json:"etag"`
 	LastModified     string    `json:"last_modified"`
 	BackoffUntil     time.Time `json:"backoff_until"`
 }

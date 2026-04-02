@@ -55,6 +55,13 @@ var (
 		RunE:  runTestFeed,
 	}
 
+	feedInfoCmd = &cobra.Command{
+		Use:   "info [feed-id or url]",
+		Short: "Show detailed information about a feed",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runFeedInfo,
+	}
+
 	feedErrorsCmd = &cobra.Command{
 		Use:   "errors",
 		Short: "List feeds with recorded errors",
@@ -69,17 +76,25 @@ var (
 )
 
 var (
-	catchupAll        bool
-	updateURL         string
-	updateTitle       string
-	feedFullArticle   bool
-	updateFullArticle bool
-	testFullArticle   bool
-	testToStdout      bool
+	catchupAll              bool
+	updateURL               string
+	updateTitle             string
+	feedFullArticle         bool
+	feedExtractionStrategy  string
+	feedExtractionConfig    string
+	updateFullArticle       bool
+	updateExtractionStrategy string
+	updateExtractionConfig  string
+	testFullArticle         bool
+	testExtractionStrategy  string
+	testExtractionConfig    string
+	testToStdout            bool
 )
 
 func init() {
 	feedAddCmd.Flags().BoolVar(&feedFullArticle, "full-article", false, "Extract full article content for this feed")
+	feedAddCmd.Flags().StringVar(&feedExtractionStrategy, "extraction-strategy", "readability", "Extraction strategy when full-article is set (readability, selector)")
+	feedAddCmd.Flags().StringVar(&feedExtractionConfig, "extraction-config", "", "Extraction config (e.g. CSS selector for selector strategy)")
 	feedCmd.AddCommand(feedAddCmd)
 
 	feedCmd.AddCommand(feedDelCmd)
@@ -87,11 +102,17 @@ func init() {
 	feedUpdateCmd.Flags().StringVar(&updateURL, "url", "", "New URL for the feed")
 	feedUpdateCmd.Flags().StringVar(&updateTitle, "title", "", "New title for the feed")
 	feedUpdateCmd.Flags().BoolVar(&updateFullArticle, "full-article", false, "Extract full article content for this feed")
+	feedUpdateCmd.Flags().StringVar(&updateExtractionStrategy, "extraction-strategy", "", "Extraction strategy (readability, selector)")
+	feedUpdateCmd.Flags().StringVar(&updateExtractionConfig, "extraction-config", "", "Extraction config (e.g. CSS selector for selector strategy)")
 	feedCmd.AddCommand(feedUpdateCmd)
 
 	feedCmd.AddCommand(feedListCmd)
 
-	feedTestCmd.Flags().BoolVar(&testFullArticle, "full-article", false, "Test full article extraction")
+	feedCmd.AddCommand(feedInfoCmd)
+
+	feedTestCmd.Flags().BoolVar(&testFullArticle, "full-article", false, "Fetch and extract the full article (implied by --extraction-strategy/--extraction-config)")
+	feedTestCmd.Flags().StringVar(&testExtractionStrategy, "extraction-strategy", "readability", "Extraction strategy: readability or selector (implies --full-article)")
+	feedTestCmd.Flags().StringVar(&testExtractionConfig, "extraction-config", "", "Extraction config, e.g. CSS selector for selector strategy (implies --full-article)")
 	feedTestCmd.Flags().BoolVar(&testToStdout, "stdout", false, "Output to stdout instead of mailing")
 	feedCmd.AddCommand(feedTestCmd)
 
@@ -110,11 +131,11 @@ func runAddFeed(cmd *cobra.Command, args []string) error {
 	}
 	defer store.Close()
 
-	id, err := store.AddFeed(context.Background(), args[0], args[1], feedFullArticle)
+	id, err := store.AddFeed(context.Background(), args[0], args[1], feedFullArticle, feedExtractionStrategy, feedExtractionConfig)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Added feed: %s (ID: %d, full_article: %v)\n", args[1], id, feedFullArticle)
+	fmt.Printf("Added feed: %s (ID: %d, full_article: %v, strategy: %s)\n", args[1], id, feedFullArticle, feedExtractionStrategy)
 	return nil
 }
 
@@ -153,8 +174,23 @@ func runUpdateFeed(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid feed ID: %s", args[0])
 	}
 
+	ctx := context.Background()
+
+	before, err := store.GetFeed(ctx, id)
+	if err != nil {
+		return err
+	}
+	if before == nil {
+		return fmt.Errorf("feed not found: %d", id)
+	}
+	subscribers, err := store.GetUsersForFeed(ctx, before.ID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch subscribers: %w", err)
+	}
+
 	var urlPtr, titlePtr *string
 	var fullArticlePtr *bool
+	var extractionStrategyPtr, extractionConfigPtr *string
 	if cmd.Flags().Changed("url") {
 		urlPtr = &updateURL
 	}
@@ -164,15 +200,30 @@ func runUpdateFeed(cmd *cobra.Command, args []string) error {
 	if cmd.Flags().Changed("full-article") {
 		fullArticlePtr = &updateFullArticle
 	}
-
-	if urlPtr == nil && titlePtr == nil && fullArticlePtr == nil {
-		return fmt.Errorf("at least one of --url, --title, or --full-article must be provided")
+	if cmd.Flags().Changed("extraction-strategy") {
+		extractionStrategyPtr = &updateExtractionStrategy
+	}
+	if cmd.Flags().Changed("extraction-config") {
+		extractionConfigPtr = &updateExtractionConfig
 	}
 
-	if err := store.UpdateFeed(context.Background(), id, urlPtr, titlePtr, fullArticlePtr); err != nil {
+	if urlPtr == nil && titlePtr == nil && fullArticlePtr == nil && extractionStrategyPtr == nil && extractionConfigPtr == nil {
+		return fmt.Errorf("at least one of --url, --title, --full-article, --extraction-strategy, or --extraction-config must be provided")
+	}
+
+	if err := store.UpdateFeed(ctx, id, urlPtr, titlePtr, fullArticlePtr, extractionStrategyPtr, extractionConfigPtr); err != nil {
 		return err
 	}
-	fmt.Printf("Updated feed ID: %d\n", id)
+
+	after, err := store.GetFeed(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("Before:")
+	printFeedInfo(before, subscribers)
+	fmt.Println("\nAfter:")
+	printFeedInfo(after, subscribers)
 	return nil
 }
 
@@ -188,12 +239,101 @@ func runListFeeds(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Printf("%-5s | %-30s | %-12s | %s\n", "ID", "Title", "FullArticle", "URL")
-	fmt.Println("-----------------------------------------------------------------------------")
+	fmt.Printf("%-5s | %-30s | %-12s | %-12s | %s\n", "ID", "Title", "FullArticle", "Strategy", "URL")
+	fmt.Println("---------------------------------------------------------------------------------------------")
 	for _, f := range feeds {
-		fmt.Printf("%-5d | %-30s | %-12v | %s\n", f.ID, f.Title, f.FullArticle, f.URL)
+		fmt.Printf("%-5d | %-30s | %-12v | %-12s | %s\n", f.ID, f.Title, f.FullArticle, f.ExtractionStrategy, f.URL)
 	}
 	return nil
+}
+
+func runFeedInfo(cmd *cobra.Command, args []string) error {
+	_, _, store, err := setup()
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+	arg := args[0]
+
+	var f *models.Feed
+	var id int64
+	if _, err := fmt.Sscanf(arg, "%d", &id); err == nil {
+		f, err = store.GetFeed(ctx, id)
+		if err != nil {
+			return err
+		}
+	} else {
+		f, err = store.GetFeedByURL(ctx, arg)
+		if err != nil {
+			return err
+		}
+	}
+
+	if f == nil {
+		return fmt.Errorf("feed not found: %s", arg)
+	}
+
+	subscribers, err := store.GetUsersForFeed(ctx, f.ID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch subscribers: %w", err)
+	}
+
+	printFeedInfo(f, subscribers)
+	return nil
+}
+
+const feedInfoSep = "─────────────────────────────────────────────"
+
+func printFeedInfo(f *models.Feed, subscribers []models.User) {
+	fmt.Println(feedInfoSep)
+	fmt.Printf("%-18s %d\n", "ID:", f.ID)
+	fmt.Printf("%-18s %s\n", "Title:", f.Title)
+	fmt.Printf("%-18s %s\n", "URL:", f.URL)
+	fmt.Println(feedInfoSep)
+
+	fmt.Printf("%-18s %v\n", "Full Article:", f.FullArticle)
+	fmt.Printf("%-18s %s\n", "Strategy:", f.ExtractionStrategy)
+	if f.ExtractionConfig != "" {
+		fmt.Printf("%-18s %s\n", "Extraction Config:", f.ExtractionConfig)
+	}
+	fmt.Println(feedInfoSep)
+
+	if f.LastPoll.IsZero() {
+		fmt.Printf("%-18s never\n", "Last Poll:")
+	} else {
+		fmt.Printf("%-18s %s\n", "Last Poll:", f.LastPoll.Format("2006-01-02 15:04:05 MST"))
+	}
+	if f.ETag != "" {
+		fmt.Printf("%-18s %s\n", "ETag:", f.ETag)
+	}
+	if f.LastModified != "" {
+		fmt.Printf("%-18s %s\n", "Last-Modified:", f.LastModified)
+	}
+	if !f.BackoffUntil.IsZero() {
+		fmt.Printf("%-18s %s\n", "Backoff Until:", f.BackoffUntil.Format("2006-01-02 15:04:05 MST"))
+	}
+
+	if f.LastErrorCode != 0 || !f.LastErrorTime.IsZero() {
+		fmt.Println(feedInfoSep)
+		fmt.Printf("%-18s %d\n", "Last Error Code:", f.LastErrorCode)
+		fmt.Printf("%-18s %s\n", "Last Error Time:", f.LastErrorTime.Format("2006-01-02 15:04:05 MST"))
+		if f.LastErrorSnippet != "" {
+			fmt.Printf("%-18s %s\n", "Last Error:", f.LastErrorSnippet)
+		}
+	}
+
+	fmt.Println(feedInfoSep)
+	if len(subscribers) == 0 {
+		fmt.Printf("%-18s none\n", "Subscribers:")
+	} else {
+		fmt.Printf("Subscribers (%d):\n", len(subscribers))
+		for _, u := range subscribers {
+			fmt.Printf("  - %s (ID: %d)\n", u.Email, u.ID)
+		}
+	}
+	fmt.Println(feedInfoSep)
 }
 
 func runTestFeed(cmd *cobra.Command, args []string) error {
@@ -226,9 +366,19 @@ func runTestFeed(cmd *cobra.Command, args []string) error {
 
 	item := feed.Items[0]
 
+	// Providing --extraction-strategy or --extraction-config implies --full-article.
+	doExtraction := testFullArticle ||
+		cmd.Flags().Changed("extraction-strategy") ||
+		cmd.Flags().Changed("extraction-config")
+
 	var extractedContent string
-	if testFullArticle && item.Link != "" {
-		fmt.Printf("Extracting full article from: %s\n", item.Link)
+	if doExtraction && item.Link != "" {
+		ext, err := extractor.New(testExtractionStrategy, testExtractionConfig)
+		if err != nil {
+			return fmt.Errorf("invalid extraction config: %w", err)
+		}
+
+		fmt.Printf("Extracting full article from: %s (strategy: %s)\n", item.Link, testExtractionStrategy)
 		cPool := crawler.NewPool(1, cfg.CrawlerTimeout, logger)
 
 		reqCtx, cancel := context.WithTimeout(context.Background(), cfg.CrawlerTimeout)
@@ -245,7 +395,7 @@ func runTestFeed(cmd *cobra.Command, args []string) error {
 			if resp.Error != nil {
 				return fmt.Errorf("failed to fetch full article: %w", resp.Error)
 			}
-			extracted, err := extractor.Extract(bytes.NewReader(resp.Body), item.Link, cfg.CrawlerTimeout)
+			extracted, err := ext.Extract(bytes.NewReader(resp.Body), item.Link, cfg.CrawlerTimeout, logger)
 			if err != nil {
 				return fmt.Errorf("failed to extract full article: %w", err)
 			}

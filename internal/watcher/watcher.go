@@ -288,7 +288,12 @@ func (w *Watcher) handleItemResponse(ctx context.Context, resp crawler.CrawlResp
 
 	var extractedContent string
 	if resp.Error == nil {
-		extracted, err := extractor.Extract(bytes.NewReader(resp.Body), itm.Link, 30*time.Second)
+		ext, extErr := extractor.New(w.feed.ExtractionStrategy, w.feed.ExtractionConfig)
+		if extErr != nil {
+			w.logger.Warn("invalid extraction config, falling back to readability", "error", extErr)
+			ext, _ = extractor.New(extractor.StrategyReadability, "")
+		}
+		extracted, err := ext.Extract(bytes.NewReader(resp.Body), itm.Link, 30*time.Second, w.logger)
 		if err != nil {
 			w.logger.Warn("failed to extract content", "url", itm.Link, "error", err)
 		} else {

@@ -38,12 +38,12 @@ func (m *mockStore) GetFeedByURL(ctx context.Context, url string) (*models.Feed,
 	f, _ := args.Get(0).(*models.Feed)
 	return f, args.Error(1)
 }
-func (m *mockStore) AddFeed(ctx context.Context, url string, title string, fullArticle bool) (int64, error) {
-	args := m.Called(ctx, url, title, fullArticle)
+func (m *mockStore) AddFeed(ctx context.Context, url string, title string, fullArticle bool, extractionStrategy string, extractionConfig string) (int64, error) {
+	args := m.Called(ctx, url, title, fullArticle, extractionStrategy, extractionConfig)
 	return args.Get(0).(int64), args.Error(1)
 }
-func (m *mockStore) UpdateFeed(ctx context.Context, id int64, url *string, title *string, fullArticle *bool) error {
-	args := m.Called(ctx, id, url, title, fullArticle)
+func (m *mockStore) UpdateFeed(ctx context.Context, id int64, url *string, title *string, fullArticle *bool, extractionStrategy *string, extractionConfig *string) error {
+	args := m.Called(ctx, id, url, title, fullArticle, extractionStrategy, extractionConfig)
 	return args.Error(0)
 }
 func (m *mockStore) DeleteFeed(ctx context.Context, id int64) error {

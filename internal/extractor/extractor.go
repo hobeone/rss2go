@@ -1,31 +1,45 @@
 package extractor
 
 import (
-	"bytes"
 	"fmt"
 	"io"
-	"net/url"
+	"log/slog"
 	"time"
-
-	"codeberg.org/readeck/go-readability/v2"
 )
 
-// Extract pulls the main content from an HTML document.
-func Extract(html io.Reader, pageURL string, timeout time.Duration) (string, error) {
-	parsedURL, err := url.Parse(pageURL)
-	if err != nil {
-		return "", fmt.Errorf("invalid URL: %w", err)
-	}
+// Strategy constants for extraction methods.
+const (
+	StrategyReadability = "readability"
+	StrategySelector    = "selector"
+)
 
-	article, err := readability.FromReader(html, parsedURL)
-	if err != nil {
-		return "", fmt.Errorf("readability extraction failed: %w", err)
-	}
+// Extractor pulls the main content from an HTML document.
+type Extractor interface {
+	Extract(html io.Reader, pageURL string, timeout time.Duration, logger *slog.Logger) (string, error)
+}
 
-	var buf bytes.Buffer
-	if err := article.RenderHTML(&buf); err != nil {
-		return "", fmt.Errorf("failed to render article HTML: %w", err)
+// New returns an Extractor for the given strategy and config.
+// An empty strategy defaults to StrategyReadability.
+func New(strategy, config string) (Extractor, error) {
+	if strategy == "" {
+		strategy = StrategyReadability
 	}
+	switch strategy {
+	case StrategyReadability:
+		return &ReadabilityExtractor{}, nil
+	case StrategySelector:
+		if config == "" {
+			return nil, fmt.Errorf("selector strategy requires a CSS selector in extraction_config")
+		}
+		return &SelectorExtractor{Selector: config}, nil
+	default:
+		return nil, fmt.Errorf("unknown extraction strategy %q", strategy)
+	}
+}
 
-	return buf.String(), nil
+// Extract is a convenience wrapper that constructs an extractor and runs it.
+// Kept for callers that don't need per-feed strategy selection.
+func Extract(html io.Reader, pageURL string, timeout time.Duration, logger *slog.Logger) (string, error) {
+	ext := &ReadabilityExtractor{}
+	return ext.Extract(html, pageURL, timeout, logger)
 }
