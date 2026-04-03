@@ -73,6 +73,17 @@ var (
 		Short: "Mark all items in a feed (or all feeds) as seen without mailing",
 		RunE:  runCatchup,
 	}
+
+	feedRewindCmd = &cobra.Command{
+		Use:   "rewind [feed-id] [count]",
+		Short: "Unsee the N most recent items and schedule an immediate poll",
+		Long: `Removes the N most recently seen items from the feed's history and
+resets the poll timer so the daemon fetches the feed on its next resync cycle.
+
+Useful when testing a new extraction strategy or when items were missed.`,
+		Args: cobra.ExactArgs(2),
+		RunE: runRewindFeed,
+	}
 )
 
 var (
@@ -120,6 +131,8 @@ func init() {
 
 	feedCatchupCmd.Flags().BoolVar(&catchupAll, "all", false, "catchup all feeds")
 	feedCmd.AddCommand(feedCatchupCmd)
+
+	feedCmd.AddCommand(feedRewindCmd)
 
 	rootCmd.AddCommand(feedCmd)
 }
@@ -541,5 +554,50 @@ func runCatchup(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  Done. Marked %d new items as seen.\n", markedCount)
 	}
 
+	return nil
+}
+
+func runRewindFeed(cmd *cobra.Command, args []string) error {
+	_, _, store, err := setup()
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	var id int64
+	if _, err := fmt.Sscanf(args[0], "%d", &id); err != nil {
+		return fmt.Errorf("invalid feed ID: %s", args[0])
+	}
+
+	var n int
+	if _, err := fmt.Sscanf(args[1], "%d", &n); err != nil || n <= 0 {
+		return fmt.Errorf("count must be a positive integer, got: %s", args[1])
+	}
+
+	ctx := context.Background()
+
+	f, err := store.GetFeed(ctx, id)
+	if err != nil {
+		return err
+	}
+	if f == nil {
+		return fmt.Errorf("feed not found: %d", id)
+	}
+
+	guids, err := store.UnseenRecentItems(ctx, id, n)
+	if err != nil {
+		return fmt.Errorf("failed to unsee items: %w", err)
+	}
+
+	if err := store.ResetFeedPoll(ctx, id); err != nil {
+		return fmt.Errorf("failed to reset poll time: %w", err)
+	}
+
+	fmt.Printf("Feed: %s\n", f.Title)
+	fmt.Printf("Removed %d seen item(s) (requested %d):\n", len(guids), n)
+	for _, guid := range guids {
+		fmt.Printf("  - %s\n", guid)
+	}
+	fmt.Println("Poll timer reset — the daemon will fetch this feed on its next resync cycle.")
 	return nil
 }

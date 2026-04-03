@@ -95,6 +95,14 @@ func (m *mockStore) MarkSeen(ctx context.Context, feedID int64, guid string) err
 	args := m.Called(ctx, feedID, guid)
 	return args.Error(0)
 }
+func (m *mockStore) UnseenRecentItems(ctx context.Context, feedID int64, n int) ([]string, error) {
+	args := m.Called(ctx, feedID, n)
+	return args.Get(0).([]string), args.Error(1)
+}
+func (m *mockStore) ResetFeedPoll(ctx context.Context, id int64) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
 func (m *mockStore) UpdateFeedBackoff(ctx context.Context, id int64, backoffUntil time.Time) error {
 	args := m.Called(ctx, id, backoffUntil)
 	return args.Error(0)

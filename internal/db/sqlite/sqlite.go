@@ -453,3 +453,36 @@ func (s *Store) MarkSeen(ctx context.Context, feedID int64, guid string) error {
 	_, err := s.db.ExecContext(ctx, query, feedID, guid)
 	return err
 }
+
+// UnseenRecentItems removes the N most recently seen items for a feed,
+// ordered by seen_at DESC. Returns the GUIDs of the deleted rows.
+func (s *Store) UnseenRecentItems(ctx context.Context, feedID int64, n int) ([]string, error) {
+	query := `DELETE FROM seen_items WHERE feed_id = ? AND guid IN (
+		SELECT guid FROM seen_items WHERE feed_id = ? ORDER BY seen_at DESC LIMIT ?
+	) RETURNING guid`
+	s.logger.Debug("executing query", "query", query, "args", []any{feedID, feedID, n})
+	rows, err := s.db.QueryContext(ctx, query, feedID, feedID, n)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var guids []string
+	for rows.Next() {
+		var guid string
+		if err := rows.Scan(&guid); err != nil {
+			return nil, err
+		}
+		guids = append(guids, guid)
+	}
+	return guids, rows.Err()
+}
+
+// ResetFeedPoll sets last_poll to NULL so the scheduler treats the feed as
+// never-polled and dispatches a crawl on the next resync cycle.
+func (s *Store) ResetFeedPoll(ctx context.Context, id int64) error {
+	query := "UPDATE feeds SET last_poll = NULL WHERE id = ?"
+	s.logger.Debug("executing exec", "query", query, "args", []any{id})
+	_, err := s.db.ExecContext(ctx, query, id)
+	return err
+}

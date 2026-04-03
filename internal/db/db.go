@@ -35,6 +35,8 @@ type Store interface {
 	// Item operations
 	IsSeen(ctx context.Context, feedID int64, guid string) (bool, error)
 	MarkSeen(ctx context.Context, feedID int64, guid string) error
+	UnseenRecentItems(ctx context.Context, feedID int64, n int) ([]string, error)
+	ResetFeedPoll(ctx context.Context, id int64) error
 
 	// Outbox operations
 	EnqueueEmail(ctx context.Context, recipients []string, subject, body string) error
