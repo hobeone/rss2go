@@ -1,14 +1,12 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"os"
 
 	"github.com/hobeone/rss2go"
 	"github.com/hobeone/rss2go/internal/config"
-	"github.com/hobeone/rss2go/internal/db"
 	"github.com/hobeone/rss2go/internal/db/sqlite"
 	"github.com/hobeone/rss2go/internal/version"
 	"github.com/spf13/cobra"
@@ -77,19 +75,3 @@ func setup() (*config.Config, *slog.Logger, *sqlite.Store, error) {
 	return cfg, logger, store, nil
 }
 
-// getFeedID resolves a feed ID from either a numeric string or a URL.
-func getFeedID(ctx context.Context, store db.Store, arg string) (int64, error) {
-	var id int64
-	if _, err := fmt.Sscanf(arg, "%d", &id); err == nil {
-		return id, nil
-	}
-
-	f, err := store.GetFeedByURL(ctx, arg)
-	if err != nil {
-		return 0, err
-	}
-	if f == nil {
-		return 0, fmt.Errorf("feed not found with URL: %s", arg)
-	}
-	return f.ID, nil
-}
