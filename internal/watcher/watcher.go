@@ -214,8 +214,7 @@ func (w *Watcher) handleFeedResponse(ctx context.Context, resp crawler.CrawlResp
 	}
 
 	newItemsCount := 0
-	for item := range feed.Items {
-		itm := feed.Items[item]
+	for _, itm := range feed.Items {
 		guid := itm.GUID
 		if guid == "" {
 			guid = itm.Link

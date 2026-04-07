@@ -23,8 +23,11 @@ func TestExtract(t *testing.T) {
 </body>
 </html>
 `
-	pageURL := "http://example.com/article"
-	content, err := Extract(strings.NewReader(html), pageURL, 5*time.Second, discardLogger)
+	ext, err := New(StrategyReadability, "")
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
+	}
+	content, err := ext.Extract(strings.NewReader(html), "http://example.com/article", 5*time.Second, discardLogger)
 	if err != nil {
 		t.Fatalf("Extract failed: %v", err)
 	}
@@ -38,7 +41,11 @@ func TestExtract(t *testing.T) {
 }
 
 func TestExtract_InvalidURL(t *testing.T) {
-	_, err := Extract(strings.NewReader("<html></html>"), "::invalid-url::", 5*time.Second, discardLogger)
+	ext, err := New(StrategyReadability, "")
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
+	}
+	_, err = ext.Extract(strings.NewReader("<html></html>"), "::invalid-url::", 5*time.Second, discardLogger)
 	if err == nil {
 		t.Error("expected error for invalid URL, got nil")
 	}

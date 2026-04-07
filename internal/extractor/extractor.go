@@ -37,9 +37,3 @@ func New(strategy, config string) (Extractor, error) {
 	}
 }
 
-// Extract is a convenience wrapper that constructs an extractor and runs it.
-// Kept for callers that don't need per-feed strategy selection.
-func Extract(html io.Reader, pageURL string, timeout time.Duration, logger *slog.Logger) (string, error) {
-	ext := &ReadabilityExtractor{}
-	return ext.Extract(html, pageURL, timeout, logger)
-}
