@@ -19,41 +19,47 @@ var (
 	FeedsCrawledErrors uint64
 )
 
-// Start starts a simple metrics HTTP server if configured and initiates periodic internal stats logging.
+// Start starts the Prometheus-style metrics HTTP server.
+// It is a no-op when cfg.MetricsAddr is empty.
 func Start(ctx context.Context, cfg *config.Config, logger *slog.Logger) {
-	if cfg.MetricsAddr != "" {
-		mux := http.NewServeMux()
-		mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "text/plain")
-			fmt.Fprintf(w, "# HELP feeds_crawled_total The total number of feeds crawled.\n")
-			fmt.Fprintf(w, "# TYPE feeds_crawled_total counter\n")
-			fmt.Fprintf(w, "feeds_crawled_total %d\n", atomic.LoadUint64(&FeedsCrawledTotal))
-
-			fmt.Fprintf(w, "# HELP feeds_crawled_errors The total number of feed crawl errors.\n")
-			fmt.Fprintf(w, "# TYPE feeds_crawled_errors counter\n")
-			fmt.Fprintf(w, "feeds_crawled_errors %d\n", atomic.LoadUint64(&FeedsCrawledErrors))
-
-			fmt.Fprintf(w, "# HELP emails_sent_total The total number of emails sent.\n")
-			fmt.Fprintf(w, "# TYPE emails_sent_total counter\n")
-			fmt.Fprintf(w, "emails_sent_total %d\n", atomic.LoadUint64(&EmailsSentTotal))
-		})
-
-		logger.Info("starting metrics server", "addr", cfg.MetricsAddr)
-		go func() {
-			server := &http.Server{
-				Addr:         cfg.MetricsAddr,
-				Handler:      mux,
-				ReadTimeout:  5 * time.Second,
-				WriteTimeout: 10 * time.Second,
-				IdleTimeout:  120 * time.Second,
-			}
-			if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				logger.Error("metrics server failed", "error", err)
-			}
-		}()
+	if cfg.MetricsAddr == "" {
+		return
 	}
 
-	// Internal stats logging loop
+	mux := http.NewServeMux()
+	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		fmt.Fprintf(w, "# HELP feeds_crawled_total The total number of feeds crawled.\n")
+		fmt.Fprintf(w, "# TYPE feeds_crawled_total counter\n")
+		fmt.Fprintf(w, "feeds_crawled_total %d\n", atomic.LoadUint64(&FeedsCrawledTotal))
+
+		fmt.Fprintf(w, "# HELP feeds_crawled_errors The total number of feed crawl errors.\n")
+		fmt.Fprintf(w, "# TYPE feeds_crawled_errors counter\n")
+		fmt.Fprintf(w, "feeds_crawled_errors %d\n", atomic.LoadUint64(&FeedsCrawledErrors))
+
+		fmt.Fprintf(w, "# HELP emails_sent_total The total number of emails sent.\n")
+		fmt.Fprintf(w, "# TYPE emails_sent_total counter\n")
+		fmt.Fprintf(w, "emails_sent_total %d\n", atomic.LoadUint64(&EmailsSentTotal))
+	})
+
+	logger.Info("starting metrics server", "addr", cfg.MetricsAddr)
+	go func() {
+		server := &http.Server{
+			Addr:         cfg.MetricsAddr,
+			Handler:      mux,
+			ReadTimeout:  5 * time.Second,
+			WriteTimeout: 10 * time.Second,
+			IdleTimeout:  120 * time.Second,
+		}
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("metrics server failed", "error", err)
+		}
+	}()
+}
+
+// StartStatsLoop starts a goroutine that logs runtime and application stats
+// once per minute. It runs for the lifetime of ctx.
+func StartStatsLoop(ctx context.Context, logger *slog.Logger) {
 	go func() {
 		ticker := time.NewTicker(1 * time.Minute)
 		defer ticker.Stop()

@@ -51,6 +51,7 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 	mPool := mailer.NewPool(cfg.MailerPoolSize, cfg, store, logger)
 	defer mPool.Close()
 
+	metrics.StartStatsLoop(ctx, logger)
 	metrics.Start(ctx, cfg, logger)
 
 	scheduler := watcher.NewScheduler(cPool, mPool, store, cfg.PollInterval, cfg.PollJitter, cfg.MaxImageWidth, logger)
