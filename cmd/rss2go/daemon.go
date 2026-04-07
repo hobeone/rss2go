@@ -36,7 +36,7 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 
 	logger := getLogger(cfg)
 
-	store, err := getStore(logger)
+	store, err := getStore(cfg, logger)
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}

@@ -51,11 +51,7 @@ func getLogger(cfg *config.Config) *slog.Logger {
 	return logger
 }
 
-func getStore(logger *slog.Logger) (*sqlite.Store, error) {
-	cfg, err := config.Load(cfgFile)
-	if err != nil {
-		return nil, err
-	}
+func getStore(cfg *config.Config, logger *slog.Logger) (*sqlite.Store, error) {
 	store, err := sqlite.New(cfg.DBPath, logger)
 	if err != nil {
 		return nil, err
@@ -74,7 +70,7 @@ func setup() (*config.Config, *slog.Logger, *sqlite.Store, error) {
 		return nil, nil, nil, err
 	}
 	logger := getLogger(cfg)
-	store, err := getStore(logger)
+	store, err := getStore(cfg, logger)
 	if err != nil {
 		return nil, nil, nil, err
 	}
