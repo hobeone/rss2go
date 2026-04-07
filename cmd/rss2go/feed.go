@@ -429,12 +429,12 @@ func runTestFeed(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	mPool := mailer.NewPool(1, cfg, nil, logger)
-	defer mPool.Close()
+	sender := mailer.NewSender(cfg, logger)
+	defer sender.Close()
 
 	fmt.Printf("Sending item: %s to %s\n", item.Title, email)
 
-	if err := mPool.Send(mailer.MailRequest{
+	if err := sender.Send(mailer.MailRequest{
 		To:      []string{email},
 		Subject: "[TEST] " + subject,
 		Body:    body,

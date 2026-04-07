@@ -24,97 +24,230 @@ type MailRequest struct {
 	Body    string
 }
 
-// Sender is an interface for sending emails.
-type Sender func(req MailRequest) error
+// sendFunc is the injectable sender used for testing.
+type sendFunc func(req MailRequest) error
 
-// Pool is a pool of workers for sending emails.
-//
-// When created with a non-nil db.Store it operates in outbox mode: Submit
-// persists the request to the DB and workers drain by claiming rows. This
-// gives at-least-once delivery across process restarts.
-//
-// When store is nil (CLI / test use) it falls back to a buffered channel
-// (best-effort, in-process delivery).
-type Pool struct {
+const (
+	maxRetries    = 5
+	initialDelay  = 10 * time.Second
+	maxRetryDelay = 30 * time.Minute
+)
+
+// Sender delivers email directly with SMTP connection pooling and retry.
+// Suitable for CLI commands that send one-off emails without pool overhead.
+type Sender struct {
 	config *config.Config
 	logger *slog.Logger
-	sender Sender
+	send   sendFunc
 
-	// outbox mode (store != nil)
-	store        db.Store
-	notifyC      chan struct{}
-	outboxCtx    context.Context
-	outboxCancel context.CancelFunc
-	wg           sync.WaitGroup
-
-	// legacy mode (store == nil)
-	requests chan MailRequest
-
-	// SMTP persistence management
 	mu         sync.Mutex
 	smtpDialer *gomail.Dialer
 	smtpConn   gomail.SendCloser
 	idleTimer  *time.Timer
 }
 
-// NewPool creates a new mailer pool.
-//
-// Pass a non-nil store to enable DB-backed outbox mode. Pass nil for simple
-// in-process delivery (suitable for CLI commands that call Send directly).
-func NewPool(size int, cfg *config.Config, store db.Store, logger *slog.Logger) *Pool {
-	p := &Pool{
+// NewSender creates a Sender for direct, synchronous email delivery.
+func NewSender(cfg *config.Config, logger *slog.Logger) *Sender {
+	s := &Sender{
 		config: cfg,
 		logger: logger.With("component", "mailer"),
-		store:  store,
 	}
-
 	if cfg.SMTPServer != "" {
-		p.smtpDialer = gomail.NewDialer(cfg.SMTPServer, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass)
+		s.smtpDialer = gomail.NewDialer(cfg.SMTPServer, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass)
 	}
-	p.sender = p.defaultSender
+	s.send = s.defaultSender
+	return s
+}
 
-	if store != nil {
-		// Outbox mode: recover any rows stuck in 'delivering' from a prior crash.
-		if err := store.ResetDeliveringToPending(context.Background()); err != nil {
-			p.logger.Error("failed to reset delivering→pending on startup", "error", err)
+// Send delivers an email immediately, retrying with exponential backoff on failure.
+func (s *Sender) Send(req MailRequest) error {
+	var err error
+	for i := 0; i <= maxRetries; i++ {
+		err = s.send(req)
+		if err == nil {
+			atomic.AddUint64(&metrics.EmailsSentTotal, 1)
+			return nil
 		}
+		if i < maxRetries {
+			delay := min(time.Duration(math.Pow(2, float64(i)))*initialDelay, maxRetryDelay)
+			s.logger.Warn("failed to send email, retrying", "attempt", i+1, "delay", delay, "error", err)
+			time.Sleep(delay)
+		}
+	}
+	return fmt.Errorf("failed to send email after %d retries: %w", maxRetries, err)
+}
 
-		p.outboxCtx, p.outboxCancel = context.WithCancel(context.Background())
-		p.notifyC = make(chan struct{}, 1)
+// Close closes any open SMTP connection held by the Sender.
+func (s *Sender) Close() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closeSMTP()
+	if s.idleTimer != nil {
+		s.idleTimer.Stop()
+	}
+}
 
-		p.wg.Add(size)
-		for i := range size {
-			go p.outboxWorker(i)
+func (s *Sender) defaultSender(req MailRequest) error {
+	if s.config.SMTPServer != "" {
+		return s.persistentSMTPSender(req)
+	}
+	if s.config.Sendmail != "" {
+		return s.sendSendmail(req)
+	}
+	return fmt.Errorf("no mailer configured (SMTP or Sendmail)")
+}
+
+func (s *Sender) persistentSMTPSender(req MailRequest) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.smtpConn == nil {
+		s.logger.Debug("opening new SMTP connection", "server", s.config.SMTPServer)
+		conn, err := s.smtpDialer.Dial()
+		if err != nil {
+			s.logger.Error("failed to dial SMTP server", "error", err)
+			return fmt.Errorf("failed to dial SMTP: %w", err)
 		}
-	} else {
-		// Legacy mode: buffered channel, one goroutine per worker.
-		p.requests = make(chan MailRequest, size*100)
-		for i := range size {
-			go p.channelWorker(i)
+		s.smtpConn = conn
+	}
+
+	m := gomail.NewMessage()
+	m.SetHeader("From", s.config.SMTPSender)
+	m.SetHeader("To", req.To...)
+	m.SetHeader("Subject", req.Subject)
+	m.SetBody("text/html", req.Body)
+
+	if err := gomail.Send(s.smtpConn, m); err != nil {
+		s.logger.Error("SMTP send failed",
+			"server", s.config.SMTPServer,
+			"to", req.To,
+			"subject", req.Subject,
+			"error", err,
+		)
+		s.closeSMTP()
+		return fmt.Errorf("failed to send via SMTP: %w", err)
+	}
+
+	s.logger.Info("email sent successfully", "to", req.To, "subject", req.Subject)
+
+	if s.idleTimer != nil {
+		s.idleTimer.Stop()
+	}
+	s.idleTimer = time.AfterFunc(3*time.Minute, func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.smtpConn != nil {
+			s.logger.Debug("closing idle SMTP connection", "server", s.config.SMTPServer)
+			s.closeSMTP()
 		}
+	})
+
+	return nil
+}
+
+func (s *Sender) closeSMTP() {
+	if s.smtpConn != nil {
+		s.logger.Debug("closing SMTP connection")
+		if err := s.smtpConn.Close(); err != nil {
+			s.logger.Debug("SMTP close error", "error", err)
+		}
+		s.smtpConn = nil
+	}
+}
+
+func (s *Sender) sendSendmail(req MailRequest) error {
+	// #nosec G204 - sendmail path is part of application configuration
+	cmd := exec.Command(s.config.Sendmail, "-t")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+
+	msg := fmt.Sprintf("To: %s\nSubject: %s\nContent-Type: text/html; charset=UTF-8\n\n%s",
+		strings.Join(req.To, ", "), req.Subject, req.Body)
+
+	errChan := make(chan error, 1)
+	go func() {
+		defer func() { _ = stdin.Close() }()
+		_, werr := stdin.Write([]byte(msg))
+		errChan <- werr
+	}()
+
+	// Always read from errChan: when the process exits (cmd.Run returns),
+	// its stdin pipe breaks, causing the Write goroutine to unblock and send.
+	runErr := cmd.Run()
+	writeErr := <-errChan
+
+	if runErr != nil {
+		return fmt.Errorf("sendmail command failed: %w", runErr)
+	}
+	if writeErr != nil {
+		return fmt.Errorf("failed to write to sendmail stdin: %w", writeErr)
+	}
+	return nil
+}
+
+// Pool is a DB-backed outbox worker pool for at-least-once email delivery.
+//
+// Submit persists the request to the DB before signalling workers, so a crash
+// between Submit and delivery will not lose the email.
+type Pool struct {
+	sender *Sender
+	store  db.Store
+	logger *slog.Logger
+
+	notifyC      chan struct{}
+	outboxCtx    context.Context
+	outboxCancel context.CancelFunc
+	wg           sync.WaitGroup
+}
+
+// NewPool creates an outbox-backed mailer pool. The store must be non-nil.
+func NewPool(size int, cfg *config.Config, store db.Store, logger *slog.Logger) *Pool {
+	p := &Pool{
+		sender:  NewSender(cfg, logger),
+		store:   store,
+		logger:  logger.With("component", "mailer"),
+		notifyC: make(chan struct{}, 1),
+	}
+
+	// Recover any rows stuck in 'delivering' from a prior crash.
+	if err := store.ResetDeliveringToPending(context.Background()); err != nil {
+		p.logger.Error("failed to reset delivering→pending on startup", "error", err)
+	}
+
+	p.outboxCtx, p.outboxCancel = context.WithCancel(context.Background())
+
+	p.wg.Add(size)
+	for i := range size {
+		go p.outboxWorker(i)
 	}
 
 	return p
 }
 
-// Submit enqueues a mail request for delivery.
-//
-// In outbox mode it persists to the DB before signalling workers, so a crash
-// between Submit and delivery will not lose the email. In legacy mode it
-// writes to a buffered in-process channel.
+// Submit enqueues a mail request for at-least-once delivery via the DB outbox.
 func (p *Pool) Submit(ctx context.Context, req MailRequest) {
-	if p.store != nil {
-		if err := p.store.EnqueueEmail(ctx, req.To, req.Subject, req.Body); err != nil {
-			p.logger.Error("failed to enqueue email to outbox", "error", err)
-			return
-		}
-		select {
-		case p.notifyC <- struct{}{}:
-		default:
-		}
-	} else {
-		p.requests <- req
+	if err := p.store.EnqueueEmail(ctx, req.To, req.Subject, req.Body); err != nil {
+		p.logger.Error("failed to enqueue email to outbox", "error", err)
+		return
 	}
+	select {
+	case p.notifyC <- struct{}{}:
+	default:
+	}
+}
+
+// Send delivers an email directly, bypassing the outbox queue.
+func (p *Pool) Send(req MailRequest) error {
+	return p.sender.Send(req)
+}
+
+// Close shuts down the outbox workers and waits for in-flight work to finish.
+func (p *Pool) Close() {
+	p.outboxCancel()
+	p.wg.Wait()
+	p.sender.Close()
 }
 
 func (p *Pool) outboxWorker(id int) {
@@ -148,7 +281,7 @@ func (p *Pool) drainOutbox() {
 			return // queue empty
 		}
 
-		err = p.Send(MailRequest{To: entry.Recipients, Subject: entry.Subject, Body: entry.Body})
+		err = p.sender.Send(MailRequest{To: entry.Recipients, Subject: entry.Subject, Body: entry.Body})
 		if err != nil {
 			p.logger.Error("failed to deliver outbox email", "id", entry.ID, "error", err)
 			if rerr := p.store.ResetEmailToPending(p.outboxCtx, entry.ID); rerr != nil {
@@ -160,157 +293,5 @@ func (p *Pool) drainOutbox() {
 		if merr := p.store.MarkEmailDelivered(p.outboxCtx, entry.ID); merr != nil {
 			p.logger.Error("failed to mark outbox email delivered", "id", entry.ID, "error", merr)
 		}
-	}
-}
-
-func (p *Pool) channelWorker(id int) {
-	p.logger.Debug("channel worker started", "worker_id", id)
-	for req := range p.requests {
-		p.logger.Debug("sending email", "to", req.To, "subject", req.Subject)
-		if err := p.Send(req); err != nil {
-			p.logger.Error("failed to send email", "to", req.To, "subject", req.Subject, "error", err)
-		}
-	}
-}
-
-const (
-	maxRetries    = 5
-	initialDelay  = 10 * time.Second
-	maxRetryDelay = 30 * time.Minute
-)
-
-// Send sends an email immediately and returns the error.
-// It retries with exponential backoff on failure.
-func (p *Pool) Send(req MailRequest) error {
-	var err error
-	for i := 0; i <= maxRetries; i++ {
-		err = p.sender(req)
-		if err == nil {
-			atomic.AddUint64(&metrics.EmailsSentTotal, 1)
-			return nil
-		}
-
-		if i < maxRetries {
-			delay := min(time.Duration(math.Pow(2, float64(i)))*initialDelay, maxRetryDelay)
-			p.logger.Warn("failed to send email, retrying", "attempt", i+1, "delay", delay, "error", err)
-			time.Sleep(delay)
-		}
-	}
-	return fmt.Errorf("failed to send email after %d retries: %w", maxRetries, err)
-}
-
-func (p *Pool) defaultSender(req MailRequest) error {
-	if p.config.SMTPServer != "" {
-		return p.persistentSMTPSender(req)
-	}
-	if p.config.Sendmail != "" {
-		return p.sendSendmail(req)
-	}
-	return fmt.Errorf("no mailer configured (SMTP or Sendmail)")
-}
-
-func (p *Pool) persistentSMTPSender(req MailRequest) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if p.smtpConn == nil {
-		p.logger.Debug("opening new SMTP connection", "server", p.config.SMTPServer)
-		s, err := p.smtpDialer.Dial()
-		if err != nil {
-			p.logger.Error("failed to dial SMTP server", "error", err)
-			return fmt.Errorf("failed to dial SMTP: %w", err)
-		}
-		p.smtpConn = s
-	}
-
-	m := gomail.NewMessage()
-	m.SetHeader("From", p.config.SMTPSender)
-	m.SetHeader("To", req.To...)
-	m.SetHeader("Subject", req.Subject)
-	m.SetBody("text/html", req.Body)
-
-	if err := gomail.Send(p.smtpConn, m); err != nil {
-		p.logger.Error("SMTP send failed",
-			"server", p.config.SMTPServer,
-			"to", req.To,
-			"subject", req.Subject,
-			"error", err,
-		)
-		p.closeSMTP()
-		return fmt.Errorf("failed to send via SMTP: %w", err)
-	}
-
-	p.logger.Info("email sent successfully", "to", req.To, "subject", req.Subject)
-
-	if p.idleTimer != nil {
-		p.idleTimer.Stop()
-	}
-	p.idleTimer = time.AfterFunc(3*time.Minute, func() {
-		p.mu.Lock()
-		defer p.mu.Unlock()
-		if p.smtpConn != nil {
-			p.logger.Debug("closing idle SMTP connection", "server", p.config.SMTPServer)
-			p.closeSMTP()
-		}
-	})
-
-	return nil
-}
-
-func (p *Pool) closeSMTP() {
-	if p.smtpConn != nil {
-		p.logger.Debug("closing SMTP connection")
-		if err := p.smtpConn.Close(); err != nil {
-			p.logger.Debug("SMTP close error", "error", err)
-		}
-		p.smtpConn = nil
-	}
-}
-
-func (p *Pool) sendSendmail(req MailRequest) error {
-	// #nosec G204 - sendmail path is part of application configuration
-	cmd := exec.Command(p.config.Sendmail, "-t")
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return err
-	}
-
-	msg := fmt.Sprintf("To: %s\nSubject: %s\nContent-Type: text/html; charset=UTF-8\n\n%s",
-		strings.Join(req.To, ", "), req.Subject, req.Body)
-
-	errChan := make(chan error, 1)
-	go func() {
-		defer func() { _ = stdin.Close() }()
-		_, werr := stdin.Write([]byte(msg))
-		errChan <- werr
-	}()
-
-	// Always read from errChan: when the process exits (cmd.Run returns),
-	// its stdin pipe breaks, causing the Write goroutine to unblock and send.
-	runErr := cmd.Run()
-	writeErr := <-errChan
-
-	if runErr != nil {
-		return fmt.Errorf("sendmail command failed: %w", runErr)
-	}
-	if writeErr != nil {
-		return fmt.Errorf("failed to write to sendmail stdin: %w", writeErr)
-	}
-	return nil
-}
-
-// Close shuts down the pool and waits for in-flight work to finish.
-func (p *Pool) Close() {
-	if p.store != nil {
-		p.outboxCancel()
-		p.wg.Wait()
-	} else {
-		close(p.requests)
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.closeSMTP()
-	if p.idleTimer != nil {
-		p.idleTimer.Stop()
 	}
 }
