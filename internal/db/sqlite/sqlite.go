@@ -45,8 +45,81 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
+// feedColumns is the canonical column list for feed SELECT queries.
+const feedColumns = "id, url, title, last_poll, last_error_time, last_error_code, last_error_snippet, full_article, backoff_until, etag, last_modified, extraction_strategy, extraction_config"
+
+// feedNulls holds nullable scan targets for a feed row and applies them to a Feed.
+type feedNulls struct {
+	lastPoll           sql.NullTime
+	lastErrorTime      sql.NullTime
+	backoffUntil       sql.NullTime
+	lastErrorCode      sql.NullInt64
+	lastErrorSnippet   sql.NullString
+	etag               sql.NullString
+	lastModified       sql.NullString
+	extractionStrategy sql.NullString
+	extractionConfig   sql.NullString
+}
+
+func (n *feedNulls) apply(f *models.Feed) {
+	if n.lastPoll.Valid {
+		f.LastPoll = n.lastPoll.Time
+	}
+	if n.lastErrorTime.Valid {
+		f.LastErrorTime = n.lastErrorTime.Time
+	}
+	if n.backoffUntil.Valid {
+		f.BackoffUntil = n.backoffUntil.Time
+	}
+	if n.lastErrorCode.Valid {
+		f.LastErrorCode = int(n.lastErrorCode.Int64)
+	}
+	if n.lastErrorSnippet.Valid {
+		f.LastErrorSnippet = n.lastErrorSnippet.String
+	}
+	if n.etag.Valid {
+		f.ETag = n.etag.String
+	}
+	if n.lastModified.Valid {
+		f.LastModified = n.lastModified.String
+	}
+	if n.extractionStrategy.Valid {
+		f.ExtractionStrategy = n.extractionStrategy.String
+	}
+	if n.extractionConfig.Valid {
+		f.ExtractionConfig = n.extractionConfig.String
+	}
+}
+
+// scanFeedRow scans a single feed from a *sql.Row (QueryRow result).
+// Returns nil, nil when no row is found.
+func scanFeedRow(row *sql.Row) (*models.Feed, error) {
+	var f models.Feed
+	var n feedNulls
+	err := row.Scan(&f.ID, &f.URL, &f.Title, &n.lastPoll, &n.lastErrorTime, &n.lastErrorCode, &n.lastErrorSnippet, &f.FullArticle, &n.backoffUntil, &n.etag, &n.lastModified, &n.extractionStrategy, &n.extractionConfig)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	n.apply(&f)
+	return &f, nil
+}
+
+// scanFeedRows scans one feed from an open *sql.Rows cursor.
+func scanFeedRows(rows *sql.Rows) (models.Feed, error) {
+	var f models.Feed
+	var n feedNulls
+	if err := rows.Scan(&f.ID, &f.URL, &f.Title, &n.lastPoll, &n.lastErrorTime, &n.lastErrorCode, &n.lastErrorSnippet, &f.FullArticle, &n.backoffUntil, &n.etag, &n.lastModified, &n.extractionStrategy, &n.extractionConfig); err != nil {
+		return models.Feed{}, err
+	}
+	n.apply(&f)
+	return f, nil
+}
+
 func (s *Store) GetFeeds(ctx context.Context) ([]models.Feed, error) {
-	query := "SELECT id, url, title, last_poll, last_error_time, last_error_code, last_error_snippet, full_article, backoff_until, extraction_strategy, extraction_config FROM feeds"
+	query := "SELECT " + feedColumns + " FROM feeds"
 	s.logger.Debug("executing query", "query", query)
 	rows, err := s.db.QueryContext(ctx, query)
 	if err != nil {
@@ -56,33 +129,9 @@ func (s *Store) GetFeeds(ctx context.Context) ([]models.Feed, error) {
 
 	feeds := make([]models.Feed, 0, 32)
 	for rows.Next() {
-		var f models.Feed
-		var lastPoll, lastErrorTime, backoffUntil sql.NullTime
-		var lastErrorCode sql.NullInt64
-		var lastErrorSnippet, extractionStrategy, extractionConfig sql.NullString
-		if err := rows.Scan(&f.ID, &f.URL, &f.Title, &lastPoll, &lastErrorTime, &lastErrorCode, &lastErrorSnippet, &f.FullArticle, &backoffUntil, &extractionStrategy, &extractionConfig); err != nil {
+		f, err := scanFeedRows(rows)
+		if err != nil {
 			return nil, err
-		}
-		if lastPoll.Valid {
-			f.LastPoll = lastPoll.Time
-		}
-		if lastErrorTime.Valid {
-			f.LastErrorTime = lastErrorTime.Time
-		}
-		if lastErrorCode.Valid {
-			f.LastErrorCode = int(lastErrorCode.Int64)
-		}
-		if lastErrorSnippet.Valid {
-			f.LastErrorSnippet = lastErrorSnippet.String
-		}
-		if backoffUntil.Valid {
-			f.BackoffUntil = backoffUntil.Time
-		}
-		if extractionStrategy.Valid {
-			f.ExtractionStrategy = extractionStrategy.String
-		}
-		if extractionConfig.Valid {
-			f.ExtractionConfig = extractionConfig.String
 		}
 		feeds = append(feeds, f)
 	}
@@ -90,7 +139,7 @@ func (s *Store) GetFeeds(ctx context.Context) ([]models.Feed, error) {
 }
 
 func (s *Store) GetFeedsWithErrors(ctx context.Context) ([]models.Feed, error) {
-	query := "SELECT id, url, title, last_poll, last_error_time, last_error_code, last_error_snippet, full_article, etag, last_modified FROM feeds WHERE last_error_time IS NOT NULL OR last_error_code != 0"
+	query := "SELECT " + feedColumns + " FROM feeds WHERE last_error_time IS NOT NULL OR last_error_code != 0"
 	s.logger.Debug("executing query", "query", query)
 	rows, err := s.db.QueryContext(ctx, query)
 	if err != nil {
@@ -100,30 +149,9 @@ func (s *Store) GetFeedsWithErrors(ctx context.Context) ([]models.Feed, error) {
 
 	feeds := make([]models.Feed, 0, 16)
 	for rows.Next() {
-		var f models.Feed
-		var lastPoll, lastErrorTime sql.NullTime
-		var lastErrorCode sql.NullInt64
-		var lastErrorSnippet, etag, lastModified sql.NullString
-		if err := rows.Scan(&f.ID, &f.URL, &f.Title, &lastPoll, &lastErrorTime, &lastErrorCode, &lastErrorSnippet, &f.FullArticle, &etag, &lastModified); err != nil {
+		f, err := scanFeedRows(rows)
+		if err != nil {
 			return nil, err
-		}
-		if lastPoll.Valid {
-			f.LastPoll = lastPoll.Time
-		}
-		if lastErrorTime.Valid {
-			f.LastErrorTime = lastErrorTime.Time
-		}
-		if lastErrorCode.Valid {
-			f.LastErrorCode = int(lastErrorCode.Int64)
-		}
-		if lastErrorSnippet.Valid {
-			f.LastErrorSnippet = lastErrorSnippet.String
-		}
-		if etag.Valid {
-			f.ETag = etag.String
-		}
-		if lastModified.Valid {
-			f.LastModified = lastModified.String
 		}
 		feeds = append(feeds, f)
 	}
@@ -131,90 +159,15 @@ func (s *Store) GetFeedsWithErrors(ctx context.Context) ([]models.Feed, error) {
 }
 
 func (s *Store) GetFeed(ctx context.Context, id int64) (*models.Feed, error) {
-	query := "SELECT id, url, title, last_poll, last_error_time, last_error_code, last_error_snippet, full_article, backoff_until, etag, last_modified, extraction_strategy, extraction_config FROM feeds WHERE id = ?"
+	query := "SELECT " + feedColumns + " FROM feeds WHERE id = ?"
 	s.logger.Debug("executing query", "query", query, "args", []any{id})
-	var f models.Feed
-	var lastPoll, lastErrorTime, backoffUntil sql.NullTime
-	var lastErrorCode sql.NullInt64
-	var lastErrorSnippet, etag, lastModified, extractionStrategy, extractionConfig sql.NullString
-	err := s.db.QueryRowContext(ctx, query, id).
-		Scan(&f.ID, &f.URL, &f.Title, &lastPoll, &lastErrorTime, &lastErrorCode, &lastErrorSnippet, &f.FullArticle, &backoffUntil, &etag, &lastModified, &extractionStrategy, &extractionConfig)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
-	}
-	if lastPoll.Valid {
-		f.LastPoll = lastPoll.Time
-	}
-	if lastErrorTime.Valid {
-		f.LastErrorTime = lastErrorTime.Time
-	}
-	if lastErrorCode.Valid {
-		f.LastErrorCode = int(lastErrorCode.Int64)
-	}
-	if lastErrorSnippet.Valid {
-		f.LastErrorSnippet = lastErrorSnippet.String
-	}
-	if backoffUntil.Valid {
-		f.BackoffUntil = backoffUntil.Time
-	}
-	if etag.Valid {
-		f.ETag = etag.String
-	}
-	if lastModified.Valid {
-		f.LastModified = lastModified.String
-	}
-	if extractionStrategy.Valid {
-		f.ExtractionStrategy = extractionStrategy.String
-	}
-	if extractionConfig.Valid {
-		f.ExtractionConfig = extractionConfig.String
-	}
-	return &f, nil
+	return scanFeedRow(s.db.QueryRowContext(ctx, query, id))
 }
 
 func (s *Store) GetFeedByURL(ctx context.Context, url string) (*models.Feed, error) {
-	query := "SELECT id, url, title, last_poll, last_error_time, last_error_code, last_error_snippet, full_article, etag, last_modified, extraction_strategy, extraction_config FROM feeds WHERE url = ?"
+	query := "SELECT " + feedColumns + " FROM feeds WHERE url = ?"
 	s.logger.Debug("executing query", "query", query, "args", []any{url})
-	var f models.Feed
-	var lastPoll, lastErrorTime sql.NullTime
-	var lastErrorCode sql.NullInt64
-	var lastErrorSnippet, etag, lastModified, extractionStrategy, extractionConfig sql.NullString
-	err := s.db.QueryRowContext(ctx, query, url).
-		Scan(&f.ID, &f.URL, &f.Title, &lastPoll, &lastErrorTime, &lastErrorCode, &lastErrorSnippet, &f.FullArticle, &etag, &lastModified, &extractionStrategy, &extractionConfig)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
-	}
-	if lastPoll.Valid {
-		f.LastPoll = lastPoll.Time
-	}
-	if lastErrorTime.Valid {
-		f.LastErrorTime = lastErrorTime.Time
-	}
-	if lastErrorCode.Valid {
-		f.LastErrorCode = int(lastErrorCode.Int64)
-	}
-	if lastErrorSnippet.Valid {
-		f.LastErrorSnippet = lastErrorSnippet.String
-	}
-	if etag.Valid {
-		f.ETag = etag.String
-	}
-	if lastModified.Valid {
-		f.LastModified = lastModified.String
-	}
-	if extractionStrategy.Valid {
-		f.ExtractionStrategy = extractionStrategy.String
-	}
-	if extractionConfig.Valid {
-		f.ExtractionConfig = extractionConfig.String
-	}
-	return &f, nil
+	return scanFeedRow(s.db.QueryRowContext(ctx, query, url))
 }
 
 func (s *Store) AddFeed(ctx context.Context, url string, title string, fullArticle bool, extractionStrategy string, extractionConfig string) (int64, error) {
