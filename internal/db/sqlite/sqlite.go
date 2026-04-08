@@ -280,8 +280,22 @@ func (s *Store) AddUser(ctx context.Context, email string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
-	return id, nil
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	if id != 0 {
+		return id, nil
+	}
+	// ON CONFLICT DO NOTHING returns id=0 when the row already exists; look it up.
+	u, err := s.GetUserByEmail(ctx, email)
+	if err != nil {
+		return 0, err
+	}
+	if u == nil {
+		return 0, fmt.Errorf("user %q not found after upsert", email)
+	}
+	return u.ID, nil
 }
 
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {

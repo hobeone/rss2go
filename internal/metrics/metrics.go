@@ -42,17 +42,24 @@ func Start(ctx context.Context, cfg *config.Config, logger *slog.Logger) {
 		fmt.Fprintf(w, "emails_sent_total %d\n", atomic.LoadUint64(&EmailsSentTotal))
 	})
 
+	server := &http.Server{
+		Addr:         cfg.MetricsAddr,
+		Handler:      mux,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+
 	logger.Info("starting metrics server", "addr", cfg.MetricsAddr)
 	go func() {
-		server := &http.Server{
-			Addr:         cfg.MetricsAddr,
-			Handler:      mux,
-			ReadTimeout:  5 * time.Second,
-			WriteTimeout: 10 * time.Second,
-			IdleTimeout:  120 * time.Second,
-		}
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Error("metrics server failed", "error", err)
+		}
+	}()
+	go func() {
+		<-ctx.Done()
+		if err := server.Shutdown(context.Background()); err != nil {
+			logger.Error("metrics server shutdown error", "error", err)
 		}
 	}()
 }

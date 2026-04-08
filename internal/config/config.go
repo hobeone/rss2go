@@ -17,7 +17,6 @@ type Config struct {
 	SMTPUser   string `mapstructure:"smtp_user"`
 	SMTPPass   string `mapstructure:"smtp_pass"`
 	SMTPSender string `mapstructure:"smtp_sender"`
-	UseTLS     bool   `mapstructure:"use_tls"`
 	Sendmail   string `mapstructure:"sendmail"` // Path to sendmail binary
 
 	PollInterval time.Duration `mapstructure:"poll_interval"`
@@ -57,7 +56,6 @@ func Load(cfgFile string) (*Config, error) {
 	v.SetDefault("mailer_pool_size", 2)
 	v.SetDefault("max_image_width", 600)
 	v.SetDefault("smtp_port", 587)
-	v.SetDefault("use_tls", true)
 
 	if err := v.ReadInConfig(); err != nil {
 		// If a config file was explicitly provided but not found, return error

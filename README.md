@@ -53,7 +53,6 @@ smtp_port: 587
 smtp_user: "your-email@gmail.com"
 smtp_pass: "your-app-password"
 smtp_sender: "rss2go@example.com"
-use_tls: true
 
 # Mailer settings (Alternative: Local Sendmail)
 # sendmail: "/usr/sbin/sendmail"

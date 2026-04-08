@@ -173,6 +173,13 @@ func (s *Scheduler) Run(ctx context.Context) {
 	s.logger.Info("scheduler started", "feeds", s.h.Len())
 	go s.routeResponses(ctx)
 
+	// Start with a stopped timer so the first Reset at the loop top is safe.
+	timer := time.NewTimer(0)
+	if !timer.Stop() {
+		<-timer.C
+	}
+	defer timer.Stop()
+
 	for {
 		s.mu.Lock()
 		var delay time.Duration
@@ -187,12 +194,19 @@ func (s *Scheduler) Run(ctx context.Context) {
 			delay = 0
 		}
 
+		timer.Reset(delay)
 		select {
-		case <-time.After(delay):
+		case <-timer.C:
 			s.dispatchDue(ctx)
 		case <-s.wakeC:
-			// Heap changed; recalculate delay at top of loop.
+			// Heap changed; stop timer before recalculating delay at top of loop.
+			if !timer.Stop() {
+				<-timer.C
+			}
 		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
 			s.logger.Info("scheduler shutting down")
 			s.handlerWg.Wait() // drain in-flight HandleResponse calls before returning
 			return

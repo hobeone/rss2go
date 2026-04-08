@@ -253,14 +253,29 @@ func (p *Pool) Close() {
 func (p *Pool) outboxWorker(id int) {
 	defer p.wg.Done()
 	p.logger.Debug("outbox worker started", "worker_id", id)
+
+	// Start with a stopped timer so the first Reset at the loop top is safe.
+	timer := time.NewTimer(0)
+	if !timer.Stop() {
+		<-timer.C
+	}
+	defer timer.Stop()
+
 	for {
+		timer.Reset(30 * time.Second)
 		select {
 		case <-p.outboxCtx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
 			p.logger.Debug("outbox worker stopping", "worker_id", id)
 			return
 		case <-p.notifyC:
+			if !timer.Stop() {
+				<-timer.C
+			}
 			p.drainOutbox()
-		case <-time.After(30 * time.Second):
+		case <-timer.C:
 			// Periodic drain to pick up rows that were missed (e.g. after a
 			// restart that recovered stuck rows without sending a notify).
 			p.drainOutbox()

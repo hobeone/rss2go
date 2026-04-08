@@ -21,4 +21,3 @@ smtp_port: 587
 smtp_user: "YOUR USER NAME@gmail.com"
 smtp_pass: "YOUR APP PASSWORD"
 smtp_sender: "YOUR USER NAME@gmail.com"
-use_tls: true
