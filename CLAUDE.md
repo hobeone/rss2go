@@ -102,9 +102,12 @@ Goose migrations are embedded in the binary via `embed.go` and `migrations/`. Mi
 001_initial.sql
 002_full_article.sql
 003_add_etag_last_modified.sql
+004_add_backoff_until.sql
+005_add_outbox.sql
+006_extraction_strategy.sql
 ```
 
-Next migration: `004_*.sql`. Always use `-- +goose Up` / `-- +goose Down` annotations.
+Next migration: `007_*.sql`. Always use `-- +goose Up` / `-- +goose Down` annotations.
 
 ## Configuration
 
@@ -119,8 +122,8 @@ Config is loaded via Viper (`internal/config/config.go`). The config file is sea
 | `max_image_width` | Max px before stripping image dimensions |
 | `metrics_addr` | Optional `host:port` for metrics HTTP endpoint |
 
-## v2 Work in Progress
+## Improvement Backlog
 
-See `v2_claude.md` for tracked improvement proposals. Completed so far:
+See `claude_improvements.md` for tracked improvement proposals. Completed refactors:
 - `main.go` split into `daemon.go`, `feed.go`, `user.go`
 - Per-goroutine watcher model replaced with `Scheduler` (min-heap)

@@ -106,7 +106,7 @@ func resyncFeeds(
 					scheduler.Register(f)
 				} else {
 					current := w.Feed()
-					if current.URL != f.URL || current.Title != f.Title || current.FullArticle != f.FullArticle {
+					if feedMetadataChanged(current, f) {
 						logger.Info("sync: feed metadata changed, re-registering", "feed_id", f.ID)
 						scheduler.Register(f) // Register replaces the existing watcher
 					}
@@ -121,4 +121,16 @@ func resyncFeeds(
 			}
 		}
 	}
+}
+
+// feedMetadataChanged reports whether any scheduler-relevant field differs
+// between the running watcher's copy and the database copy of a feed.
+// Add new fields here whenever models.Feed gains a field that affects
+// crawl or email behaviour.
+func feedMetadataChanged(running, db models.Feed) bool {
+	return running.URL != db.URL ||
+		running.Title != db.Title ||
+		running.FullArticle != db.FullArticle ||
+		running.ExtractionStrategy != db.ExtractionStrategy ||
+		running.ExtractionConfig != db.ExtractionConfig
 }

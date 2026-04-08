@@ -135,7 +135,7 @@ func (s *Store) GetFeeds(ctx context.Context) ([]models.Feed, error) {
 		}
 		feeds = append(feeds, f)
 	}
-	return feeds, nil
+	return feeds, rows.Err()
 }
 
 func (s *Store) GetFeedsWithErrors(ctx context.Context) ([]models.Feed, error) {
@@ -155,7 +155,7 @@ func (s *Store) GetFeedsWithErrors(ctx context.Context) ([]models.Feed, error) {
 		}
 		feeds = append(feeds, f)
 	}
-	return feeds, nil
+	return feeds, rows.Err()
 }
 
 func (s *Store) GetFeed(ctx context.Context, id int64) (*models.Feed, error) {
@@ -319,7 +319,7 @@ func (s *Store) GetUsersForFeed(ctx context.Context, feedID int64) ([]models.Use
 		}
 		users = append(users, u)
 	}
-	return users, nil
+	return users, rows.Err()
 }
 
 func (s *Store) Subscribe(ctx context.Context, userID int64, feedID int64) error {

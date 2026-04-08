@@ -25,12 +25,6 @@ type User struct {
 	Email string `json:"email"`
 }
 
-// Subscription links a user to a feed.
-type Subscription struct {
-	UserID int64 `json:"user_id"`
-	FeedID int64 `json:"feed_id"`
-}
-
 // OutboxEntry is a pending or delivered email in the transactional outbox.
 type OutboxEntry struct {
 	ID          int64     `json:"id"`
@@ -40,14 +34,4 @@ type OutboxEntry struct {
 	Status      string    `json:"status"`
 	CreatedAt   time.Time `json:"created_at"`
 	DeliveredAt time.Time `json:"delivered_at"`
-}
-
-// Item represents a single RSS entry.
-type Item struct {
-	FeedID      int64     `json:"feed_id"`
-	GUID        string    `json:"guid"`
-	Title       string    `json:"title"`
-	Link        string    `json:"link"`
-	Description string    `json:"description"`
-	PublishedAt time.Time `json:"published_at"`
 }

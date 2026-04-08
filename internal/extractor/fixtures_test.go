@@ -34,11 +34,7 @@ func TestFixtures(t *testing.T) {
 		t.Fatalf("failed to read testdata dir: %v", err)
 	}
 
-	//logger := slog.New(slog.DiscardHandler)
-	opts := &slog.HandlerOptions{
-		Level: slog.LevelDebug, // Enable debug logs
-	}
-	logger := slog.New(slog.NewTextHandler(os.Stderr, opts))
+	logger := slog.New(slog.DiscardHandler)
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
