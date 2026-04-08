@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 // fixtureMeta is the schema for testdata/<name>/meta.json.
@@ -65,7 +64,7 @@ func TestFixtures(t *testing.T) {
 				t.Fatalf("failed to build extractor: %v", err)
 			}
 
-			content, err := ext.Extract(strings.NewReader(string(htmlBytes)), meta.URL, 5*time.Second, logger)
+			content, err := ext.Extract(strings.NewReader(string(htmlBytes)), meta.URL, logger)
 			if err != nil {
 				t.Fatalf("extraction failed: %v", err)
 			}

@@ -4,7 +4,6 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
-	"time"
 )
 
 var discardLogger = slog.New(slog.DiscardHandler)
@@ -27,7 +26,7 @@ func TestExtract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New failed: %v", err)
 	}
-	content, err := ext.Extract(strings.NewReader(html), "http://example.com/article", 5*time.Second, discardLogger)
+	content, err := ext.Extract(strings.NewReader(html), "http://example.com/article", discardLogger)
 	if err != nil {
 		t.Fatalf("Extract failed: %v", err)
 	}
@@ -45,7 +44,7 @@ func TestExtract_InvalidURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New failed: %v", err)
 	}
-	_, err = ext.Extract(strings.NewReader("<html></html>"), "::invalid-url::", 5*time.Second, discardLogger)
+	_, err = ext.Extract(strings.NewReader("<html></html>"), "::invalid-url::", discardLogger)
 	if err == nil {
 		t.Error("expected error for invalid URL, got nil")
 	}
@@ -79,7 +78,7 @@ func TestSelectorExtractor(t *testing.T) {
 		t.Fatalf("New failed: %v", err)
 	}
 
-	content, err := ext.Extract(strings.NewReader(html), "http://example.com/", 5*time.Second, discardLogger)
+	content, err := ext.Extract(strings.NewReader(html), "http://example.com/", discardLogger)
 	if err != nil {
 		t.Fatalf("Extract failed: %v", err)
 	}
@@ -98,7 +97,7 @@ func TestSelectorExtractor_NoMatch(t *testing.T) {
 		t.Fatalf("New failed: %v", err)
 	}
 
-	_, err = ext.Extract(strings.NewReader("<html><body><p>text</p></body></html>"), "http://example.com/", 5*time.Second, discardLogger)
+	_, err = ext.Extract(strings.NewReader("<html><body><p>text</p></body></html>"), "http://example.com/", discardLogger)
 	if err == nil {
 		t.Error("expected error for non-matching selector, got nil")
 	}

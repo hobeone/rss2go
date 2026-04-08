@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"time"
 
 	"codeberg.org/readeck/go-readability/v2"
 )
@@ -13,7 +12,7 @@ import (
 // ReadabilityExtractor uses the go-readability library to extract article content.
 type ReadabilityExtractor struct{}
 
-func (e *ReadabilityExtractor) Extract(html io.Reader, pageURL string, timeout time.Duration, logger *slog.Logger) (string, error) {
+func (e *ReadabilityExtractor) Extract(html io.Reader, pageURL string, logger *slog.Logger) (string, error) {
 	parsedURL, err := parseURL(pageURL)
 	if err != nil {
 		return "", err

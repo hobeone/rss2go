@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"time"
 )
 
 // Strategy constants for extraction methods.
@@ -15,7 +14,7 @@ const (
 
 // Extractor pulls the main content from an HTML document.
 type Extractor interface {
-	Extract(html io.Reader, pageURL string, timeout time.Duration, logger *slog.Logger) (string, error)
+	Extract(html io.Reader, pageURL string, logger *slog.Logger) (string, error)
 }
 
 // New returns an Extractor for the given strategy and config.

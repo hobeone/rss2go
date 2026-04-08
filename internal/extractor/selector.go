@@ -5,7 +5,6 @@ import (
 	"io"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -15,7 +14,7 @@ type SelectorExtractor struct {
 	Selector string
 }
 
-func (e *SelectorExtractor) Extract(html io.Reader, pageURL string, timeout time.Duration, logger *slog.Logger) (string, error) {
+func (e *SelectorExtractor) Extract(html io.Reader, pageURL string, logger *slog.Logger) (string, error) {
 	doc, err := goquery.NewDocumentFromReader(html)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse HTML: %w", err)

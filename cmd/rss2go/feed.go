@@ -408,7 +408,7 @@ func runTestFeed(cmd *cobra.Command, args []string) error {
 			if resp.Error != nil {
 				return fmt.Errorf("failed to fetch full article: %w", resp.Error)
 			}
-			extracted, err := ext.Extract(bytes.NewReader(resp.Body), item.Link, cfg.CrawlerTimeout, logger)
+			extracted, err := ext.Extract(bytes.NewReader(resp.Body), item.Link, logger)
 			if err != nil {
 				return fmt.Errorf("failed to extract full article: %w", err)
 			}
@@ -420,8 +420,8 @@ func runTestFeed(cmd *cobra.Command, args []string) error {
 		cPool.Close()
 	}
 
-	w := watcher.New(models.Feed{}, nil, nil, nil, 0, 0, cfg.MaxImageWidth, logger)
-	subject, body := w.FormatItem(feed.Title, item, extractedContent)
+	f := watcher.NewFormatter(cfg.MaxImageWidth, logger)
+	subject, body := f.FormatItem(feed.Title, item, extractedContent)
 
 	if testToStdout {
 		fmt.Printf("\nSubject: %s\n", subject)

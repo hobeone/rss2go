@@ -3,26 +3,19 @@ package watcher
 import (
 	"bytes"
 	"context"
-	"fmt"
-	"html"
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
-	"regexp"
-	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/hobeone/rss2go/internal/crawler"
 	"github.com/hobeone/rss2go/internal/db"
 	"github.com/hobeone/rss2go/internal/extractor"
 	"github.com/hobeone/rss2go/internal/mailer"
 	"github.com/hobeone/rss2go/internal/metrics"
 	"github.com/hobeone/rss2go/internal/models"
-	"github.com/microcosm-cc/bluemonday"
 	"github.com/mmcdole/gofeed"
 )
 
@@ -47,9 +40,7 @@ type Watcher struct {
 	logger          *slog.Logger
 	interval        time.Duration
 	jitter          time.Duration
-	strictPol       *bluemonday.Policy
-	contentPol      *bluemonday.Policy
-	maxImageWidth   int
+	formatter       *Formatter
 	currentInterval time.Duration // backoff state; only touched by handleFeedResponse
 	parser          *gofeed.Parser
 	pendingItems    map[string]*gofeed.Item
@@ -63,22 +54,6 @@ const (
 
 // New creates a new feed watcher.
 func New(feed models.Feed, store db.Store, c CrawlerPool, m MailerPool, interval, jitter time.Duration, maxImageWidth int, logger *slog.Logger) *Watcher {
-
-	// Strict policy for titles and subjects (no HTML)
-	strictPol := bluemonday.StrictPolicy()
-
-	// Let's build a strict safe HTML policy from scratch or modify UGC.
-	// A simpler safe policy:
-	contentPol := bluemonday.NewPolicy()
-	contentPol.AllowURLSchemes("http", "https")
-	contentPol.AllowAttrs("href").OnElements("a")
-	contentPol.RequireNoReferrerOnLinks(true)
-	contentPol.RequireParseableURLs(true)
-	contentPol.AllowElements("b", "i", "u", "strong", "em", "p", "br", "div", "span", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "img")
-	contentPol.AllowAttrs("src", "alt", "title", "width", "height").OnElements("img")
-	contentPol.AllowStyles("max-width").Matching(regexp.MustCompile(`(?i)^100%$`)).OnElements("img")
-	contentPol.AllowStyles("height").Matching(regexp.MustCompile(`(?i)^auto$`)).OnElements("img")
-
 	return &Watcher{
 		feed:            feed,
 		store:           store,
@@ -87,9 +62,7 @@ func New(feed models.Feed, store db.Store, c CrawlerPool, m MailerPool, interval
 		logger:          logger.With("feed_id", feed.ID, "url", feed.URL),
 		interval:        interval,
 		jitter:          jitter,
-		strictPol:       strictPol,
-		contentPol:      contentPol,
-		maxImageWidth:   maxImageWidth,
+		formatter:       NewFormatter(maxImageWidth, logger),
 		currentInterval: interval,
 		parser:          gofeed.NewParser(),
 		pendingItems:    make(map[string]*gofeed.Item),
@@ -292,7 +265,7 @@ func (w *Watcher) handleItemResponse(ctx context.Context, resp crawler.CrawlResp
 			w.logger.Warn("invalid extraction config, falling back to readability", "error", extErr)
 			ext, _ = extractor.New(extractor.StrategyReadability, "")
 		}
-		extracted, err := ext.Extract(bytes.NewReader(resp.Body), itm.Link, 30*time.Second, w.logger)
+		extracted, err := ext.Extract(bytes.NewReader(resp.Body), itm.Link, w.logger)
 		if err != nil {
 			w.logger.Warn("failed to extract content", "url", itm.Link, "error", err)
 		} else {
@@ -317,118 +290,9 @@ func (w *Watcher) handleItemResponse(ctx context.Context, resp crawler.CrawlResp
 }
 
 // FormatItem sanitizes and formats a feed item for an email.
+// Delegates to the Formatter which holds the stateless formatting config.
 func (w *Watcher) FormatItem(feedTitle string, item *gofeed.Item, contentOverride string) (subject, body string) {
-	safeTitle := html.UnescapeString(strings.TrimSpace(w.strictPol.Sanitize(item.Title)))
-	safeFeedTitle := html.UnescapeString(strings.TrimSpace(w.strictPol.Sanitize(feedTitle)))
-	safeLink := strings.TrimSpace(w.strictPol.Sanitize(item.Link))
-
-	// Use Content if available, otherwise Description.
-	// Many feeds use Description for summary and Content for full text.
-	content := contentOverride
-	if content == "" {
-		content = item.Content
-		if content == "" {
-			content = item.Description
-		}
-	}
-
-	if len(content) > MaxItemContentSize {
-		w.logger.Error("item content too large to process", "title", item.Title, "size", len(content), "limit", MaxItemContentSize)
-		content = "<i>[Content omitted: item too large to process safely]</i>"
-	} else {
-		// Pre-process to clean content, remove trackers, and handle embedded elements
-		content = cleanFeedContent(content, w.maxImageWidth)
-	}
-
-	safeContent := strings.TrimSpace(w.contentPol.Sanitize(content))
-
-	subject = "[" + safeFeedTitle + "] " + safeTitle
-	body = safeContent + "<br><br><a href=\"" + safeLink + "\">Read more</a>"
-	return
-}
-
-func cleanFeedContent(htmlStr string, maxWidth int) string {
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlStr))
-	if err != nil {
-		return htmlStr // Fallback to returning original string if parsing fails
-	}
-
-	// Replace iframes with links
-	doc.Find("iframe").Each(func(i int, s *goquery.Selection) {
-		src, exists := s.Attr("src")
-		if exists && src != "" {
-			replacement := fmt.Sprintf(`<a href="%s">[Embedded Content: %s]</a>`, html.EscapeString(src), html.EscapeString(src))
-			s.ReplaceWithHtml(replacement)
-		} else {
-			s.Remove()
-		}
-	})
-
-	// Remove feedsportal tracking links
-	doc.Find("a").Each(func(i int, s *goquery.Selection) {
-		href, exists := s.Attr("href")
-		if exists && strings.Contains(strings.ToLower(href), "da.feedsportal.com") {
-			s.Remove()
-		}
-	})
-
-	// Process images: remove tracking pixels, strip large dimensions, and add responsive styling
-	doc.Find("img").Each(func(i int, s *goquery.Selection) {
-		widthStr, _ := s.Attr("width")
-		heightStr, _ := s.Attr("height")
-		src, _ := s.Attr("src")
-
-		// Remove if width or height is 1 or 0 (likely tracking pixel)
-		if widthStr == "1" || widthStr == "0" || heightStr == "1" || heightStr == "0" {
-			s.Remove()
-			return
-		}
-
-		// Remove if URL contains common tracking keywords
-		srcLower := strings.ToLower(src)
-		if strings.Contains(srcLower, "tracker") || strings.Contains(srcLower, "pixel") || strings.Contains(srcLower, "analytics") {
-			s.Remove()
-			return
-		}
-
-		// Strip problematic attributes that can break email layout or are redundant
-		s.RemoveAttr("srcset")
-		s.RemoveAttr("sizes")
-		s.RemoveAttr("decoding")
-		s.RemoveAttr("fetchpriority")
-
-		// Responsive sizing logic
-		if maxWidth > 0 {
-			w, wErr := strconv.Atoi(widthStr)
-			h, hErr := strconv.Atoi(heightStr)
-
-			// Define what we consider a "small image" (e.g., icons, buttons)
-			// Small images should not have max-width: 100% forced on them
-			isSmall := false
-			if wErr == nil && hErr == nil && w <= 150 && h <= 150 {
-				isSmall = true
-			}
-
-			if !isSmall {
-				// Strip width/height if they exceed maxWidth
-				if wErr == nil && w > maxWidth {
-					s.RemoveAttr("width")
-					s.RemoveAttr("height")
-				} else if hErr == nil && h > maxWidth {
-					s.RemoveAttr("width")
-					s.RemoveAttr("height")
-				}
-
-				// Add responsive styling to everything except small images.
-				// This includes images with no dimensions (which might be large)
-				// and medium images (to ensure they fit on mobile).
-				s.SetAttr("style", "max-width: 100%; height: auto;")
-			}
-		}
-	})
-
-	htmlStr, _ = doc.Find("body").Html()
-	return htmlStr
+	return w.formatter.FormatItem(feedTitle, item, contentOverride)
 }
 
 func (w *Watcher) getJitter() time.Duration {
