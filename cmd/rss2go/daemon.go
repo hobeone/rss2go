@@ -28,7 +28,7 @@ func init() {
 	rootCmd.AddCommand(daemonCmd)
 }
 
-func runDaemon(cmd *cobra.Command, args []string) error {
+func runDaemon(_ *cobra.Command, args []string) error {
 	cfg, err := config.Load(cfgFile)
 	if err != nil {
 		return err

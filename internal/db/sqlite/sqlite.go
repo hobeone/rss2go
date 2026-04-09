@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/hobeone/rss2go/internal/models"
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // modernc sqlite driver
 )
 
 type Store struct {

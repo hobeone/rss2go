@@ -12,7 +12,7 @@ import (
 )
 
 func TestPool(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		if _, err := w.Write([]byte("mock rss content")); err != nil {
 			t.Errorf("failed to write response: %v", err)
@@ -66,12 +66,12 @@ func TestPool_RateLimited(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				if tt.retryAfterHdr != "" {
 					w.Header().Set("Retry-After", tt.retryAfterHdr)
 				}
 				w.WriteHeader(tt.statusCode)
-				fmt.Fprint(w, "rate limited")
+				_, _ = fmt.Fprint(w, "rate limited")
 			}))
 			defer ts.Close()
 
@@ -121,7 +121,7 @@ func TestParseRetryAfter(t *testing.T) {
 
 func TestPool_SizeLimit(t *testing.T) {
 	content := make([]byte, MaxResponseBodySize+100)
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		if _, err := w.Write(content); err != nil {
 			t.Errorf("failed to write response: %v", err)

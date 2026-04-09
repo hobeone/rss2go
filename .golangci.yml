@@ -1,6 +1,19 @@
 version: "2"
 
 linters:
+  enable:
+    - bodyclose
+    - errcheck
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - nilerr
+    - revive
+    - sqlclosecheck
+    - staticcheck
+    - unused
+
   settings:
     errcheck:
       exclude-functions:
@@ -11,3 +24,11 @@ linters:
         - fmt.Fprintln
         - (*github.com/hobeone/rss2go/internal/db/sqlite.Store).Close
         - rows.Close
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+        - name: var-naming
+          disabled: true

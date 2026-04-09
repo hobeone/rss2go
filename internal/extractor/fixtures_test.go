@@ -43,6 +43,7 @@ func TestFixtures(t *testing.T) {
 			dir := filepath.Join("testdata", name)
 
 			// Load meta.json
+			//nolint:gosec // test file read
 			metaBytes, err := os.ReadFile(filepath.Join(dir, "meta.json"))
 			if err != nil {
 				t.Fatalf("missing meta.json: %v", err)
@@ -53,6 +54,7 @@ func TestFixtures(t *testing.T) {
 			}
 
 			// Load article.html
+			//nolint:gosec // test file read
 			htmlBytes, err := os.ReadFile(filepath.Join(dir, "article.html"))
 			if err != nil {
 				t.Fatalf("missing article.html: %v", err)

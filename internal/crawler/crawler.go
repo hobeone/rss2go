@@ -123,6 +123,7 @@ func (p *Pool) fetch(ctx context.Context, url string, etag string, lastModified 
 
 	p.logger.Debug("sending request", "url", url, "timeout", p.timeout)
 	start := time.Now()
+	// #nosec G704 -- intentional SSRF for crawling RSS feeds
 	resp, err := p.client.Do(req)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {

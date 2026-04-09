@@ -25,7 +25,7 @@ func TestLoad(t *testing.T) {
 db_path: "overridden.db"
 log_level: "debug"
 `
-		err := os.WriteFile("test_config.yaml", []byte(content), 0644)
+		err := os.WriteFile("test_config.yaml", []byte(content), 0600)
 		assert.NoError(t, err)
 		defer func() {
 			if err := os.Remove("test_config.yaml"); err != nil {

@@ -67,7 +67,7 @@ func runAddUser(cmd *cobra.Command, args []string) error {
 	}
 	defer store.Close()
 
-	id, err := store.AddUser(context.Background(), args[0])
+	id, err := store.AddUser(cmd.Context(), args[0])
 	if err != nil {
 		return err
 	}
@@ -82,7 +82,7 @@ func runSubscribe(cmd *cobra.Command, args []string) error {
 	}
 	defer store.Close()
 
-	ctx := context.Background()
+	ctx := cmd.Context()
 	user, err := store.GetUserByEmail(ctx, args[0])
 	if err != nil {
 		return err
@@ -110,7 +110,7 @@ func runUnsubscribe(cmd *cobra.Command, args []string) error {
 	}
 	defer store.Close()
 
-	ctx := context.Background()
+	ctx := cmd.Context()
 	user, err := store.GetUserByEmail(ctx, args[0])
 	if err != nil {
 		return err

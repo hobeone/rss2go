@@ -144,7 +144,7 @@ func runAddFeed(cmd *cobra.Command, args []string) error {
 	}
 	defer store.Close()
 
-	id, err := store.AddFeed(context.Background(), args[0], args[1], feedFullArticle, feedExtractionStrategy, feedExtractionConfig)
+	id, err := store.AddFeed(cmd.Context(), args[0], args[1], feedFullArticle, feedExtractionStrategy, feedExtractionConfig)
 	if err != nil {
 		return err
 	}
@@ -162,12 +162,12 @@ func runDelFeed(cmd *cobra.Command, args []string) error {
 	arg := args[0]
 	var id int64
 	if _, err := fmt.Sscanf(arg, "%d", &id); err == nil {
-		if err := store.DeleteFeed(context.Background(), id); err != nil {
+		if err := store.DeleteFeed(cmd.Context(), id); err != nil {
 			return err
 		}
 		fmt.Printf("Deleted feed with ID: %d\n", id)
 	} else {
-		if err := store.DeleteFeedByURL(context.Background(), arg); err != nil {
+		if err := store.DeleteFeedByURL(cmd.Context(), arg); err != nil {
 			return err
 		}
 		fmt.Printf("Deleted feed with URL: %s\n", arg)
@@ -187,7 +187,7 @@ func runUpdateFeed(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid feed ID: %s", args[0])
 	}
 
-	ctx := context.Background()
+	ctx := cmd.Context()
 
 	before, err := store.GetFeed(ctx, id)
 	if err != nil {
@@ -240,14 +240,14 @@ func runUpdateFeed(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runListFeeds(cmd *cobra.Command, args []string) error {
+func runListFeeds(cmd *cobra.Command, _ []string) error {
 	_, _, store, err := setup()
 	if err != nil {
 		return err
 	}
 	defer store.Close()
 
-	feeds, err := store.GetFeeds(context.Background())
+	feeds, err := store.GetFeeds(cmd.Context())
 	if err != nil {
 		return err
 	}
@@ -267,7 +267,7 @@ func runFeedInfo(cmd *cobra.Command, args []string) error {
 	}
 	defer store.Close()
 
-	ctx := context.Background()
+	ctx := cmd.Context()
 	arg := args[0]
 
 	var f *models.Feed
@@ -394,7 +394,7 @@ func runTestFeed(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Extracting full article from: %s (strategy: %s)\n", item.Link, testExtractionStrategy)
 		cPool := crawler.NewPool(1, cfg.CrawlerTimeout, logger)
 
-		reqCtx, cancel := context.WithTimeout(context.Background(), cfg.CrawlerTimeout)
+		reqCtx, cancel := context.WithTimeout(cmd.Context(), cfg.CrawlerTimeout)
 		defer cancel()
 
 		cPool.Submit(crawler.CrawlRequest{
@@ -453,7 +453,7 @@ func runListErrors(cmd *cobra.Command, args []string) error {
 	}
 	defer store.Close()
 
-	feeds, err := store.GetFeedsWithErrors(context.Background())
+	feeds, err := store.GetFeedsWithErrors(cmd.Context())
 	if err != nil {
 		return err
 	}
@@ -484,7 +484,7 @@ func runCatchup(cmd *cobra.Command, args []string) error {
 	}
 	defer store.Close()
 
-	ctx := context.Background()
+	ctx := cmd.Context()
 	var feeds []models.Feed
 
 	if catchupAll {
@@ -574,7 +574,7 @@ func runRewindFeed(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("count must be a positive integer, got: %s", args[1])
 	}
 
-	ctx := context.Background()
+	ctx := cmd.Context()
 
 	f, err := store.GetFeed(ctx, id)
 	if err != nil {

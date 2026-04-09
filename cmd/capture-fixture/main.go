@@ -31,7 +31,7 @@ type meta struct {
 	ExpectedContains []string `json:"expected_contains"`
 }
 
-func main() {
+func run() error {
 	rawURL := flag.String("url", "", "URL to fetch (required)")
 	name := flag.String("name", "", "Fixture directory name, e.g. ars_technica (required)")
 	strategy := flag.String("strategy", "readability", "Extraction strategy: readability or selector")
@@ -41,8 +41,7 @@ func main() {
 	flag.Parse()
 
 	if *rawURL == "" || *name == "" {
-		fmt.Fprintln(os.Stderr, "usage: capture-fixture -url <URL> -name <name> [-strategy selector] [-config '.selector'] [-expect 'text1,text2']")
-		os.Exit(1)
+		return fmt.Errorf("usage: capture-fixture -url <URL> -name <name> [-strategy selector] [-config '.selector'] [-expect 'text1,text2']")
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
@@ -52,35 +51,30 @@ func main() {
 	logger.Info("fetching", "url", *rawURL)
 	resp, err := client.Get(*rawURL)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "fetch failed: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("fetch failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		fmt.Fprintf(os.Stderr, "unexpected status: %s\n", resp.Status)
-		os.Exit(1)
+		return fmt.Errorf("unexpected status: %s", resp.Status)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "read body failed: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("read body failed: %w", err)
 	}
 
 	// Target directory relative to repo root: internal/extractor/testdata/<name>
 	// The tool is designed to be run from the repo root.
 	outDir := filepath.Join("internal", "extractor", "testdata", *name)
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "mkdir failed: %v\n", err)
-		os.Exit(1)
+	if err := os.MkdirAll(outDir, 0o750); err != nil {
+		return fmt.Errorf("mkdir failed: %w", err)
 	}
 
 	// Save article.html
 	htmlPath := filepath.Join(outDir, "article.html")
-	if err := os.WriteFile(htmlPath, body, 0o644); err != nil {
-		fmt.Fprintf(os.Stderr, "write article.html failed: %v\n", err)
-		os.Exit(1)
+	if err := os.WriteFile(htmlPath, body, 0o600); err != nil {
+		return fmt.Errorf("write article.html failed: %w", err)
 	}
 	logger.Info("saved HTML", "path", htmlPath, "bytes", len(body))
 
@@ -104,13 +98,20 @@ func main() {
 	}
 	metaBytes, _ := json.MarshalIndent(m, "", "  ")
 	metaPath := filepath.Join(outDir, "meta.json")
-	if err := os.WriteFile(metaPath, append(metaBytes, '\n'), 0o644); err != nil {
-		fmt.Fprintf(os.Stderr, "write meta.json failed: %v\n", err)
-		os.Exit(1)
+	if err := os.WriteFile(metaPath, append(metaBytes, '\n'), 0o600); err != nil {
+		return fmt.Errorf("write meta.json failed: %w", err)
 	}
 	logger.Info("saved meta", "path", metaPath)
 
 	fmt.Printf("\nFixture saved to %s\n", outDir)
 	fmt.Printf("Edit %s to add expected_contains strings, then run:\n", metaPath)
 	fmt.Printf("  go test ./internal/extractor/ -run TestFixtures/%s -v\n", *name)
+	return nil
+}
+
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }

@@ -105,7 +105,7 @@ func cleanFeedContent(htmlStr string, maxWidth int) string {
 	})
 
 	// Remove feedsportal tracking links.
-	doc.Find("a").Each(func(i int, s *goquery.Selection) {
+	doc.Find("a").Each(func(_ int, s *goquery.Selection) {
 		href, exists := s.Attr("href")
 		if exists && strings.Contains(strings.ToLower(href), "da.feedsportal.com") {
 			s.Remove()

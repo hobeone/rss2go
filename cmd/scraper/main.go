@@ -75,7 +75,7 @@ func escapecollective(targetURL, selector string, logger *slog.Logger) http.Hand
 			Link:  &feeds.Link{Href: targetURL},
 		}
 
-		doc.Find(selector).Each(func(i int, s *goquery.Selection) {
+		doc.Find(selector).Each(func(_ int, s *goquery.Selection) {
 			item := parseItem(s)
 			f.Items = append(f.Items, item)
 		})
@@ -93,7 +93,7 @@ func escapecollective(targetURL, selector string, logger *slog.Logger) http.Hand
 	}
 }
 
-func main() {
+func run() error {
 	addr := flag.String("addr", ":8282", "address to listen on")
 	targetURL := flag.String("url", "https://escapecollective.com/stories/", "URL of the page to scrape")
 	selector := flag.String("selector", "div.post", "CSS selector for feed item elements")
@@ -115,7 +115,15 @@ func main() {
 
 	logger.Info("scraper listening", "addr", *addr)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		logger.Error("server error", "error", err)
+		return fmt.Errorf("server error: %w", err)
+	}
+
+	return nil
+}
+
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
 }

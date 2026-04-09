@@ -56,9 +56,13 @@ func Start(ctx context.Context, cfg *config.Config, logger *slog.Logger) {
 			logger.Error("metrics server failed", "error", err)
 		}
 	}()
+	// #nosec G118 -- intentional: we need a fresh context because ctx is already canceled
 	go func() {
 		<-ctx.Done()
-		if err := server.Shutdown(context.Background()); err != nil {
+		// #nosec G118 -- intentional: we need a fresh context because ctx is already canceled
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
 			logger.Error("metrics server shutdown error", "error", err)
 		}
 	}()
