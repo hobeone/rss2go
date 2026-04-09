@@ -47,6 +47,15 @@ func (s *Store) Close() error {
 }
 
 // feedColumns is the canonical column list for feed SELECT queries.
+//
+// IMPORTANT: When adding a new feed column, update ALL of the following:
+//  1. feedColumns     — add the column name here
+//  2. feedNulls       — add a nullable scan target field (if the column is nullable)
+//  3. feedNulls.apply — map the nullable field onto models.Feed
+//  4. scanFeedRow     — add the &f.Field or &n.field to the Scan call
+//  5. scanFeedRows    — same as scanFeedRow but for *sql.Rows
+//  6. models.Feed     — add the struct field in internal/models/models.go
+//  7. migrations/     — add a new migration file (never modify existing ones)
 const feedColumns = "id, url, title, last_poll, last_error_time, last_error_code, last_error_snippet, full_article, backoff_until, etag, last_modified, extraction_strategy, extraction_config"
 
 // feedNulls holds nullable scan targets for a feed row and applies them to a Feed.
