@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/mail"
 
 	"github.com/hobeone/rss2go/internal/db"
 	"github.com/spf13/cobra"
@@ -61,17 +62,22 @@ func init() {
 }
 
 func runAddUser(cmd *cobra.Command, args []string) error {
+	email := args[0]
+	if _, err := mail.ParseAddress(email); err != nil {
+		return fmt.Errorf("invalid email address %q: %w", email, err)
+	}
+
 	_, _, store, err := setup()
 	if err != nil {
 		return err
 	}
 	defer store.Close()
 
-	id, err := store.AddUser(cmd.Context(), args[0])
+	id, err := store.AddUser(cmd.Context(), email)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Added user: %s (ID: %d)\n", args[0], id)
+	fmt.Printf("Added user: %s (ID: %d)\n", email, id)
 	return nil
 }
 
