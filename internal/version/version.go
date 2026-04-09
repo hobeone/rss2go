@@ -12,10 +12,13 @@ var (
 	Commit = "unknown"
 	// BuildDate is the time of compilation.
 	BuildDate = "unknown"
+	// GoVersion is the version of Go used to build the binary.
+	GoVersion = "unknown"
 )
 
 func init() {
 	if info, ok := debug.ReadBuildInfo(); ok {
+		GoVersion = info.GoVersion
 		for _, setting := range info.Settings {
 			switch setting.Key {
 			case "vcs.revision":
@@ -32,5 +35,5 @@ func init() {
 
 // Info returns a string containing build information.
 func Info() string {
-	return fmt.Sprintf("rss2go version %s, commit %s, built at %s", Version, Commit, BuildDate)
+	return fmt.Sprintf("rss2go version %s, commit %s, built at %s with %s", Version, Commit, BuildDate, GoVersion)
 }
