@@ -61,7 +61,8 @@ func NewSender(cfg *config.Config, logger *slog.Logger) *Sender {
 }
 
 // Send delivers an email immediately, retrying with exponential backoff on failure.
-func (s *Sender) Send(req MailRequest) error {
+// The context allows retries to be interrupted during shutdown.
+func (s *Sender) Send(ctx context.Context, req MailRequest) error {
 	var err error
 	for i := 0; i <= maxRetries; i++ {
 		err = s.send(req)
@@ -72,7 +73,13 @@ func (s *Sender) Send(req MailRequest) error {
 		if i < maxRetries {
 			delay := min(time.Duration(math.Pow(2, float64(i)))*initialDelay, maxRetryDelay)
 			s.logger.Warn("failed to send email, retrying", "attempt", i+1, "delay", delay, "error", err)
-			time.Sleep(delay)
+			timer := time.NewTimer(delay)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return fmt.Errorf("send cancelled during retry backoff: %w", ctx.Err())
+			case <-timer.C:
+			}
 		}
 	}
 	return fmt.Errorf("failed to send email after %d retries: %w", maxRetries, err)
@@ -240,8 +247,8 @@ func (p *Pool) Submit(ctx context.Context, req MailRequest) {
 }
 
 // Send delivers an email directly, bypassing the outbox queue.
-func (p *Pool) Send(req MailRequest) error {
-	return p.sender.Send(req)
+func (p *Pool) Send(ctx context.Context, req MailRequest) error {
+	return p.sender.Send(ctx, req)
 }
 
 // Close shuts down the outbox workers and waits for in-flight work to finish.
@@ -297,7 +304,7 @@ func (p *Pool) drainOutbox() {
 			return // queue empty
 		}
 
-		err = p.sender.Send(MailRequest{To: entry.Recipients, Subject: entry.Subject, Body: entry.Body})
+		err = p.sender.Send(p.outboxCtx, MailRequest{To: entry.Recipients, Subject: entry.Subject, Body: entry.Body})
 		if err != nil {
 			p.logger.Error("failed to deliver outbox email", "id", entry.ID, "error", err)
 			if rerr := p.store.ResetEmailToPending(p.outboxCtx, entry.ID); rerr != nil {

@@ -434,7 +434,7 @@ func runTestFeed(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Sending item: %s to %s\n", item.Title, email)
 
-	if err := sender.Send(mailer.MailRequest{
+	if err := sender.Send(cmd.Context(), mailer.MailRequest{
 		To:      []string{email},
 		Subject: "[TEST] " + subject,
 		Body:    body,

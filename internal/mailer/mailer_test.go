@@ -1,6 +1,7 @@
 package mailer
 
 import (
+	"context"
 	"log/slog"
 	"sync/atomic"
 	"testing"
@@ -23,7 +24,7 @@ func TestSender_SendIncrementsMetrics(t *testing.T) {
 	}
 
 	req := MailRequest{To: []string{"test@example.com"}, Subject: "Test", Body: "Body"}
-	err := s.Send(req)
+	err := s.Send(context.Background(), req)
 
 	assert.NoError(t, err)
 	assert.Equal(t, req.To, got.To)
