@@ -16,6 +16,17 @@ crawler_timeout: "30s"
 max_image_width: 600
 
 # Mailer settings (SMTP)
+#
+# All settings can be overridden via environment variables with the
+# RSS2GO_ prefix. For example:
+#   export RSS2GO_SMTP_PASS="your-app-password"
+#   export RSS2GO_SMTP_USER="you@gmail.com"
+#
+# Using environment variables is RECOMMENDED for sensitive values like
+# smtp_pass to avoid storing credentials in plaintext config files.
+#
+# IMPORTANT: If you do store credentials here, ensure this file has
+# restrictive permissions:  chmod 600 rss2go.yaml
 smtp_server: "smtp.gmail.com"
 smtp_port: 587
 smtp_user: "YOUR USER NAME@gmail.com"

@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -71,5 +73,25 @@ func Load(cfgFile string) (*Config, error) {
 		return nil, fmt.Errorf("error unmarshaling config: %w", err)
 	}
 
+	if cfg.SMTPPass != "" {
+		warnIfWorldReadable(v.ConfigFileUsed())
+	}
+
 	return &cfg, nil
+}
+
+// warnIfWorldReadable logs a warning if the config file is readable by
+// group or others, which is a risk when it contains SMTP credentials.
+func warnIfWorldReadable(path string) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return
+	}
+	perm := info.Mode().Perm()
+	if perm&0o077 != 0 {
+		slog.Warn("config file is accessible by group/others; consider chmod 600",
+			"path", path,
+			"permissions", fmt.Sprintf("%04o", perm),
+		)
+	}
 }
