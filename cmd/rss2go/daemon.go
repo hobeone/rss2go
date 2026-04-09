@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -67,11 +68,23 @@ func runDaemon(_ *cobra.Command, args []string) error {
 
 	logger.Info("daemon started", "feeds_count", len(feeds))
 
-	go resyncFeeds(ctx, store, scheduler, logger)
-	go scheduler.Run(ctx)
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		resyncFeeds(ctx, store, scheduler, logger)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		scheduler.Run(ctx)
+	}()
 
 	<-ctx.Done()
-	logger.Info("shutting down")
+	logger.Info("shutting down, waiting for active jobs to finish")
+	wg.Wait()
 
 	return nil
 }

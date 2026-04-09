@@ -105,7 +105,6 @@ func (s *Sender) persistentSMTPSender(req MailRequest) error {
 		s.logger.Debug("opening new SMTP connection", "server", s.config.SMTPServer)
 		conn, err := s.smtpDialer.Dial()
 		if err != nil {
-			s.logger.Error("failed to dial SMTP server", "error", err)
 			return fmt.Errorf("failed to dial SMTP: %w", err)
 		}
 		s.smtpConn = conn
@@ -118,14 +117,8 @@ func (s *Sender) persistentSMTPSender(req MailRequest) error {
 	m.SetBody("text/html", req.Body)
 
 	if err := gomail.Send(s.smtpConn, m); err != nil {
-		s.logger.Error("SMTP send failed",
-			"server", s.config.SMTPServer,
-			"to", req.To,
-			"subject", req.Subject,
-			"error", err,
-		)
 		s.closeSMTP()
-		return fmt.Errorf("failed to send via SMTP: %w", err)
+		return fmt.Errorf("failed to send via SMTP (server: %s, to: %v, subject: %q): %w", s.config.SMTPServer, req.To, req.Subject, err)
 	}
 
 	s.logger.Info("email sent successfully", "to", req.To, "subject", req.Subject)
