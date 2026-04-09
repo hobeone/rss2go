@@ -14,6 +14,7 @@ import (
 	"github.com/hobeone/rss2go/internal/config"
 	"github.com/hobeone/rss2go/internal/db"
 	"github.com/hobeone/rss2go/internal/metrics"
+	"github.com/hobeone/rss2go/internal/sanitize"
 	"gopkg.in/gomail.v2"
 )
 
@@ -158,11 +159,11 @@ func (s *Sender) sendSendmail(req MailRequest) error {
 
 	sanitizedTo := make([]string, len(req.To))
 	for i, t := range req.To {
-		sanitizedTo[i] = sanitizeHeader(t)
+		sanitizedTo[i] = sanitize.Header(t)
 	}
 
 	msg := fmt.Sprintf("To: %s\nSubject: %s\nContent-Type: text/html; charset=UTF-8\n\n%s",
-		strings.Join(sanitizedTo, ", "), sanitizeHeader(req.Subject), req.Body)
+		strings.Join(sanitizedTo, ", "), sanitize.Header(req.Subject), req.Body)
 
 	errChan := make(chan error, 1)
 	go func() {
@@ -185,14 +186,7 @@ func (s *Sender) sendSendmail(req MailRequest) error {
 	return nil
 }
 
-func sanitizeHeader(s string) string {
-	return strings.Map(func(r rune) rune {
-		if r == '\n' || r == '\r' {
-			return ' '
-		}
-		return r
-	}, s)
-}
+
 
 // Pool is a DB-backed outbox worker pool for at-least-once email delivery.
 //

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/hobeone/rss2go/internal/sanitize"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/mmcdole/gofeed"
 )
@@ -70,19 +71,12 @@ func (f *Formatter) FormatItem(feedTitle string, item *gofeed.Item, contentOverr
 
 	safeContent := strings.TrimSpace(f.contentPol.Sanitize(content))
 
-	subject = sanitizeHeader("[" + safeFeedTitle + "] " + safeTitle)
+	subject = sanitize.Header("[" + safeFeedTitle + "] " + safeTitle)
 	body = safeContent + "<br><br><a href=\"" + safeLink + "\">Read more</a>"
 	return
 }
 
-func sanitizeHeader(s string) string {
-	return strings.Map(func(r rune) rune {
-		if r == '\n' || r == '\r' {
-			return ' '
-		}
-		return r
-	}, s)
-}
+
 
 // cleanFeedContent pre-processes raw HTML from a feed item: replaces iframes
 // with links, removes tracking pixels and feedsportal links, and applies
