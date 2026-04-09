@@ -87,7 +87,7 @@ func main() {
 	// Build expected_contains list
 	var expectedContains []string
 	if *expect != "" {
-		for _, s := range strings.Split(*expect, ",") {
+		for s := range strings.SplitSeq(*expect, ",") {
 			if t := strings.TrimSpace(s); t != "" {
 				expectedContains = append(expectedContains, t)
 			}

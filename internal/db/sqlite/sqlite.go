@@ -191,34 +191,39 @@ func (s *Store) UpdateFeed(ctx context.Context, id int64, url *string, title *st
 		return nil
 	}
 
-	query := "UPDATE feeds SET "
+	var query strings.Builder
+	query.WriteString("UPDATE feeds SET ")
+	var assignments []string
 	var args []any
+
 	if url != nil {
-		query += "url = ?, "
+		assignments = append(assignments, "url = ?")
 		args = append(args, *url)
 	}
 	if title != nil {
-		query += "title = ?, "
+		assignments = append(assignments, "title = ?")
 		args = append(args, *title)
 	}
 	if fullArticle != nil {
-		query += "full_article = ?, "
+		assignments = append(assignments, "full_article = ?")
 		args = append(args, *fullArticle)
 	}
 	if extractionStrategy != nil {
-		query += "extraction_strategy = ?, "
+		assignments = append(assignments, "extraction_strategy = ?")
 		args = append(args, *extractionStrategy)
 	}
 	if extractionConfig != nil {
-		query += "extraction_config = ?, "
+		assignments = append(assignments, "extraction_config = ?")
 		args = append(args, *extractionConfig)
 	}
-	query = query[:len(query)-2] // Remove trailing comma and space
-	query += " WHERE id = ?"
+
+	query.WriteString(strings.Join(assignments, ", "))
+	query.WriteString(" WHERE id = ?")
 	args = append(args, id)
 
-	s.logger.Debug("executing exec", "query", query, "args", args)
-	_, err := s.db.ExecContext(ctx, query, args...)
+	finalQuery := query.String()
+	s.logger.Debug("executing exec", "query", finalQuery, "args", args)
+	_, err := s.db.ExecContext(ctx, finalQuery, args...)
 	return err
 }
 

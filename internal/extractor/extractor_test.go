@@ -8,6 +8,15 @@ import (
 
 var discardLogger = slog.New(slog.DiscardHandler)
 
+func TestTruncate_UTF8(t *testing.T) {
+	s := "世界你好"
+	got := truncate(s, 2)
+	want := "世界…"
+	if got != want {
+		t.Errorf("truncate(%q, 2) = %q, want %q", s, got, want)
+	}
+}
+
 func TestExtract(t *testing.T) {
 	html := `
 <html>

@@ -163,8 +163,13 @@ func (s *Sender) sendSendmail(req MailRequest) error {
 		return err
 	}
 
+	sanitizedTo := make([]string, len(req.To))
+	for i, t := range req.To {
+		sanitizedTo[i] = sanitizeHeader(t)
+	}
+
 	msg := fmt.Sprintf("To: %s\nSubject: %s\nContent-Type: text/html; charset=UTF-8\n\n%s",
-		strings.Join(req.To, ", "), req.Subject, req.Body)
+		strings.Join(sanitizedTo, ", "), sanitizeHeader(req.Subject), req.Body)
 
 	errChan := make(chan error, 1)
 	go func() {
@@ -185,6 +190,15 @@ func (s *Sender) sendSendmail(req MailRequest) error {
 		return fmt.Errorf("failed to write to sendmail stdin: %w", writeErr)
 	}
 	return nil
+}
+
+func sanitizeHeader(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\r' {
+			return ' '
+		}
+		return r
+	}, s)
 }
 
 // Pool is a DB-backed outbox worker pool for at-least-once email delivery.

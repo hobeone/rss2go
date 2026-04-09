@@ -70,9 +70,18 @@ func (f *Formatter) FormatItem(feedTitle string, item *gofeed.Item, contentOverr
 
 	safeContent := strings.TrimSpace(f.contentPol.Sanitize(content))
 
-	subject = "[" + safeFeedTitle + "] " + safeTitle
+	subject = sanitizeHeader("[" + safeFeedTitle + "] " + safeTitle)
 	body = safeContent + "<br><br><a href=\"" + safeLink + "\">Read more</a>"
 	return
+}
+
+func sanitizeHeader(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\r' {
+			return ' '
+		}
+		return r
+	}, s)
 }
 
 // cleanFeedContent pre-processes raw HTML from a feed item: replaces iframes
