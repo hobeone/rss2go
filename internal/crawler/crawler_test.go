@@ -108,6 +108,7 @@ func TestParseRetryAfter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("header=%q", tt.header), func(t *testing.T) {
+			t.Parallel()
 			got := parseRetryAfter(tt.header)
 			if tt.wantMin == 0 && tt.wantMax == 0 {
 				assert.Equal(t, time.Duration(0), got)

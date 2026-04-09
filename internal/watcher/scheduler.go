@@ -3,6 +3,7 @@ package watcher
 import (
 	"container/heap"
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -62,7 +63,7 @@ type Scheduler struct {
 	jitter        time.Duration
 	maxImageWidth int
 	logger        *slog.Logger
-	wakeC         chan struct{} // non-blocking signal to interrupt sleep
+	wakeC         chan struct{}  // non-blocking signal to interrupt sleep
 	handlerWg     sync.WaitGroup // tracks in-flight HandleResponse goroutines
 }
 
@@ -225,7 +226,11 @@ func (s *Scheduler) dispatchDue(ctx context.Context) {
 	s.mu.Lock()
 	var due []*Watcher
 	for s.h.Len() > 0 && !s.h[0].nextPoll.After(now) {
-		e := heap.Pop(&s.h).(*schedEntry)
+		popVal := heap.Pop(&s.h)
+		e, ok := popVal.(*schedEntry)
+		if !ok {
+			panic(fmt.Sprintf("expected *schedEntry, got %T", popVal))
+		}
 		delete(s.entries, e.feedID)
 		if w, ok := s.watchers[e.feedID]; ok {
 			due = append(due, w)

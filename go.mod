@@ -13,6 +13,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
+	go.uber.org/goleak v1.3.0
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
 	modernc.org/sqlite v1.48.1
 )

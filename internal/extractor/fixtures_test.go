@@ -40,6 +40,7 @@ func TestFixtures(t *testing.T) {
 		}
 		name := e.Name()
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			dir := filepath.Join("testdata", name)
 
 			// Load meta.json
