@@ -3,7 +3,6 @@ package mailer
 import (
 	"context"
 	"log/slog"
-	"sync/atomic"
 	"testing"
 
 	"github.com/hobeone/rss2go/internal/config"
@@ -12,9 +11,9 @@ import (
 )
 
 func TestSender_SendIncrementsMetrics(t *testing.T) {
-	atomic.StoreUint64(&metrics.EmailsSentTotal, 0)
+	m := &metrics.Set{}
 
-	s := NewSender(&config.Config{}, slog.New(slog.DiscardHandler))
+	s := NewSender(&config.Config{}, m, slog.New(slog.DiscardHandler))
 	defer s.Close()
 
 	var got MailRequest
@@ -29,14 +28,15 @@ func TestSender_SendIncrementsMetrics(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, req.To, got.To)
 	assert.Equal(t, req.Subject, got.Subject)
-	assert.Equal(t, uint64(1), atomic.LoadUint64(&metrics.EmailsSentTotal))
+	assert.Equal(t, uint64(1), m.EmailsSentTotal.Load())
 }
 
 func TestSender_DefaultSenderRouting(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
+	m := &metrics.Set{}
 
 	t.Run("NoConfig", func(t *testing.T) {
-		s := NewSender(&config.Config{}, logger)
+		s := NewSender(&config.Config{}, m, logger)
 		defer s.Close()
 		err := s.defaultSender(MailRequest{})
 		assert.Error(t, err)
@@ -44,7 +44,7 @@ func TestSender_DefaultSenderRouting(t *testing.T) {
 	})
 
 	t.Run("SMTPConfigured", func(t *testing.T) {
-		s := NewSender(&config.Config{SMTPServer: "localhost"}, logger)
+		s := NewSender(&config.Config{SMTPServer: "localhost"}, m, logger)
 		defer s.Close()
 		err := s.defaultSender(MailRequest{To: []string{"a@b.com"}})
 		assert.Error(t, err)
@@ -52,7 +52,7 @@ func TestSender_DefaultSenderRouting(t *testing.T) {
 	})
 
 	t.Run("SendmailConfigured", func(t *testing.T) {
-		s := NewSender(&config.Config{Sendmail: "/bin/false"}, logger)
+		s := NewSender(&config.Config{Sendmail: "/bin/false"}, m, logger)
 		defer s.Close()
 		err := s.defaultSender(MailRequest{To: []string{"a@b.com"}})
 		assert.Error(t, err)

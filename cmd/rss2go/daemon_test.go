@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hobeone/rss2go/internal/models"
+	"github.com/hobeone/rss2go/internal/metrics"
 	"github.com/hobeone/rss2go/internal/watcher"
 	"github.com/stretchr/testify/assert"
 )
@@ -36,7 +37,7 @@ func (s *testSyncer) GetWatcher(feedID int64) (*watcher.Watcher, bool) {
 		return nil, false
 	}
 	logger := slog.New(slog.DiscardHandler)
-	return watcher.New(f, nil, nil, nil, time.Hour, 0, 600, logger), true
+	return watcher.New(f, nil, nil, nil, &metrics.Set{}, time.Hour, 0, 600, logger), true
 }
 
 func (s *testSyncer) Register(feed models.Feed) {

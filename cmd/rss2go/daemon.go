@@ -46,16 +46,18 @@ func runDaemon(_ *cobra.Command, args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	m := &metrics.Set{}
+
 	cPool := crawler.NewPool(cfg.CrawlerPoolSize, cfg.CrawlerTimeout, logger)
 	defer cPool.Close()
 
-	mPool := mailer.NewPool(cfg.MailerPoolSize, cfg, store, logger)
+	mPool := mailer.NewPool(cfg.MailerPoolSize, cfg, m, store, logger)
 	defer mPool.Close()
 
-	metrics.StartStatsLoop(ctx, logger)
-	metrics.Start(ctx, cfg, logger)
+	metrics.StartStatsLoop(ctx, m, logger)
+	metrics.Start(ctx, cfg, m, logger)
 
-	scheduler := watcher.NewScheduler(cPool, mPool, store, cfg.PollInterval, cfg.PollJitter, cfg.MaxImageWidth, logger)
+	scheduler := watcher.NewScheduler(cPool, mPool, store, m, cfg.PollInterval, cfg.PollJitter, cfg.MaxImageWidth, logger)
 
 	feeds, err := store.GetFeeds(ctx)
 	if err != nil {

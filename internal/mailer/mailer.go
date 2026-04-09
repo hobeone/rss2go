@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/hobeone/rss2go/internal/config"
@@ -37,9 +36,10 @@ const (
 // Sender delivers email directly with SMTP connection pooling and retry.
 // Suitable for CLI commands that send one-off emails without pool overhead.
 type Sender struct {
-	config *config.Config
-	logger *slog.Logger
-	send   sendFunc
+	config  *config.Config
+	logger  *slog.Logger
+	metrics *metrics.Set
+	send    sendFunc
 
 	mu         sync.Mutex
 	smtpDialer *gomail.Dialer
@@ -48,10 +48,11 @@ type Sender struct {
 }
 
 // NewSender creates a Sender for direct, synchronous email delivery.
-func NewSender(cfg *config.Config, logger *slog.Logger) *Sender {
+func NewSender(cfg *config.Config, m *metrics.Set, logger *slog.Logger) *Sender {
 	s := &Sender{
-		config: cfg,
-		logger: logger.With("component", "mailer"),
+		config:  cfg,
+		logger:  logger.With("component", "mailer"),
+		metrics: m,
 	}
 	if cfg.SMTPServer != "" {
 		s.smtpDialer = gomail.NewDialer(cfg.SMTPServer, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass)
@@ -67,7 +68,7 @@ func (s *Sender) Send(ctx context.Context, req MailRequest) error {
 	for i := 0; i <= maxRetries; i++ {
 		err = s.send(req)
 		if err == nil {
-			atomic.AddUint64(&metrics.EmailsSentTotal, 1)
+			s.metrics.IncEmailsSent()
 			return nil
 		}
 		if i < maxRetries {
@@ -211,9 +212,9 @@ type Pool struct {
 }
 
 // NewPool creates an outbox-backed mailer pool. The store must be non-nil.
-func NewPool(size int, cfg *config.Config, store db.Store, logger *slog.Logger) *Pool {
+func NewPool(size int, cfg *config.Config, m *metrics.Set, store db.Store, logger *slog.Logger) *Pool {
 	p := &Pool{
-		sender:  NewSender(cfg, logger),
+		sender:  NewSender(cfg, m, logger),
 		store:   store,
 		logger:  logger.With("component", "mailer"),
 		notifyC: make(chan struct{}, 1),

@@ -10,6 +10,7 @@ import (
 
 	"github.com/hobeone/rss2go/internal/crawler"
 	"github.com/hobeone/rss2go/internal/db"
+	"github.com/hobeone/rss2go/internal/metrics"
 	"github.com/hobeone/rss2go/internal/models"
 )
 
@@ -59,6 +60,7 @@ type Scheduler struct {
 	crawlerPool   *crawler.Pool
 	mailerPool    MailerPool
 	store         db.Store
+	metrics       *metrics.Set
 	interval      time.Duration
 	jitter        time.Duration
 	maxImageWidth int
@@ -72,6 +74,7 @@ func NewScheduler(
 	crawlerPool *crawler.Pool,
 	mailerPool MailerPool,
 	store db.Store,
+	m *metrics.Set,
 	interval, jitter time.Duration,
 	maxImageWidth int,
 	logger *slog.Logger,
@@ -83,6 +86,7 @@ func NewScheduler(
 		crawlerPool:   crawlerPool,
 		mailerPool:    mailerPool,
 		store:         store,
+		metrics:       m,
 		interval:      interval,
 		jitter:        jitter,
 		maxImageWidth: maxImageWidth,
@@ -105,7 +109,7 @@ func (s *Scheduler) Register(feed models.Feed) {
 		delete(s.entries, feed.ID)
 	}
 
-	w := New(feed, s.store, s.crawlerPool, s.mailerPool, s.interval, s.jitter, s.maxImageWidth, s.logger)
+	w := New(feed, s.store, s.crawlerPool, s.mailerPool, s.metrics, s.interval, s.jitter, s.maxImageWidth, s.logger)
 	s.watchers[feed.ID] = w
 
 	// Determine the initial poll time, honouring any persisted backoff first.

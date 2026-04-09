@@ -7,7 +7,6 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/hobeone/rss2go/internal/crawler"
@@ -37,6 +36,7 @@ type Watcher struct {
 	store           db.Store
 	crawler         CrawlerPool
 	mailer          MailerPool
+	metrics         *metrics.Set
 	logger          *slog.Logger
 	interval        time.Duration
 	jitter          time.Duration
@@ -54,12 +54,13 @@ const (
 )
 
 // New creates a new feed watcher.
-func New(feed models.Feed, store db.Store, c CrawlerPool, m MailerPool, interval, jitter time.Duration, maxImageWidth int, logger *slog.Logger) *Watcher {
+func New(feed models.Feed, store db.Store, c CrawlerPool, m MailerPool, met *metrics.Set, interval, jitter time.Duration, maxImageWidth int, logger *slog.Logger) *Watcher {
 	return &Watcher{
 		feed:            feed,
 		store:           store,
 		crawler:         c,
 		mailer:          m,
+		metrics:         met,
 		logger:          logger.With("feed_id", feed.ID, "url", feed.URL),
 		interval:        interval,
 		jitter:          jitter,
@@ -124,9 +125,9 @@ func (w *Watcher) HandleResponse(ctx context.Context, resp crawler.CrawlResponse
 // handleFeedResponse processes a feed crawl result and returns the next poll
 // interval (normal interval on success, exponentially backed-off on error).
 func (w *Watcher) handleFeedResponse(ctx context.Context, resp crawler.CrawlResponse) time.Duration {
-	atomic.AddUint64(&metrics.FeedsCrawledTotal, 1)
+	w.metrics.IncFeedsCrawled()
 	if resp.Error != nil {
-		atomic.AddUint64(&metrics.FeedsCrawledErrors, 1)
+		w.metrics.IncFeedsCrawledErrors()
 		w.logger.Error("crawl failed", "error", resp.Error)
 
 		snippet := ""

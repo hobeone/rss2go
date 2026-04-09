@@ -13,15 +13,26 @@ import (
 	"github.com/hobeone/rss2go/internal/config"
 )
 
-var (
-	FeedsCrawledTotal  uint64
-	EmailsSentTotal    uint64
-	FeedsCrawledErrors uint64
-)
+// Set holds application-level counters. It is safe for concurrent use.
+// Pass a *Set by dependency injection instead of using package-level globals.
+type Set struct {
+	FeedsCrawledTotal  atomic.Uint64
+	EmailsSentTotal    atomic.Uint64
+	FeedsCrawledErrors atomic.Uint64
+}
+
+// IncFeedsCrawled atomically increments the feeds-crawled counter.
+func (s *Set) IncFeedsCrawled() { s.FeedsCrawledTotal.Add(1) }
+
+// IncFeedsCrawledErrors atomically increments the crawl-errors counter.
+func (s *Set) IncFeedsCrawledErrors() { s.FeedsCrawledErrors.Add(1) }
+
+// IncEmailsSent atomically increments the emails-sent counter.
+func (s *Set) IncEmailsSent() { s.EmailsSentTotal.Add(1) }
 
 // Start starts the Prometheus-style metrics HTTP server.
 // It is a no-op when cfg.MetricsAddr is empty.
-func Start(ctx context.Context, cfg *config.Config, logger *slog.Logger) {
+func Start(ctx context.Context, cfg *config.Config, m *Set, logger *slog.Logger) {
 	if cfg.MetricsAddr == "" {
 		return
 	}
@@ -31,15 +42,15 @@ func Start(ctx context.Context, cfg *config.Config, logger *slog.Logger) {
 		w.Header().Set("Content-Type", "text/plain")
 		fmt.Fprintf(w, "# HELP feeds_crawled_total The total number of feeds crawled.\n")
 		fmt.Fprintf(w, "# TYPE feeds_crawled_total counter\n")
-		fmt.Fprintf(w, "feeds_crawled_total %d\n", atomic.LoadUint64(&FeedsCrawledTotal))
+		fmt.Fprintf(w, "feeds_crawled_total %d\n", m.FeedsCrawledTotal.Load())
 
 		fmt.Fprintf(w, "# HELP feeds_crawled_errors The total number of feed crawl errors.\n")
 		fmt.Fprintf(w, "# TYPE feeds_crawled_errors counter\n")
-		fmt.Fprintf(w, "feeds_crawled_errors %d\n", atomic.LoadUint64(&FeedsCrawledErrors))
+		fmt.Fprintf(w, "feeds_crawled_errors %d\n", m.FeedsCrawledErrors.Load())
 
 		fmt.Fprintf(w, "# HELP emails_sent_total The total number of emails sent.\n")
 		fmt.Fprintf(w, "# TYPE emails_sent_total counter\n")
-		fmt.Fprintf(w, "emails_sent_total %d\n", atomic.LoadUint64(&EmailsSentTotal))
+		fmt.Fprintf(w, "emails_sent_total %d\n", m.EmailsSentTotal.Load())
 	})
 
 	server := &http.Server{
@@ -70,7 +81,7 @@ func Start(ctx context.Context, cfg *config.Config, logger *slog.Logger) {
 
 // StartStatsLoop starts a goroutine that logs runtime and application stats
 // once per minute. It runs for the lifetime of ctx.
-func StartStatsLoop(ctx context.Context, logger *slog.Logger) {
+func StartStatsLoop(ctx context.Context, m *Set, logger *slog.Logger) {
 	go func() {
 		ticker := time.NewTicker(1 * time.Minute)
 		defer ticker.Stop()
@@ -88,8 +99,8 @@ func StartStatsLoop(ctx context.Context, logger *slog.Logger) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				var m runtime.MemStats
-				runtime.ReadMemStats(&m)
+				var ms runtime.MemStats
+				runtime.ReadMemStats(&ms)
 
 				metrics.Read(samples)
 				currentCPU := samples[0].Value.Float64()
@@ -101,13 +112,13 @@ func StartStatsLoop(ctx context.Context, logger *slog.Logger) {
 
 				logger.Info("internal stats",
 					"goroutines", runtime.NumGoroutine(),
-					"alloc_mb", m.Alloc/1024/1024,
-					"sys_mb", m.Sys/1024/1024,
-					"heap_inuse_mb", m.HeapInuse/1024/1024,
+					"alloc_mb", ms.Alloc/1024/1024,
+					"sys_mb", ms.Sys/1024/1024,
+					"heap_inuse_mb", ms.HeapInuse/1024/1024,
 					"cpu_usage_pct", fmt.Sprintf("%.2f%%", cpuPct),
-					"feeds_crawled", atomic.LoadUint64(&FeedsCrawledTotal),
-					"emails_sent", atomic.LoadUint64(&EmailsSentTotal),
-					"crawl_errors", atomic.LoadUint64(&FeedsCrawledErrors),
+					"feeds_crawled", m.FeedsCrawledTotal.Load(),
+					"emails_sent", m.EmailsSentTotal.Load(),
+					"crawl_errors", m.FeedsCrawledErrors.Load(),
 				)
 
 				lastCPU = currentCPU

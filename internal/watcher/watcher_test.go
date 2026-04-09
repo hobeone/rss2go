@@ -10,6 +10,7 @@ import (
 
 	"github.com/hobeone/rss2go/internal/crawler"
 	"github.com/hobeone/rss2go/internal/mailer"
+	"github.com/hobeone/rss2go/internal/metrics"
 	"github.com/hobeone/rss2go/internal/models"
 	"github.com/mmcdole/gofeed"
 	"github.com/stretchr/testify/assert"
@@ -155,7 +156,7 @@ func TestWatcher_HandleResponse(t *testing.T) {
 	mPool := new(mockMailer)
 	logger := slog.New(slog.DiscardHandler)
 
-	w := New(feed, store, cPool, mPool, time.Hour, 0, 600, logger)
+	w := New(feed, store, cPool, mPool, &metrics.Set{}, time.Hour, 0, 600, logger)
 
 	ctx := context.Background()
 
@@ -219,7 +220,7 @@ func TestWatcher_HandleResponse_BackoffPersisted(t *testing.T) {
 	mPool := new(mockMailer)
 	logger := slog.New(slog.DiscardHandler)
 
-	w := New(feed, store, cPool, mPool, time.Hour, 0, 600, logger)
+	w := New(feed, store, cPool, mPool, &metrics.Set{}, time.Hour, 0, 600, logger)
 	ctx := context.Background()
 
 	store.On("SetFeedError", ctx, feed.ID, 429, mock.Anything).Return(nil)
@@ -248,7 +249,7 @@ func TestWatcher_HandleResponse_FullArticle(t *testing.T) {
 	mPool := new(mockMailer)
 	logger := slog.New(slog.DiscardHandler)
 
-	w := New(feed, store, cPool, mPool, time.Hour, 0, 600, logger)
+	w := New(feed, store, cPool, mPool, &metrics.Set{}, time.Hour, 0, 600, logger)
 	ctx := context.Background()
 
 	// 1. Initial Feed Response
@@ -309,7 +310,7 @@ func TestWatcher_FormatItem_Sanitization(t *testing.T) {
 	mPool := new(mockMailer)
 	logger := slog.New(slog.DiscardHandler)
 
-	w := New(feed, store, cPool, mPool, time.Hour, 0, 600, logger)
+	w := New(feed, store, cPool, mPool, &metrics.Set{}, time.Hour, 0, 600, logger)
 
 	item := &gofeed.Item{
 		Title: "Test",
@@ -333,7 +334,7 @@ func TestWatcher_FormatItem_Sanitization(t *testing.T) {
 
 func TestWatcher_FormatItem_LargeContent(t *testing.T) {
 	feed := models.Feed{ID: 1, URL: "http://example.com/rss", Title: "Example"}
-	w := New(feed, nil, nil, nil, time.Hour, 0, 600, slog.New(slog.DiscardHandler))
+	w := New(feed, nil, nil, nil, &metrics.Set{}, time.Hour, 0, 600, slog.New(slog.DiscardHandler))
 
 	// Create content > MaxItemContentSize
 	largeContent := strings.Repeat("a", MaxItemContentSize+100)
@@ -354,7 +355,7 @@ func TestWatcher_FormatItem_LargeContent(t *testing.T) {
 func TestWatcher_FormatItem_ImageWidth(t *testing.T) {
 	feed := models.Feed{ID: 1, URL: "http://example.com/rss", Title: "Example"}
 	// Max width 600
-	w := New(feed, nil, nil, nil, time.Hour, 0, 600, slog.New(slog.DiscardHandler))
+	w := New(feed, nil, nil, nil, &metrics.Set{}, time.Hour, 0, 600, slog.New(slog.DiscardHandler))
 
 	tests := []struct {
 		name          string
@@ -428,7 +429,7 @@ func TestWatcher_FormatItem_ImageWidth(t *testing.T) {
 
 func TestWatcher_FormatItem_BikerumorFeed(t *testing.T) {
 	feed := models.Feed{ID: 1, URL: "https://bikerumor.com/feed/", Title: "Bikerumor"}
-	w := New(feed, nil, nil, nil, time.Hour, 0, 600, slog.New(slog.DiscardHandler))
+	w := New(feed, nil, nil, nil, &metrics.Set{}, time.Hour, 0, 600, slog.New(slog.DiscardHandler))
 
 	item := &gofeed.Item{
 		Title: "XFusion Teases 2 New 32” Suspension Forks, But When Will They Be Ready?",

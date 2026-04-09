@@ -9,6 +9,7 @@ import (
 	"github.com/hobeone/rss2go/internal/crawler"
 	"github.com/hobeone/rss2go/internal/extractor"
 	"github.com/hobeone/rss2go/internal/mailer"
+	"github.com/hobeone/rss2go/internal/metrics"
 	"github.com/hobeone/rss2go/internal/models"
 	"github.com/hobeone/rss2go/internal/watcher"
 	"github.com/mmcdole/gofeed"
@@ -429,7 +430,7 @@ func runTestFeed(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	sender := mailer.NewSender(cfg, logger)
+	sender := mailer.NewSender(cfg, &metrics.Set{}, logger)
 	defer sender.Close()
 
 	fmt.Printf("Sending item: %s to %s\n", item.Title, email)

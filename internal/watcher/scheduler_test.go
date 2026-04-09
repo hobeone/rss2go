@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/hobeone/rss2go/internal/crawler"
+	"github.com/hobeone/rss2go/internal/metrics"
 	"github.com/hobeone/rss2go/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,7 +24,7 @@ func newTestScheduler(t *testing.T) (*Scheduler, *crawler.Pool) {
 	logger := slog.New(slog.DiscardHandler)
 	cPool := crawler.NewPool(1, 5*time.Second, logger)
 	t.Cleanup(func() { cPool.Close() })
-	s := NewScheduler(cPool, new(mockMailer), new(mockStore), time.Hour, 0, 600, logger)
+	s := NewScheduler(cPool, new(mockMailer), new(mockStore), &metrics.Set{}, time.Hour, 0, 600, logger)
 	return s, cPool
 }
 
