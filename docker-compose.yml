@@ -29,7 +29,7 @@ services:
     # Scraper listens on :8282
     command: ["scraper"]
     ports:
-      - "8282:8282"
+      - "127.0.0.1:8282:8282"
     networks:
       - rss2go-network
 
