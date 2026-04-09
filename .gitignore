@@ -1,4 +1,5 @@
 /rss2go
+/scraper
 rss2go.yaml
 rss2go_docker.yaml
 rss2go_web.yaml
