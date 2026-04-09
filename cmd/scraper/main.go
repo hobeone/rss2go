@@ -106,11 +106,12 @@ func run() error {
 	mux.HandleFunc("/escapecollective", escapecollective(*targetURL, *selector, logger))
 
 	server := &http.Server{
-		Addr:         *addr,
-		Handler:      mux,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		Addr:           *addr,
+		Handler:        mux,
+		ReadTimeout:    10 * time.Second,
+		WriteTimeout:   30 * time.Second,
+		IdleTimeout:    120 * time.Second,
+		MaxHeaderBytes: 1 << 20, // 1 MB
 	}
 
 	logger.Info("scraper listening", "addr", *addr)
