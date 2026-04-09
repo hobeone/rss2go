@@ -252,7 +252,7 @@ func TestWatcher_HandleResponse_FullArticle(t *testing.T) {
 	ctx := context.Background()
 
 	// 1. Initial Feed Response
-	store.On("GetUsersForFeed", ctx, feed.ID).Return([]models.User{{ID: 1, Email: "user@example.com"}}, nil).Twice()
+	store.On("GetUsersForFeed", ctx, feed.ID).Return([]models.User{{ID: 1, Email: "user@example.com"}}, nil).Once()
 	store.On("IsSeen", ctx, feed.ID, "item-1").Return(false, nil)
 	store.On("UpdateFeedLastPoll", ctx, feed.ID, mock.Anything, mock.Anything).Return(nil)
 	store.On("ClearFeedError", ctx, feed.ID).Return(nil)
