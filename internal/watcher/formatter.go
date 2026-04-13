@@ -76,8 +76,6 @@ func (f *Formatter) FormatItem(feedTitle string, item *gofeed.Item, contentOverr
 	return
 }
 
-
-
 // cleanFeedContent pre-processes raw HTML from a feed item: replaces iframes
 // with links, removes tracking pixels and feedsportal links, and applies
 // responsive image sizing.

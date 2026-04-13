@@ -20,7 +20,7 @@ import (
 
 // CrawlerPool defines the interface for submitting crawl requests.
 type CrawlerPool interface {
-	Submit(crawler.CrawlRequest)
+	Submit(ctx context.Context, req crawler.CrawlRequest)
 }
 
 // MailerPool defines the interface for submitting mail requests.
@@ -103,12 +103,11 @@ func (w *Watcher) crawl(ctx context.Context) {
 		FeedID:       w.feed.ID,
 		URL:          w.feed.URL,
 		Type:         crawler.RequestTypeFeed,
-		Ctx:          ctx,
 		ETag:         w.feed.ETag,
 		LastModified: w.feed.LastModified,
 	}
 	w.mu.RUnlock()
-	w.crawler.Submit(req)
+	w.crawler.Submit(ctx, req)
 }
 
 // HandleResponse processes a crawl result. For feed responses it returns the
@@ -239,12 +238,11 @@ func (w *Watcher) handleFeedResponse(ctx context.Context, resp crawler.CrawlResp
 			w.pendingItems[guid] = itm
 			w.mu.Unlock()
 
-			w.crawler.Submit(crawler.CrawlRequest{
+			w.crawler.Submit(ctx, crawler.CrawlRequest{
 				FeedID:   feedID,
 				URL:      itm.Link,
 				Type:     crawler.RequestTypeItem,
 				ItemGUID: guid,
-				Ctx:      ctx,
 			})
 		} else {
 			subject, body := w.FormatItem(feedTitle, itm, "")

@@ -137,8 +137,8 @@ type mockCrawler struct {
 	mock.Mock
 }
 
-func (m *mockCrawler) Submit(req crawler.CrawlRequest) {
-	m.Called(req)
+func (m *mockCrawler) Submit(ctx context.Context, req crawler.CrawlRequest) {
+	m.Called(ctx, req)
 }
 
 type mockMailer struct {
@@ -260,7 +260,7 @@ func TestWatcher_HandleResponse_FullArticle(t *testing.T) {
 	store.On("UpdateFeedBackoff", ctx, feed.ID, mock.Anything).Return(nil)
 
 	// Expect a crawl request for the item URL
-	cPool.On("Submit", mock.MatchedBy(func(req crawler.CrawlRequest) bool {
+	cPool.On("Submit", mock.Anything, mock.MatchedBy(func(req crawler.CrawlRequest) bool {
 		return req.Type == crawler.RequestTypeItem && req.URL == "http://example.com/item1" && req.ItemGUID == "item-1"
 	})).Return()
 

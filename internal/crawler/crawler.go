@@ -26,12 +26,13 @@ const (
 )
 
 // CrawlRequest represents a request to fetch a feed or an item.
+// The request context is set by Pool.Submit and must not be assigned by callers.
 type CrawlRequest struct {
 	FeedID       int64
 	URL          string
 	Type         RequestType
 	ItemGUID     string // To correlate with the original item
-	Ctx          context.Context
+	ctx          context.Context
 	ETag         string
 	LastModified string
 }
@@ -77,38 +78,43 @@ func NewPool(size int, timeout time.Duration, logger *slog.Logger) *Pool {
 	return p
 }
 
+// fetchResult holds the outcome of a single HTTP fetch.
+type fetchResult struct {
+	body         []byte
+	statusCode   int
+	etag         string
+	lastModified string
+	retryAfter   time.Duration
+}
+
 func (p *Pool) worker(id int) {
 	defer p.wg.Done()
 	p.logger.Debug("starting worker", "worker_id", id)
 	for req := range p.requests {
 		p.logger.Debug("crawling request", "feed_id", req.FeedID, "type", req.Type, "url", req.URL)
-		body, code, etag, lastModified, retryAfter, err := p.fetch(req.Ctx, req.URL, req.ETag, req.LastModified)
+		res, err := p.fetch(req.ctx, req.URL, req.ETag, req.LastModified)
 		p.responses <- CrawlResponse{
 			FeedID:       req.FeedID,
 			Type:         req.Type,
 			ItemGUID:     req.ItemGUID,
-			StatusCode:   code,
-			Body:         body,
+			StatusCode:   res.statusCode,
+			Body:         res.body,
 			Error:        err,
-			ETag:         etag,
-			LastModified: lastModified,
-			RetryAfter:   retryAfter,
+			ETag:         res.etag,
+			LastModified: res.lastModified,
+			RetryAfter:   res.retryAfter,
 		}
 	}
 }
 
-func (p *Pool) fetch(ctx context.Context, url string, etag string, lastModified string) ([]byte, int, string, string, time.Duration, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
+func (p *Pool) fetch(ctx context.Context, url, etag, lastModified string) (fetchResult, error) {
 	// Create a sub-context with the pool's configured timeout
 	ctx, cancel := context.WithTimeout(ctx, p.timeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, 0, "", "", 0, err
+		return fetchResult{}, err
 	}
 
 	req.Header.Set("User-Agent", "rss2go/2.0")
@@ -123,7 +129,7 @@ func (p *Pool) fetch(ctx context.Context, url string, etag string, lastModified 
 
 	p.logger.Debug("sending request", "url", url, "timeout", p.timeout)
 	start := time.Now()
-	// #nosec G704 -- intentional SSRF for crawling RSS feeds
+	// #nosec G107 -- intentional SSRF for crawling RSS feeds
 	resp, err := p.client.Do(req)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
@@ -131,7 +137,7 @@ func (p *Pool) fetch(ctx context.Context, url string, etag string, lastModified 
 		} else {
 			p.logger.Debug("request failed", "url", url, "error", err, "duration", time.Since(start))
 		}
-		return nil, 0, "", "", 0, err
+		return fetchResult{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -145,7 +151,7 @@ func (p *Pool) fetch(ctx context.Context, url string, etag string, lastModified 
 
 	if resp.StatusCode == http.StatusNotModified {
 		p.logger.Debug("feed not modified", "url", url)
-		return nil, resp.StatusCode, "", "", 0, nil
+		return fetchResult{statusCode: resp.StatusCode}, nil
 	}
 
 	// Parse Retry-After on rate-limit and service-unavailable responses.
@@ -159,7 +165,7 @@ func (p *Pool) fetch(ctx context.Context, url string, etag string, lastModified 
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBodySize+1))
 	if err != nil {
-		return nil, resp.StatusCode, "", "", retryAfter, err
+		return fetchResult{statusCode: resp.StatusCode, retryAfter: retryAfter}, err
 	}
 
 	if len(body) > MaxResponseBodySize {
@@ -168,11 +174,17 @@ func (p *Pool) fetch(ctx context.Context, url string, etag string, lastModified 
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return body, resp.StatusCode, "", "", retryAfter, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return fetchResult{body: body, statusCode: resp.StatusCode, retryAfter: retryAfter},
+			fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	p.logger.Debug("read complete", "url", url, "bytes", len(body))
-	return body, resp.StatusCode, resp.Header.Get("ETag"), resp.Header.Get("Last-Modified"), 0, nil
+	return fetchResult{
+		body:         body,
+		statusCode:   resp.StatusCode,
+		etag:         resp.Header.Get("ETag"),
+		lastModified: resp.Header.Get("Last-Modified"),
+	}, nil
 }
 
 // parseRetryAfter parses the value of a Retry-After HTTP header, which may be
@@ -197,8 +209,10 @@ func parseRetryAfter(header string) time.Duration {
 	return 0
 }
 
-// Submit sends a crawl request to the pool.
-func (p *Pool) Submit(req CrawlRequest) {
+// Submit sends a crawl request to the pool. The provided ctx is attached to
+// the request and used to cancel the in-flight HTTP fetch.
+func (p *Pool) Submit(ctx context.Context, req CrawlRequest) {
+	req.ctx = ctx
 	p.requests <- req
 }
 

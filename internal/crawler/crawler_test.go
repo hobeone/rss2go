@@ -1,6 +1,7 @@
 package crawler
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -28,7 +29,7 @@ func TestPool(t *testing.T) {
 		FeedID: 1,
 		URL:    ts.URL,
 	}
-	p.Submit(req)
+	p.Submit(context.Background(), req)
 
 	resp := <-p.Responses()
 	assert.NoError(t, resp.Error)
@@ -79,7 +80,7 @@ func TestPool_RateLimited(t *testing.T) {
 			p := NewPool(1, 5*time.Second, logger)
 			defer p.Close()
 
-			p.Submit(CrawlRequest{FeedID: 1, URL: ts.URL})
+			p.Submit(context.Background(), CrawlRequest{FeedID: 1, URL: ts.URL})
 
 			resp := <-p.Responses()
 			assert.Error(t, resp.Error)
@@ -138,7 +139,7 @@ func TestPool_SizeLimit(t *testing.T) {
 		FeedID: 1,
 		URL:    ts.URL,
 	}
-	p.Submit(req)
+	p.Submit(context.Background(), req)
 
 	resp := <-p.Responses()
 	assert.NoError(t, resp.Error)

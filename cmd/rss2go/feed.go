@@ -398,10 +398,9 @@ func runTestFeed(cmd *cobra.Command, args []string) error {
 		reqCtx, cancel := context.WithTimeout(cmd.Context(), cfg.CrawlerTimeout)
 		defer cancel()
 
-		cPool.Submit(crawler.CrawlRequest{
+		cPool.Submit(reqCtx, crawler.CrawlRequest{
 			URL:  item.Link,
 			Type: crawler.RequestTypeItem,
-			Ctx:  reqCtx,
 		})
 
 		select {

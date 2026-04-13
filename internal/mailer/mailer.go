@@ -194,8 +194,6 @@ func (s *Sender) sendSendmail(req MailRequest) error {
 	return nil
 }
 
-
-
 // Pool is a DB-backed outbox worker pool for at-least-once email delivery.
 //
 // Submit persists the request to the DB before signalling workers, so a crash
