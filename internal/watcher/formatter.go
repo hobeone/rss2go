@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html"
 	"log/slog"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -66,7 +67,7 @@ func (f *Formatter) FormatItem(feedTitle string, item *gofeed.Item, contentOverr
 		f.logger.Error("item content too large to process", "title", item.Title, "size", len(content), "limit", MaxItemContentSize)
 		content = "<i>[Content omitted: item too large to process safely]</i>"
 	} else {
-		content = cleanFeedContent(content, f.maxImageWidth)
+		content = cleanFeedContent(content, safeLink, f.maxImageWidth)
 	}
 
 	safeContent := strings.TrimSpace(f.contentPol.Sanitize(content))
@@ -76,13 +77,38 @@ func (f *Formatter) FormatItem(feedTitle string, item *gofeed.Item, contentOverr
 	return
 }
 
-// cleanFeedContent pre-processes raw HTML from a feed item: replaces iframes
-// with links, removes tracking pixels and feedsportal links, and applies
-// responsive image sizing.
-func cleanFeedContent(htmlStr string, maxWidth int) string {
+// cleanFeedContent pre-processes raw HTML from a feed item: resolves relative links
+// and images, replaces iframes with links, removes tracking pixels and feedsportal
+// links, and applies responsive image sizing.
+func cleanFeedContent(htmlStr string, baseURL string, maxWidth int) string {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlStr))
 	if err != nil {
 		return htmlStr
+	}
+
+	var base *url.URL
+	if baseURL != "" {
+		base, _ = url.Parse(baseURL)
+	}
+
+	// Resolve relative links and images to absolute URLs.
+	if base != nil {
+		doc.Find("a").Each(func(_ int, s *goquery.Selection) {
+			href, exists := s.Attr("href")
+			if exists && href != "" {
+				if u, err := url.Parse(href); err == nil {
+					s.SetAttr("href", base.ResolveReference(u).String())
+				}
+			}
+		})
+		doc.Find("img").Each(func(_ int, s *goquery.Selection) {
+			src, exists := s.Attr("src")
+			if exists && src != "" {
+				if u, err := url.Parse(src); err == nil {
+					s.SetAttr("src", base.ResolveReference(u).String())
+				}
+			}
+		})
 	}
 
 	// Replace iframes with links.

@@ -332,6 +332,31 @@ func TestWatcher_FormatItem_Sanitization(t *testing.T) {
 	}
 }
 
+func TestWatcher_FormatItem_RelativeURLs(t *testing.T) {
+	feed := models.Feed{ID: 1, URL: "http://example.com/rss", Title: "Example"}
+	w := New(feed, nil, nil, nil, &metrics.Set{}, time.Hour, 0, 600, slog.New(slog.DiscardHandler))
+
+	item := &gofeed.Item{
+		Title: "Test Relative URLs",
+		Link:  "http://example.com/blog/article1.html",
+		Content: `<p>Check out our <a href="/about">about page</a>.</p>
+				 <p>And <a href="contact">contact page</a>.</p>
+				 <p>Also this image: <img src="/images/logo.png" alt="logo"></p>
+				 <p>Already absolute: <a href="http://other.com/help">help</a> and <img src="https://other.com/img.jpg"></p>`,
+	}
+
+	_, body := w.FormatItem("Example", item, "")
+
+	// Verify relative URLs are resolved correctly against item.Link
+	assert.Contains(t, body, `href="http://example.com/about"`)
+	assert.Contains(t, body, `href="http://example.com/blog/contact"`)
+	assert.Contains(t, body, `src="http://example.com/images/logo.png"`)
+
+	// Verify already-absolute URLs are preserved
+	assert.Contains(t, body, `href="http://other.com/help"`)
+	assert.Contains(t, body, `src="https://other.com/img.jpg"`)
+}
+
 func TestWatcher_FormatItem_LargeContent(t *testing.T) {
 	feed := models.Feed{ID: 1, URL: "http://example.com/rss", Title: "Example"}
 	w := New(feed, nil, nil, nil, &metrics.Set{}, time.Hour, 0, 600, slog.New(slog.DiscardHandler))
