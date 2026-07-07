@@ -736,13 +736,10 @@ func (s *Server) handleGetFeedItems(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Retrieve first 15 items
-	limit := 15
-	if len(res.Feed.Items) < limit {
-		limit = len(res.Feed.Items)
-	}
+	limit := min(len(res.Feed.Items), 15)
 
 	resp := make([]feedItemResponse, 0, limit)
-	for i := 0; i < limit; i++ {
+	for i := range limit {
 		item := res.Feed.Items[i]
 		seen, err := s.repo.IsItemSeen(r.Context(), feed.ID, item.GUID)
 		if err != nil {

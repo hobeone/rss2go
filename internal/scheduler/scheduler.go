@@ -161,16 +161,14 @@ func (s *Scheduler) TriggerCrawl(ctx context.Context, feed *types.Feed) bool {
 	s.inFlight[feed.ID] = true
 	s.inFlightMu.Unlock()
 
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
+	s.wg.Go(func() {
 		defer func() {
 			s.inFlightMu.Lock()
 			delete(s.inFlight, feed.ID)
 			s.inFlightMu.Unlock()
 		}()
 		s.processFeed(ctx, feed)
-	}()
+	})
 	return true
 }
 

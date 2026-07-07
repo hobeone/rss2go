@@ -455,4 +455,3 @@ func TestFeedEditFlow(t *testing.T) {
 		t.Fatalf("click close popup: %v", err)
 	}
 }
-

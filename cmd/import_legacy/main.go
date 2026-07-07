@@ -52,8 +52,8 @@ func main() {
 			log.Fatalf("failed to scan user: %v", err)
 		}
 
-		_, err = dstDB.ExecContext(ctx, 
-			"INSERT INTO users (id, email) VALUES (?, ?) ON CONFLICT(email) DO NOTHING", 
+		_, err = dstDB.ExecContext(ctx,
+			"INSERT INTO users (id, email) VALUES (?, ?) ON CONFLICT(email) DO NOTHING",
 			id, email,
 		)
 		if err != nil {
@@ -170,8 +170,8 @@ func main() {
 			log.Fatalf("failed to scan subscription: %v", err)
 		}
 
-		_, err = dstDB.ExecContext(ctx, 
-			"INSERT INTO subscriptions (user_id, feed_id) VALUES (?, ?) ON CONFLICT DO NOTHING", 
+		_, err = dstDB.ExecContext(ctx,
+			"INSERT INTO subscriptions (user_id, feed_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
 			userID, feedID,
 		)
 		if err != nil {
@@ -202,8 +202,8 @@ func main() {
 			log.Fatalf("failed to scan seen_item: %v", err)
 		}
 
-		_, err = dstDB.ExecContext(ctx, 
-			"INSERT INTO seen_items (feed_id, guid, seen_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING", 
+		_, err = dstDB.ExecContext(ctx,
+			"INSERT INTO seen_items (feed_id, guid, seen_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
 			feedID, guid, seenAt,
 		)
 		if err != nil {
