@@ -1,6 +1,20 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended"
+  "extends": ["config:recommended"],
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "description": "Pin Docker base images to a digest and keep the digest current, since the Dockerfile's golang and alpine images use floating tags.",
+      "matchCategories": ["docker"],
+      "pinDigests": true
+    },
+    {
+      "description": "Group all golang.org/x/* module updates into a single PR.",
+      "matchDatasources": ["go"],
+      "matchPackageNames": ["golang.org/x/**"],
+      "groupName": "golang.org/x modules"
+    }
   ]
 }

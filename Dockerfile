@@ -17,7 +17,7 @@ RUN git config --global --add safe.directory /src
 RUN GOOS=linux go build -v -buildvcs=true -o /app/rss2go ./cmd/rss2go
 RUN GOOS=linux go build -v -buildvcs=true -o /app/scraper ./cmd/scraper
 
-FROM alpine:latest
+FROM alpine:3.23
 
 # Certificates for HTTPS and timezone data
 RUN apk add --no-cache ca-certificates tzdata su-exec
