@@ -86,7 +86,7 @@ describe('App Component Layout Shell', () => {
   })
 
   it('triggers logout and returns to operator login prompt', async () => {
-    vi.mocked(api.logout).mockResolvedValue(true)
+    vi.mocked(api.logout).mockResolvedValue(undefined)
 
     render(App)
 

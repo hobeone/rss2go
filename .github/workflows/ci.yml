@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: [ '1.26', 'stable' ]
+        go-version: [ '1.26.x', 'stable' ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -29,6 +29,10 @@ jobs:
       - name: Install UI dependencies
         working-directory: frontend
         run: bun install --frozen-lockfile
+
+      - name: Type-check UI
+        working-directory: frontend
+        run: bun run check
 
       - name: Build UI
         working-directory: frontend
