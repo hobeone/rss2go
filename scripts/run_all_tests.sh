@@ -12,7 +12,7 @@ cd "${REPO_ROOT}"
 
 FAILED=0
 
-echo "=== [1/3] Building Svelte Frontend ==="
+echo "=== [1/4] Building Svelte Frontend ==="
 if command -v bun &> /dev/null; then
   echo "Building frontend assets with bun..."
   if ! (cd frontend && bun run build); then
@@ -25,14 +25,27 @@ else
 fi
 
 echo ""
-echo "=== [2/3] Running Go Unit & Integration Tests ==="
+echo "=== [2/4] Running Svelte UI Unit Tests ==="
+if command -v bun &> /dev/null; then
+  echo "Running frontend unit tests with bun/vitest..."
+  if ! (cd frontend && bun run test); then
+    echo "ERROR: Frontend unit tests failed!"
+    FAILED=1
+  fi
+else
+  echo "ERROR: bun is required but not found in PATH."
+  FAILED=1
+fi
+
+echo ""
+echo "=== [3/4] Running Go Unit & Integration Tests ==="
 if ! go test -race -v ./...; then
   echo "ERROR: Go unit and integration tests failed!"
   FAILED=1
 fi
 
 echo ""
-echo "=== [3/3] Running Go UI Playwright Tests ==="
+echo "=== [4/4] Running Go UI Playwright Tests ==="
 if ! go test -tags=uitest -v ./test/uitest/...; then
   echo "ERROR: UI Playwright tests failed!"
   FAILED=1
