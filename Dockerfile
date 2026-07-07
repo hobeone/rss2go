@@ -1,4 +1,4 @@
-FROM golang:1.26.4-alpine AS builder
+FROM golang:1.26.4-alpine@sha256:3ad57304ad93bbec8548a0437ad9e06a455660655d9af011d58b993f6f615648 AS builder
 
 WORKDIR /src
 
@@ -17,7 +17,7 @@ RUN git config --global --add safe.directory /src
 RUN GOOS=linux go build -v -buildvcs=true -o /app/rss2go ./cmd/rss2go
 RUN GOOS=linux go build -v -buildvcs=true -o /app/scraper ./cmd/scraper
 
-FROM alpine:3.23
+FROM alpine:3.23@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40
 
 # Certificates for HTTPS and timezone data
 RUN apk add --no-cache ca-certificates tzdata su-exec
