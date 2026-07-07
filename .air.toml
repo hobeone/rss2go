@@ -1,0 +1,40 @@
+# Air configuration file for live-reloading backend & frontend assets
+
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  # Build target configuration
+  cmd = "go build -o ./tmp/rss2go ./cmd/rss2go"
+  bin = "./tmp/rss2go"
+  
+  # Trigger reload on Go changes AND compiled frontend bundle edits
+  include_ext = ["go", "html", "js", "css"]
+  
+  # Exclude directories we do NOT want Air to scan (Vite handles raw Svelte files in src)
+  exclude_dir = [
+    "tmp", 
+    "frontend/node_modules", 
+    "frontend/src", 
+    ".git", 
+    ".agents",
+    ".gemini"
+  ]
+  
+  # Rebuild delay in milliseconds (allows Vite compilation output to fully flush to dist)
+  delay = 1000
+  
+  # Interrupt execution if compilation errors arise
+  stop_on_error = true
+  
+  # Logs file path
+  log = "air.log"
+
+[log]
+  time = true
+
+[color]
+  main = "magenta"
+  watcher = "cyan"
+  build = "yellow"
+  runner = "green"

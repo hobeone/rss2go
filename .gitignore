@@ -1,11 +1,38 @@
+# Binaries
+bin/
 /rss2go
-/scraper
+rss2go-scraper
+
+# SQLite Database files
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Test coverage
+coverage.txt
+*.out
+
+# IDE/OS files
+.idea/
+.vscode/
+.DS_Store
+
+# Temporary/Local configuration files
+rss2go.config.yaml
 rss2go.yaml
 rss2go_docker.yaml
 rss2go_web.yaml
-rss2go.db
-feeds
-file.csv
-insert.sql
-*.db*
-.env
+*.db.bak
+*.db-shm.bak
+*.db-wal.bak
+*.db.backup
+
+# Air temp directory
+tmp/
+
+# Playwright Screenshots
+test/uitest/screenshots/
+
+# SPA build output (embedded by Go at build time).
+internal/server/ui/dist/*

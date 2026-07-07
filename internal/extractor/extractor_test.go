@@ -1,113 +1,138 @@
 package extractor
 
 import (
-	"log/slog"
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"rss2go/internal/types"
 )
 
-var discardLogger = slog.New(slog.DiscardHandler)
-
-func TestTruncate_UTF8(t *testing.T) {
-	s := "世界你好"
-	got := truncate(s, 2)
-	want := "世界…"
-	if got != want {
-		t.Errorf("truncate(%q, 2) = %q, want %q", s, got, want)
-	}
-}
-
-func TestExtract(t *testing.T) {
-	html := `
+const sampleArticleHTML = `
+<!DOCTYPE html>
 <html>
-<head><title>Test Article</title></head>
+<head><title>Sample Article</title></head>
 <body>
-<h1>Main Title</h1>
-<div class="content">
-<p>This is the main content of the article.</p>
-<p>More interesting text here.</p>
-</div>
-<div class="footer">Ads and stuff</div>
+  <nav><ul><li>Home</li><li>Blog</li></ul></nav>
+  <div class="sidebar">Ads Ads Ads</div>
+  <article>
+    <h1 class="title">My Awesome Article</h1>
+    <div class="content">
+      <p>This is the main readable content of the article.</p>
+      <p>It should be extracted successfully.</p>
+    </div>
+  </article>
+  <footer>Copyright 2026</footer>
 </body>
-</html>
-`
-	ext, err := New(StrategyReadability, "")
+</html>`
+
+func TestExtractCSSSelector(t *testing.T) {
+	e := NewExtractor(nil)
+
+	// Happy Path
+	r := strings.NewReader(sampleArticleHTML)
+	res, err := e.ExtractFromReader(r, "https://example.com", types.StrategySelector, "article .content")
 	if err != nil {
-		t.Fatalf("New failed: %v", err)
-	}
-	content, err := ext.Extract(strings.NewReader(html), "http://example.com/article", discardLogger)
-	if err != nil {
-		t.Fatalf("Extract failed: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if !strings.Contains(content, "This is the main content") {
-		t.Errorf("extracted content missing main text, got: %s", content)
+	if !strings.Contains(res, "This is the main readable content") {
+		t.Errorf("expected extracted content to contain main text, got %q", res)
 	}
-	if strings.Contains(content, "Ads and stuff") {
-		t.Errorf("extracted content should not contain footer ads, got: %s", content)
+	if strings.Contains(res, "Ads Ads Ads") || strings.Contains(res, "Home") {
+		t.Error("extracted content contains elements outside the selector target")
 	}
-}
 
-func TestExtract_InvalidURL(t *testing.T) {
-	ext, err := New(StrategyReadability, "")
-	if err != nil {
-		t.Fatalf("New failed: %v", err)
-	}
-	_, err = ext.Extract(strings.NewReader("<html></html>"), "::invalid-url::", discardLogger)
+	// Error path: selector matches nothing
+	r = strings.NewReader(sampleArticleHTML)
+	_, err = e.ExtractFromReader(r, "https://example.com", types.StrategySelector, ".non-existent-class")
 	if err == nil {
-		t.Error("expected error for invalid URL, got nil")
+		t.Fatal("expected error for non-existent selector, got nil")
 	}
-}
 
-func TestNew_UnknownStrategy(t *testing.T) {
-	_, err := New("magic", "")
+	// Error path: empty selector
+	r = strings.NewReader(sampleArticleHTML)
+	_, err = e.ExtractFromReader(r, "https://example.com", types.StrategySelector, "")
 	if err == nil {
-		t.Error("expected error for unknown strategy, got nil")
+		t.Fatal("expected error for empty selector, got nil")
 	}
 }
 
-func TestNew_SelectorMissingConfig(t *testing.T) {
-	_, err := New(StrategySelector, "")
+func TestExtractHeuristic(t *testing.T) {
+	e := NewExtractor(nil)
+
+	r := strings.NewReader(sampleArticleHTML)
+	res, err := e.ExtractFromReader(r, "https://example.com/article", types.StrategyHeuristic, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Reader Mode heuristic should capture the core text but drop nav/sidebar ads
+	if !strings.Contains(res, "This is the main readable content") {
+		t.Errorf("expected reader mode to capture main text, got %q", res)
+	}
+	if strings.Contains(res, "Ads Ads Ads") || strings.Contains(res, "Home") {
+		t.Errorf("expected reader mode to strip nav/ads, got %q", res)
+	}
+}
+
+func TestExtractUnsupportedStrategy(t *testing.T) {
+	e := NewExtractor(nil)
+	r := strings.NewReader(sampleArticleHTML)
+	_, err := e.ExtractFromReader(r, "https://example.com", "unknown", "")
 	if err == nil {
-		t.Error("expected error for selector strategy with empty config, got nil")
+		t.Fatal("expected error for unsupported strategy, got nil")
 	}
 }
 
-func TestSelectorExtractor(t *testing.T) {
-	html := `
-<html><body>
-<div class="sidebar">Noise</div>
-<article class="post">
-<p>This is the article body.</p>
-</article>
-</body></html>
-`
-	ext, err := New(StrategySelector, "article.post")
+func TestExtractNetworkCalls(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(sampleArticleHTML))
+	}))
+	defer server.Close()
+
+	e := NewExtractor(nil)
+
+	// Happy path
+	res, err := e.Extract(context.Background(), server.URL, types.StrategySelector, "article h1")
 	if err != nil {
-		t.Fatalf("New failed: %v", err)
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(res, "My Awesome Article") {
+		t.Errorf("expected heading to match, got %q", res)
 	}
 
-	content, err := ext.Extract(strings.NewReader(html), "http://example.com/", discardLogger)
-	if err != nil {
-		t.Fatalf("Extract failed: %v", err)
-	}
+	// Bad Content-Type error path
+	serverBadType := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"hello": "world"}`))
+	}))
+	defer serverBadType.Close()
 
-	if !strings.Contains(content, "This is the article body") {
-		t.Errorf("expected article body, got: %s", content)
-	}
-	if strings.Contains(content, "Noise") {
-		t.Errorf("should not contain sidebar noise, got: %s", content)
-	}
-}
-
-func TestSelectorExtractor_NoMatch(t *testing.T) {
-	ext, err := New(StrategySelector, ".nonexistent")
-	if err != nil {
-		t.Fatalf("New failed: %v", err)
-	}
-
-	_, err = ext.Extract(strings.NewReader("<html><body><p>text</p></body></html>"), "http://example.com/", discardLogger)
+	_, err = e.Extract(context.Background(), serverBadType.URL, types.StrategyHeuristic, "")
 	if err == nil {
-		t.Error("expected error for non-matching selector, got nil")
+		t.Fatal("expected error on non-HTML content type, got nil")
+	}
+
+	// HTTP 500 status error path
+	server500 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server500.Close()
+
+	_, err = e.Extract(context.Background(), server500.URL, types.StrategyHeuristic, "")
+	if err == nil {
+		t.Fatal("expected error on HTTP 500 status, got nil")
+	}
+
+	// Network failure path
+	_, err = e.Extract(context.Background(), "http://non-existent-local-server.local/page", types.StrategyHeuristic, "")
+	if err == nil {
+		t.Fatal("expected network failure error, got nil")
 	}
 }

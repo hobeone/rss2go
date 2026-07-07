@@ -1,77 +1,206 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"flag"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-	"github.com/hobeone/rss2go"
-	"github.com/hobeone/rss2go/internal/config"
-	"github.com/hobeone/rss2go/internal/db/sqlite"
-	"github.com/hobeone/rss2go/internal/version"
-	"github.com/spf13/cobra"
+	"rss2go/internal/config"
+	"rss2go/internal/crawler"
+	"rss2go/internal/database"
+	"rss2go/internal/extractor"
+	"rss2go/internal/logger"
+	"rss2go/internal/notifier"
+	"rss2go/internal/outbox"
+	"rss2go/internal/sanitizer"
+	"rss2go/internal/scheduler"
+	"rss2go/internal/server"
+	"rss2go/internal/sidecar"
 )
-
-var (
-	cfgFile  string
-	logLevel string
-	rootCmd  = &cobra.Command{
-		Use:   "rss2go",
-		Short: "rss2go is an RSS-to-Email daemon",
-	}
-)
-
-func init() {
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./rss2go.yaml)")
-	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "", "override log level (debug, info, warn, error)")
-}
 
 func main() {
-	fmt.Println(version.Info())
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	// 0. Intercept sidecar subcommand routing
+	if len(os.Args) > 1 && os.Args[1] == "sidecar" {
+		fs := flag.NewFlagSet("sidecar", flag.ExitOnError)
+		addr := fs.String("addr", ":8081", "Bind address for sidecar scraper server")
+		_ = fs.Parse(os.Args[2:])
+
+		if envAddr, exists := os.LookupEnv("RSS2GO_SIDECAR_ADDR"); exists {
+			*addr = envAddr
+		}
+
+		_, _, err := logger.Setup(logger.LoggingOptions{
+			Level: slog.LevelInfo,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error setting up sidecar logger: %v\n", err)
+			os.Exit(1)
+		}
+
+		slog.Info("Starting rss2go scraper sidecar")
+
+		srv := sidecar.NewServer(*addr, nil, slog.Default().With("component", "sidecar"))
+
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+
+		if err := srv.Start(ctx); err != nil {
+			slog.Error("Scraper Sidecar crashed", "err", err)
+			os.Exit(1)
+		}
+		slog.Info("Scraper sidecar shutdown complete")
+		return
+	}
+
+	// Load resolved configuration via YAML config file, env variables, and flags
+	cfg, err := config.Load(os.Args[1:])
+	if err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(0)
+		}
+		fmt.Fprintf(os.Stderr, "Error loading configuration: %v\n", err)
+		os.Exit(2)
+	}
+
+	// 1. Initialize log broadcaster and unified logger
+	broadcaster := server.NewLogBroadcaster()
+	consoleWriter := server.NewSSEWriter(broadcaster, os.Stderr)
+
+	logLvl, err := logger.ParseLevel(cfg.LogLevel)
+	if err != nil {
+		logLvl = slog.LevelInfo
+	}
+	compLvls := make(map[string]slog.Level)
+	for comp, lvlStr := range cfg.LogLevels {
+		if lvl, err := logger.ParseLevel(lvlStr); err == nil {
+			compLvls[comp] = lvl
+		}
+	}
+
+	_, logCloser, err := logger.Setup(logger.LoggingOptions{
+		Level:           logLvl,
+		LogFile:         cfg.LogFile,
+		ComponentLevels: compLvls,
+		ConsoleWriter:   consoleWriter,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error initializing logger: %v\n", err)
 		os.Exit(1)
 	}
-}
-
-func getLogger(cfg *config.Config) *slog.Logger {
-	levelStr := cfg.LogLevel
-	if logLevel != "" {
-		levelStr = logLevel
+	if logCloser != nil {
+		defer func() {
+			_ = logCloser.Close()
+		}()
 	}
 
-	var level slog.Level
-	if err := level.UnmarshalText([]byte(levelStr)); err != nil {
-		level = slog.LevelInfo
-	}
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
-	slog.SetDefault(logger)
-	return logger
-}
+	slog.Info("Starting rss2go aggregator daemon")
 
-func getStore(cfg *config.Config, logger *slog.Logger) (*sqlite.Store, error) {
-	store, err := sqlite.New(cfg.DBPath, logger)
+	// 1. Initialize SQLite database
+	slog.Info("Opening SQLite database connection", "path", cfg.DBPath)
+	db, err := database.Open(cfg.DBPath)
 	if err != nil {
-		return nil, err
+		slog.Error("Failed to open SQLite database", "path", cfg.DBPath, "err", err)
+		os.Exit(1)
 	}
-	if err := store.Migrate(rss2go.MigrationsFS); err != nil {
-		return nil, err
+	defer func() {
+		slog.Info("Closing database connection")
+		_ = db.Close()
+	}()
+
+	repo := database.NewRepository(db)
+
+	// 2. Initialize crawler, extractor, and sanitizer
+	cr := crawler.NewCrawler(nil)
+	ex := extractor.NewExtractor(nil)
+	sa := sanitizer.NewSanitizer(800) // Default 800px width limit for emails
+
+	// 3. Initialize mail delivery notifier
+	var delivery notifier.Sender
+	switch cfg.MailerMode {
+	case "smtp":
+		var sec notifier.SecurityType
+		switch cfg.SMTPSecurity {
+		case "ssl":
+			sec = notifier.SecuritySSL
+		case "none":
+			sec = notifier.SecurityNone
+		default:
+			sec = notifier.SecuritySTARTTLS
+		}
+		slog.Info("Configuring SMTP mailer notifier", "host", cfg.SMTPHost, "port", cfg.SMTPPort, "from", cfg.SMTPFrom, "security", sec)
+		delivery = notifier.NewSMTPSender(notifier.SMTPConfig{
+			Host:     cfg.SMTPHost,
+			Port:     cfg.SMTPPort,
+			Username: cfg.SMTPUser,
+			Password: cfg.SMTPPass,
+			From:     cfg.SMTPFrom,
+			Security: sec,
+		})
+	case "sendmail":
+		slog.Info("Configuring sendmail binary notifier", "from", cfg.SMTPFrom)
+		delivery = notifier.NewSendmailSender("", cfg.SMTPFrom)
+	case "mock":
+		slog.Info("Configuring dry-run mock mailer (logs only)")
+		delivery = &mockNotifier{}
 	}
-	return store, nil
+
+	// 4. Initialize Outbox Worker queue
+	slog.Info("Starting background outbox worker queue")
+	worker := outbox.NewQueue(repo, delivery, outbox.Config{
+		MaxRetries:     5,
+		InitialBackoff: 5 * time.Minute,
+	}, slog.Default().With("component", "outbox"))
+
+	// 5. Initialize Scheduler
+	slog.Info("Starting polling scheduler", "max_workers", cfg.Crawlers, "interval", cfg.PollInterval)
+	sched := scheduler.New(repo, cr, ex, sa, scheduler.Config{
+		MaxWorkers:   cfg.Crawlers,
+		PollInterval: cfg.PollInterval,
+	}, slog.Default().With("component", "scheduler"))
+
+	// 6. Initialize HTTP Server
+	slog.Info("Configuring API server", "addr", cfg.Addr)
+	srv := server.New(repo, sched, cr, ex, sa, server.Config{
+		Addr:        cfg.Addr,
+		Password:    cfg.Password,
+		Broadcaster: broadcaster,
+		MailerMode:  cfg.MailerMode,
+	}, slog.Default().With("component", "api"))
+
+	// Graceful signal listener context
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	// Launch Outbox worker
+	go func() {
+		_ = worker.Start(ctx)
+		slog.Info("Outbox worker queue stopped")
+	}()
+
+	// Launch Aggregator scheduler
+	go func() {
+		_ = sched.Start(ctx)
+		slog.Info("Polling scheduler stopped")
+	}()
+
+	// Launch HTTP Server (blocks until context is done)
+	if err := srv.Start(ctx); err != nil {
+		slog.Error("API Server crashed", "err", err)
+		os.Exit(1)
+	}
+
+	slog.Info("rss2go daemon shutdown complete")
 }
 
-// setup loads config, initialises the logger, and opens the SQLite store.
-// Callers must defer store.Close() on success.
-func setup() (*config.Config, *slog.Logger, *sqlite.Store, error) {
-	cfg, err := config.Load(cfgFile)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	logger := getLogger(cfg)
-	store, err := getStore(cfg, logger)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	return cfg, logger, store, nil
-}
+type mockNotifier struct{}
 
+func (m *mockNotifier) Send(ctx context.Context, subject string, body string, recipients []string) error {
+	slog.Info("[MOCK MAIL] Sending notification", "recipients", recipients, "subject", subject, "body_len", len(body))
+	return nil
+}

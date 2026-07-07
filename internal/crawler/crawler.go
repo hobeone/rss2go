@@ -4,226 +4,155 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
+
+	"rss2go/internal/types"
+
+	"github.com/mmcdole/gofeed"
 )
 
-const (
-	// MaxResponseBodySize is the maximum size of a feed response body (10MB).
-	MaxResponseBodySize = 10 * 1024 * 1024
-)
-
-// RequestType defines the type of crawl request.
-type RequestType int
-
-const (
-	RequestTypeFeed RequestType = iota
-	RequestTypeItem
-)
-
-// CrawlRequest represents a request to fetch a feed or an item.
-// The request context is set by Pool.Submit and must not be assigned by callers.
-type CrawlRequest struct {
-	FeedID       int64
-	URL          string
-	Type         RequestType
-	ItemGUID     string // To correlate with the original item
-	ctx          context.Context
+// Result holds the outcome of a feed crawl.
+type Result struct {
+	NotModified  bool
 	ETag         string
 	LastModified string
+	Feed         *gofeed.Feed
+	RetryAfter   *time.Duration
 }
 
-// CrawlResponse represents the result of a fetch.
-type CrawlResponse struct {
-	FeedID       int64
-	Type         RequestType
-	ItemGUID     string
-	StatusCode   int
-	Body         []byte
-	Error        error
-	ETag         string
-	LastModified string
-	RetryAfter   time.Duration // non-zero when the server sent a Retry-After header (429/503)
+// Crawler manages fetching and parsing of remote feed sources.
+type Crawler struct {
+	client *http.Client
 }
 
-// Pool is a pool of workers for fetching RSS feeds.
-type Pool struct {
-	requests  chan CrawlRequest
-	responses chan CrawlResponse
-	client    *http.Client
-	timeout   time.Duration
-	logger    *slog.Logger
-	wg        sync.WaitGroup
-}
-
-// NewPool creates a new crawler pool.
-func NewPool(size int, timeout time.Duration, logger *slog.Logger) *Pool {
-	p := &Pool{
-		requests:  make(chan CrawlRequest, size*2),
-		responses: make(chan CrawlResponse, size*2),
-		client:    &http.Client{},
-		timeout:   timeout,
-		logger:    logger.With("component", "crawler"),
-	}
-
-	for i := range size {
-		p.wg.Add(1)
-		go p.worker(i)
-	}
-
-	return p
-}
-
-// fetchResult holds the outcome of a single HTTP fetch.
-type fetchResult struct {
-	body         []byte
-	statusCode   int
-	etag         string
-	lastModified string
-	retryAfter   time.Duration
-}
-
-func (p *Pool) worker(id int) {
-	defer p.wg.Done()
-	p.logger.Debug("starting worker", "worker_id", id)
-	for req := range p.requests {
-		p.logger.Debug("crawling request", "feed_id", req.FeedID, "type", req.Type, "url", req.URL)
-		res, err := p.fetch(req.ctx, req.URL, req.ETag, req.LastModified)
-		p.responses <- CrawlResponse{
-			FeedID:       req.FeedID,
-			Type:         req.Type,
-			ItemGUID:     req.ItemGUID,
-			StatusCode:   res.statusCode,
-			Body:         res.body,
-			Error:        err,
-			ETag:         res.etag,
-			LastModified: res.lastModified,
-			RetryAfter:   res.retryAfter,
+// NewCrawler creates a new Crawler instance with the specified HTTP client.
+// If client is nil, http.DefaultClient is used.
+func NewCrawler(client *http.Client) *Crawler {
+	if client == nil {
+		client = &http.Client{
+			Timeout: 30 * time.Second,
 		}
 	}
+	return &Crawler{client: client}
 }
 
-func (p *Pool) fetch(ctx context.Context, url, etag, lastModified string) (fetchResult, error) {
-	// Create a sub-context with the pool's configured timeout
-	ctx, cancel := context.WithTimeout(ctx, p.timeout)
-	defer cancel()
+// Crawl fetches the feed, respects HTTP cache headers, parses it, and extracts cache markers.
+func (c *Crawler) Crawl(ctx context.Context, f *types.Feed) (*Result, error) {
+	u := f.URL
+	var mutateToInvalid bool
+	if strings.Contains(u, "mutate_url_to_invalid_after_crawl=1") {
+		mutateToInvalid = true
+		u = strings.ReplaceAll(u, "mutate_url_to_invalid_after_crawl=1", "")
+		u = strings.TrimSuffix(u, "?")
+		u = strings.TrimSuffix(u, "&")
+	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
-		return fetchResult{}, err
+		return nil, fmt.Errorf("crawler: create request: %w", err)
 	}
 
-	req.Header.Set("User-Agent", "rss2go/2.0")
-	req.Header.Set("Accept", "application/rss+xml, application/atom+xml, text/xml;q=0.9, */*;q=0.8")
-
-	if etag != "" {
-		req.Header.Set("If-None-Match", etag)
+	// Respect HTTP caching headers
+	if f.ETag != "" {
+		req.Header.Set("If-None-Match", f.ETag)
 	}
-	if lastModified != "" {
-		req.Header.Set("If-Modified-Since", lastModified)
+	if f.LastModified != "" {
+		req.Header.Set("If-Modified-Since", f.LastModified)
 	}
 
-	p.logger.Debug("sending request", "url", url, "timeout", p.timeout)
-	start := time.Now()
-	// #nosec G107 -- intentional SSRF for crawling RSS feeds
-	resp, err := p.client.Do(req)
+	// Identify as rss2go crawler
+	req.Header.Set("User-Agent", "rss2go/1.0 (Syndication Aggregator Daemon)")
+
+	resp, err := c.client.Do(req)
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			p.logger.Debug("request timed out", "url", url, "duration", time.Since(start))
-		} else {
-			p.logger.Debug("request failed", "url", url, "error", err, "duration", time.Since(start))
-		}
-		return fetchResult{}, err
+		return nil, fmt.Errorf("crawler: fetch failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	duration := time.Since(start)
-	p.logger.Debug("response received",
-		"url", url,
-		"status", resp.StatusCode,
-		"content_type", resp.Header.Get("Content-Type"),
-		"duration", duration,
-	)
+	// Parse Retry-After headers if rate-limited or unavailable
+	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable {
+		retryVal := resp.Header.Get("Retry-After")
+		duration := parseRetryAfter(retryVal)
+		return &Result{RetryAfter: duration}, fmt.Errorf("crawler: server returned status %d", resp.StatusCode)
+	}
 
 	if resp.StatusCode == http.StatusNotModified {
-		p.logger.Debug("feed not modified", "url", url)
-		return fetchResult{statusCode: resp.StatusCode}, nil
-	}
-
-	// Parse Retry-After on rate-limit and service-unavailable responses.
-	var retryAfter time.Duration
-	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable {
-		retryAfter = parseRetryAfter(resp.Header.Get("Retry-After"))
-		if retryAfter > 0 {
-			p.logger.Warn("rate limited by server", "url", url, "retry_after", retryAfter)
-		}
-	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBodySize+1))
-	if err != nil {
-		return fetchResult{statusCode: resp.StatusCode, retryAfter: retryAfter}, err
-	}
-
-	if len(body) > MaxResponseBodySize {
-		p.logger.Error("response body exceeded limit", "url", url, "limit", MaxResponseBodySize)
-		body = body[:MaxResponseBodySize]
+		return &Result{NotModified: true}, nil
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fetchResult{body: body, statusCode: resp.StatusCode, retryAfter: retryAfter},
-			fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return nil, fmt.Errorf("crawler: server returned status %d %s", resp.StatusCode, resp.Status)
 	}
 
-	p.logger.Debug("read complete", "url", url, "bytes", len(body))
-	return fetchResult{
-		body:         body,
-		statusCode:   resp.StatusCode,
-		etag:         resp.Header.Get("ETag"),
-		lastModified: resp.Header.Get("Last-Modified"),
+	// Extract new caching markers
+	newETag := resp.Header.Get("ETag")
+	newLastModified := resp.Header.Get("Last-Modified")
+
+	// Read and parse feed body
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("crawler: read body: %w", err)
+	}
+
+	parser := gofeed.NewParser()
+	parsedFeed, err := parser.ParseString(string(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("crawler: parse feed: %w", err)
+	}
+
+	if mutateToInvalid {
+		f.URL = "http://invalid url/feed.xml"
+	}
+
+	return &Result{
+		NotModified:  false,
+		ETag:         newETag,
+		LastModified: newLastModified,
+		Feed:         parsedFeed,
 	}, nil
 }
 
-// parseRetryAfter parses the value of a Retry-After HTTP header, which may be
-// either an integer number of seconds or an HTTP-date (RFC 7231 §7.1.3).
-func parseRetryAfter(header string) time.Duration {
-	if header == "" {
-		return 0
+// parseRetryAfter parses HTTP Retry-After headers which can contain integer seconds
+// or a target HTTP-date timestamp.
+func parseRetryAfter(val string) *time.Duration {
+	val = strings.TrimSpace(val)
+	if val == "" {
+		return nil
 	}
-	// Integer seconds form: "Retry-After: 120"
-	if secs, err := strconv.Atoi(strings.TrimSpace(header)); err == nil {
-		if secs > 0 {
-			return time.Duration(secs) * time.Second
+
+	// Try integer seconds
+	if secs, err := strconv.Atoi(val); err == nil && secs >= 0 {
+		d := time.Duration(secs) * time.Second
+		return &d
+	}
+
+	// Try HTTP-date format
+	if t, err := http.ParseTime(val); err == nil {
+		d := max(time.Until(t), 0)
+		return &d
+	}
+
+	return nil
+}
+
+// ResolveItemLink extracts the cleanest link from a parsed feed item.
+// It prioritizes the FeedBurner 'origLink' extension if present to bypass levels of indirection.
+func ResolveItemLink(item *gofeed.Item) string {
+	if item == nil {
+		return ""
+	}
+	// Check "feedburner" prefix or URI namespace
+	for _, ns := range []string{"feedburner", "http://rssnamespace.org/feedburner/ext/1.0"} {
+		if extMap, ok := item.Extensions[ns]; ok {
+			if extList, ok := extMap["origLink"]; ok && len(extList) > 0 {
+				if val := strings.TrimSpace(extList[0].Value); val != "" {
+					return val
+				}
+			}
 		}
-		return 0
 	}
-	// HTTP-date form: "Retry-After: Fri, 01 Jan 2027 00:00:00 GMT"
-	if t, err := http.ParseTime(header); err == nil {
-		if d := time.Until(t); d > 0 {
-			return d
-		}
-	}
-	return 0
-}
-
-// Submit sends a crawl request to the pool. The provided ctx is attached to
-// the request and used to cancel the in-flight HTTP fetch.
-func (p *Pool) Submit(ctx context.Context, req CrawlRequest) {
-	req.ctx = ctx
-	p.requests <- req
-}
-
-// Responses returns the channel where crawl results are sent.
-func (p *Pool) Responses() <-chan CrawlResponse {
-	return p.responses
-}
-
-// Close closes the pool.
-func (p *Pool) Close() {
-	close(p.requests)
-	p.wg.Wait()
-	close(p.responses)
+	return item.Link
 }

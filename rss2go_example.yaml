@@ -1,34 +1,70 @@
-# Database location
+# rss2go Configuration Example
+# Layered loading order: Defaults -> config file -> Env variables -> CLI flags
+
+# --- Database Setup ---
+# Path to the SQLite WAL database file where feeds, users, subscriptions, 
+# outbox entries, and seen item tracking GUIDs are persisted.
 db_path: "rss2go.db"
 
-# Log level: debug, info, warn, error
+# --- Web Interface & API Dashboard ---
+# Bind address for the administrative operator panel dashboard web interface.
+addr: ":8080"
+
+# Administrative password required to authenticate on the dashboard.
+# Leave blank to disable UI authentication (not recommended in production).
+password: ""
+
+# --- Logging Setup ---
+# Logging verbosity level. Options: "debug", "info", "warn", "error", "off".
 log_level: "info"
 
-# Polling settings
-poll_interval: "1h"
-poll_jitter: "1m"
+# Path to write logs to. If empty, logs are written to console/stderr only.
+# Parent directories will be automatically created.
+log_file: ""
 
-# Crawler settings
-crawler_pool_size: 5
-crawler_timeout: "30s"
+# Per-component level overrides for granular logging configuration.
+# Keys are component names (e.g. "server", "crawler", "scheduler", "outbox").
+# Values are log levels. Components not listed inherit the global log_level.
+# Use level "off" to completely silence a component.
+log_levels:
+  server: "info"
+  scheduler: "info"
 
-# Image settings
-max_image_width: 600
+# --- Crawling & Polling ---
+# Maximum number of concurrent scrapers fetching feeds in the background.
+crawlers: 4
 
-# Mailer settings (SMTP)
-#
-# All settings can be overridden via environment variables with the
-# RSS2GO_ prefix. For example:
-#   export RSS2GO_SMTP_PASS="your-app-password"
-#   export RSS2GO_SMTP_USER="you@gmail.com"
-#
-# Using environment variables is RECOMMENDED for sensitive values like
-# smtp_pass to avoid storing credentials in plaintext config files.
-#
-# IMPORTANT: If you do store credentials here, ensure this file has
-# restrictive permissions:  chmod 600 rss2go.yaml
-smtp_server: "smtp.gmail.com"
+# Frequency at which the daemon queries the database for feeds that are due for polling.
+# Supports standard Go duration syntax (e.g. "10s", "1m", "2h").
+poll_interval: "10s"
+
+# --- Notification Mailer Settings ---
+# Outbox delivery engine configuration.
+# Options:
+#  - "sendmail": invoke local sendmail path utility.
+#  - "smtp": connect to a standard SMTP transfer agent server.
+#  - "mock": dry-run mock mode (prints notifications to stderr instead of emailing).
+mailer_mode: "sendmail"
+
+# SMTP server hostname/IP (required only when mailer_mode is "smtp").
+smtp_host: "localhost"
+
+# SMTP port connection target (standard ports: 25, 465, 587, 2525).
 smtp_port: 587
-smtp_user: "YOUR USER NAME@gmail.com"
-smtp_pass: "YOUR APP PASSWORD"
-smtp_sender: "YOUR USER NAME@gmail.com"
+
+# SMTP username for server authentication.
+smtp_user: ""
+
+# SMTP password for server authentication.
+# Note: Keep permissions of this config file restricted (e.g., chmod 600) if a password is set.
+smtp_pass: ""
+
+# Sender email address used in the "From" header of notification emails.
+smtp_from: "rss2go@localhost"
+
+# SMTP secure connection security protocol layer.
+# Options:
+#  - "starttls": upgrade connection via STARTTLS command (default).
+#  - "ssl": enforce TLS connection immediately on connect (typically port 465).
+#  - "none": plain text connection without encryption layers.
+smtp_security: "starttls"
