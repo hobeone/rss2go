@@ -25,6 +25,12 @@ import (
 	"rss2go/internal/sidecar"
 )
 
+var (
+	Version = "dev"
+	Commit  = "none"
+	Date    = "unknown"
+)
+
 func main() {
 	isSidecar, cmdAddr, globalArgs := parseSidecarArgs(os.Args[1:])
 
@@ -69,7 +75,7 @@ func main() {
 			}()
 		}
 
-		slog.Info("Starting rss2go scraper sidecar", "addr", cfg.SidecarAddr)
+		slog.Info("Starting rss2go scraper sidecar", "addr", cfg.SidecarAddr, "version", Version, "commit", Commit, "date", Date)
 
 		srv := sidecar.NewServer(cfg.SidecarAddr, nil, slog.Default().With("component", "sidecar"))
 
@@ -115,7 +121,7 @@ func main() {
 		}()
 	}
 
-	slog.Info("Starting rss2go aggregator daemon")
+	slog.Info("Starting rss2go aggregator daemon", "version", Version, "commit", Commit, "date", Date)
 
 	// 1. Initialize SQLite database
 	slog.Info("Opening SQLite database connection", "path", cfg.DBPath)
