@@ -44,6 +44,10 @@ jobs:
         working-directory: frontend
         run: bun run build
 
+      - name: UI tests
+        working-directory: frontend
+        run: bun run test
+
       - name: Go tests
         run: go test -race ./...
 
