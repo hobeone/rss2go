@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -25,27 +26,52 @@ import (
 )
 
 func main() {
-	// 0. Intercept sidecar subcommand routing
-	if len(os.Args) > 1 && os.Args[1] == "sidecar" {
-		fs := flag.NewFlagSet("sidecar", flag.ExitOnError)
-		addr := fs.String("addr", ":8081", "Bind address for sidecar scraper server")
-		_ = fs.Parse(os.Args[2:])
+	isSidecar, cmdAddr, globalArgs := parseSidecarArgs(os.Args[1:])
 
-		if envAddr, exists := os.LookupEnv("RSS2GO_SIDECAR_ADDR"); exists {
-			*addr = envAddr
+	// Load resolved configuration via YAML config file, env variables, and flags
+	cfg, err := config.Load(globalArgs)
+	if err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(0)
+		}
+		fmt.Fprintf(os.Stderr, "Error loading configuration: %v\n", err)
+		os.Exit(2)
+	}
+
+	if isSidecar {
+		if cmdAddr != "" {
+			cfg.SidecarAddr = cmdAddr
 		}
 
-		_, _, err := logger.Setup(logger.LoggingOptions{
-			Level: slog.LevelInfo,
+		logLvl, err := logger.ParseLevel(cfg.LogLevel)
+		if err != nil {
+			logLvl = slog.LevelInfo
+		}
+		compLvls := make(map[string]slog.Level)
+		for comp, lvlStr := range cfg.LogLevels {
+			if lvl, err := logger.ParseLevel(lvlStr); err == nil {
+				compLvls[comp] = lvl
+			}
+		}
+
+		_, logCloser, err := logger.Setup(logger.LoggingOptions{
+			Level:           logLvl,
+			LogFile:         cfg.LogFile,
+			ComponentLevels: compLvls,
 		})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error setting up sidecar logger: %v\n", err)
 			os.Exit(1)
 		}
+		if logCloser != nil {
+			defer func() {
+				_ = logCloser.Close()
+			}()
+		}
 
-		slog.Info("Starting rss2go scraper sidecar")
+		slog.Info("Starting rss2go scraper sidecar", "addr", cfg.SidecarAddr)
 
-		srv := sidecar.NewServer(*addr, nil, slog.Default().With("component", "sidecar"))
+		srv := sidecar.NewServer(cfg.SidecarAddr, nil, slog.Default().With("component", "sidecar"))
 
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer cancel()
@@ -56,16 +82,6 @@ func main() {
 		}
 		slog.Info("Scraper sidecar shutdown complete")
 		return
-	}
-
-	// Load resolved configuration via YAML config file, env variables, and flags
-	cfg, err := config.Load(os.Args[1:])
-	if err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			os.Exit(0)
-		}
-		fmt.Fprintf(os.Stderr, "Error loading configuration: %v\n", err)
-		os.Exit(2)
 	}
 
 	// 1. Initialize log broadcaster and unified logger
@@ -203,4 +219,32 @@ type mockNotifier struct{}
 func (m *mockNotifier) Send(ctx context.Context, subject string, body string, recipients []string) error {
 	slog.Info("[MOCK MAIL] Sending notification", "recipients", recipients, "subject", subject, "body_len", len(body))
 	return nil
+}
+
+func parseSidecarArgs(args []string) (bool, string, []string) {
+	if len(args) == 0 {
+		return false, "", args
+	}
+	if args[0] != "sidecar" {
+		return false, "", args
+	}
+
+	var sidecarAddr string
+	var globalArgs []string
+	for i := 1; i < len(args); i++ {
+		arg := args[i]
+		if arg == "-addr" || arg == "--addr" {
+			if i+1 < len(args) {
+				sidecarAddr = args[i+1]
+				i++
+			}
+		} else if after, ok := strings.CutPrefix(arg, "-addr="); ok {
+			sidecarAddr = after
+		} else if after, ok := strings.CutPrefix(arg, "--addr="); ok {
+			sidecarAddr = after
+		} else {
+			globalArgs = append(globalArgs, arg)
+		}
+	}
+	return true, sidecarAddr, globalArgs
 }

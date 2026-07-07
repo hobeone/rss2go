@@ -30,6 +30,7 @@ type Config struct {
 	LogFile      string            `yaml:"log_file"`
 	LogLevels    map[string]string `yaml:"log_levels"`
 	PollInterval time.Duration     `yaml:"poll_interval"`
+	SidecarAddr  string            `yaml:"sidecar_addr"`
 }
 
 // Default returns a Config struct initialized with standard default parameters.
@@ -50,6 +51,7 @@ func Default() *Config {
 		LogFile:      "",
 		LogLevels:    make(map[string]string),
 		PollInterval: 10 * time.Second,
+		SidecarAddr:  ":8081",
 	}
 }
 
@@ -146,6 +148,9 @@ func Load(args []string) (*Config, error) {
 			cfg.PollInterval = d
 		}
 	}
+	if val, exists := os.LookupEnv("RSS2GO_SIDECAR_ADDR"); exists {
+		cfg.SidecarAddr = val
+	}
 
 	// 4. Layer CLI Flag Overrides
 	mainFs := flag.NewFlagSet("rss2go", flag.ContinueOnError)
@@ -172,6 +177,7 @@ func Load(args []string) (*Config, error) {
 	logFileFlag := mainFs.String("log-file", "", "Log file path (default stderr only)")
 	logLevelsFlag := mainFs.String("log-levels", "", "Per-component level overrides, comma-separated e.g. 'server:warn,scheduler:debug'")
 	pollIntervalFlag := mainFs.Duration("poll-interval", 0, "Frequency of scheduled feed polling (default 10s)")
+	sidecarAddrFlag := mainFs.String("sidecar-addr", "", "Bind address for sidecar scraper server (default \":8081\")")
 	_ = mainFs.String("config", "", "Configuration file path (default \"rss2go.yaml\")")
 
 	if err := mainFs.Parse(args); err != nil {
@@ -215,6 +221,8 @@ func Load(args []string) (*Config, error) {
 			cfg.LogLevels = parseLogLevelsMap(*logLevelsFlag)
 		case "poll-interval":
 			cfg.PollInterval = *pollIntervalFlag
+		case "sidecar-addr":
+			cfg.SidecarAddr = *sidecarAddrFlag
 		}
 	})
 
@@ -233,6 +241,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Addr == "" {
 		return fmt.Errorf("addr cannot be empty")
+	}
+	if c.SidecarAddr == "" {
+		return fmt.Errorf("sidecar_addr cannot be empty")
 	}
 	if c.MailerMode != "smtp" && c.MailerMode != "sendmail" && c.MailerMode != "mock" {
 		return fmt.Errorf("invalid mailer_mode: %q (must be 'smtp', 'sendmail', or 'mock')", c.MailerMode)

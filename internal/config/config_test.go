@@ -28,6 +28,9 @@ func TestConfig_DefaultValues(t *testing.T) {
 	if cfg.PollInterval != 10*time.Second {
 		t.Errorf("expected PollInterval 10s, got %v", cfg.PollInterval)
 	}
+	if cfg.SidecarAddr != ":8081" {
+		t.Errorf("expected SidecarAddr ':8081', got %q", cfg.SidecarAddr)
+	}
 }
 
 func TestConfig_YAMLOverlay(t *testing.T) {
@@ -41,6 +44,7 @@ mailer_mode: "smtp"
 smtp_port: 465
 crawlers: 12
 poll_interval: 1m
+sidecar_addr: ":8282"
 `
 	if err := os.WriteFile(configPath, []byte(yamlContent), 0o600); err != nil {
 		t.Fatalf("failed to write test YAML config: %v", err)
@@ -69,12 +73,16 @@ poll_interval: 1m
 	if cfg.PollInterval != 1*time.Minute {
 		t.Errorf("expected PollInterval 1m, got %v", cfg.PollInterval)
 	}
+	if cfg.SidecarAddr != ":8282" {
+		t.Errorf("expected SidecarAddr ':8282', got %q", cfg.SidecarAddr)
+	}
 }
 
 func TestConfig_EnvOverlay(t *testing.T) {
 	t.Setenv("RSS2GO_DB", "/env/path.db")
 	t.Setenv("RSS2GO_ADDR", ":7777")
 	t.Setenv("RSS2GO_CRAWLERS", "9")
+	t.Setenv("RSS2GO_SIDECAR_ADDR", ":8383")
 
 	cfg, err := Load([]string{})
 	if err != nil {
@@ -90,6 +98,9 @@ func TestConfig_EnvOverlay(t *testing.T) {
 	if cfg.Crawlers != 9 {
 		t.Errorf("expected Crawlers 9, got %d", cfg.Crawlers)
 	}
+	if cfg.SidecarAddr != ":8383" {
+		t.Errorf("expected SidecarAddr ':8383', got %q", cfg.SidecarAddr)
+	}
 }
 
 func TestConfig_CLIOverlay(t *testing.T) {
@@ -99,6 +110,7 @@ func TestConfig_CLIOverlay(t *testing.T) {
 		"-db", "/cli/path.db",
 		"-addr", ":1234",
 		"-crawlers", "15",
+		"-sidecar-addr", ":8484",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -113,6 +125,9 @@ func TestConfig_CLIOverlay(t *testing.T) {
 	}
 	if cfg.Crawlers != 15 {
 		t.Errorf("expected Crawlers 15, got %d", cfg.Crawlers)
+	}
+	if cfg.SidecarAddr != ":8484" {
+		t.Errorf("expected SidecarAddr ':8484', got %q", cfg.SidecarAddr)
 	}
 }
 
@@ -147,6 +162,11 @@ func TestConfig_ValidationErrors(t *testing.T) {
 	_, err = Load([]string{"-smtp-security", "invalid_security"})
 	if err == nil {
 		t.Errorf("expected validation error for invalid smtp-security, got nil")
+	}
+
+	_, err = Load([]string{"-sidecar-addr", ""})
+	if err == nil {
+		t.Errorf("expected validation error for empty sidecar-addr, got nil")
 	}
 }
 

@@ -26,7 +26,9 @@ services:
     environment:
       - PUID=${PUID:-1000}
       - PGID=${PGID:-1000}
-    command: ["rss2go", "sidecar", "-addr", ":8282"]
+    volumes:
+      - ./rss2go_docker.yaml:/app/rss2go.yaml
+    command: ["rss2go", "sidecar", "--config", "/app/rss2go.yaml"]
     ports:
       - "127.0.0.1:8282:8282"
     networks:

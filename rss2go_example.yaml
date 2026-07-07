@@ -38,6 +38,11 @@ crawlers: 4
 # Supports standard Go duration syntax (e.g. "10s", "1m", "2h").
 poll_interval: "10s"
 
+# --- Scraper Sidecar ---
+# Bind address for the HTML scraper sidecar service.
+# Both rss2go aggregator daemon and rss2go sidecar scraper use this address.
+sidecar_addr: ":8081"
+
 # --- Notification Mailer Settings ---
 # Outbox delivery engine configuration.
 # Options:
