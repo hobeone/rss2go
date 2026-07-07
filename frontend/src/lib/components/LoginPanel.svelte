@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { login } from '../api';
+
   interface Props {
     onLoginSuccess: () => void;
   }
@@ -12,12 +14,8 @@
     e.preventDefault();
     loginError = '';
     try {
-      const resp = await fetch('/api/v1/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: passwordInput })
-      });
-      if (resp.status === 200) {
+      const ok = await login(passwordInput);
+      if (ok) {
         passwordInput = '';
         onLoginSuccess();
       } else {

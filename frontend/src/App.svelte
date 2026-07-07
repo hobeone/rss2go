@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import LoginPanel from './lib/components/LoginPanel.svelte';
+  import * as api from './lib/api';
 
   // Navigation & Authentication
   let isLoggedIn = $state(false);
@@ -73,32 +74,7 @@
     email: ''
   });
 
-  // Fetch Wrapper
-  async function apiFetch(path: string, options: RequestInit = {}) {
-    try {
-      const resp = await fetch(path, {
-        cache: 'no-store',
-        ...options
-      });
-      if (resp.status === 401) {
-        isLoggedIn = false;
-        checkedLogin = true;
-        return null;
-      }
-      if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(text || `HTTP error ${resp.status}`);
-      }
-      if (resp.headers.get('content-type')?.includes('application/json')) {
-        return await resp.json();
-      }
-      return resp;
-    } catch (err: any) {
-      console.error(`API Fetch Error [${path}]:`, err);
-      triggerToast(err.message || 'Unknown network error');
-      throw err;
-    }
-  }
+  // apiFetch has been refactored to src/lib/api.ts
 
   // Toast Helper
   function triggerToast(msg: string) {
@@ -113,7 +89,7 @@
   // Auth Operations
   async function checkAuthStatus() {
     try {
-      const data = await apiFetch('/api/v1/stats');
+      const data = await api.fetchStats();
       if (data) {
         isLoggedIn = true;
         stats = data;
@@ -129,7 +105,7 @@
   // handleLogin has been moved to LoginPanel component
 
   async function handleLogout() {
-    await fetch('/api/v1/logout', { method: 'POST' });
+    await api.logout();
     isLoggedIn = false;
     feeds = [];
     users = [];
@@ -139,14 +115,14 @@
 
   // Data Loading
   async function loadFeeds() {
-    const data = await apiFetch('/api/v1/feeds');
+    const data = await api.fetchFeeds();
     if (data !== null) {
       feeds = data;
     }
   }
 
   async function loadUsers() {
-    const data = await apiFetch('/api/v1/users');
+    const data = await api.fetchUsers();
     if (data !== null) {
       users = data;
       if (activeUser) {
@@ -159,12 +135,12 @@
   }
 
   async function loadOutbox() {
-    const data = await apiFetch('/api/v1/outbox');
+    const data = await api.fetchOutbox();
     if (data) outboxItems = data;
   }
 
   async function loadStats() {
-    const data = await apiFetch('/api/v1/stats');
+    const data = await api.fetchStats();
     if (data) stats = data;
     loadOutbox();
   }
@@ -224,7 +200,7 @@
     feedItemsError = '';
     activeFeedItems = [];
     try {
-      const data = await apiFetch(`/api/v1/feeds/${feedId}/items`);
+      const data = await api.fetchFeedItems(feedId);
       if (data) {
         activeFeedItems = data;
       }
@@ -300,11 +276,7 @@
 
     if (feedForm.id === 0) {
       // Create new
-      const res = await apiFetch('/api/v1/feeds', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      const res = await api.addFeed(payload);
       if (res) {
         triggerToast('Feed created successfully');
         isAddFeedOpen = false;
@@ -312,11 +284,7 @@
       }
     } else {
       // Edit existing
-      const res = await apiFetch(`/api/v1/feeds/${feedForm.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      const res = await api.updateFeed(feedForm.id, payload);
       if (res) {
         triggerToast('Feed updated successfully');
         isEditFeedOpen = false;
@@ -332,8 +300,8 @@
     if (!confirm('Are you sure you want to delete this feed? All subscribers will be unsubscribed.')) {
       return;
     }
-    const res = await apiFetch(`/api/v1/feeds/${id}`, { method: 'DELETE' });
-    if (res) {
+    const res = await api.deleteFeed(id);
+    if (res !== null) {
       triggerToast('Feed deleted');
       activeFeed = null;
       loadFeeds();
@@ -346,7 +314,7 @@
     testResult = null;
     isTestResultOpen = true;
     try {
-      const data = await apiFetch(`/api/v1/feeds/${feed.id}/test`, { method: 'POST' });
+      const data = await api.testFeed(feed);
       if (data) {
         testResult = data;
       }
@@ -358,7 +326,7 @@
   }
 
   async function catchupFeed(id: number) {
-    const res = await apiFetch(`/api/v1/feeds/${id}/catchup`, { method: 'POST' });
+    const res = await api.catchupFeed(id);
     if (res) {
       triggerToast(`Caught up: ${res.items_marked} items marked seen.`);
       loadFeeds();
@@ -366,11 +334,7 @@
   }
 
   async function rewindFeed(id: number) {
-    const res = await apiFetch(`/api/v1/feeds/${id}/rewind`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ limit: Number(rewindLimit) })
-    });
+    const res = await api.rewindFeed(id, { limit: Number(rewindLimit) });
     if (res) {
       triggerToast(`Rewound successfully.`);
       loadFeeds();
@@ -378,7 +342,7 @@
   }
 
   async function scanFeedNow(id: number) {
-    const res = await apiFetch(`/api/v1/feeds/${id}/scan`, { method: 'POST' });
+    const res = await api.scanFeed(id);
     if (res) {
       triggerToast('Feed scan triggered');
       loadFeeds();
@@ -389,11 +353,7 @@
   async function submitUserForm(e: SubmitEvent) {
     e.preventDefault();
     if (!userForm.email.trim()) return;
-    const res = await apiFetch('/api/v1/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: userForm.email })
-    });
+    const res = await api.addUser(userForm.email);
     if (res) {
       triggerToast('User created successfully');
       userForm.email = '';
@@ -405,8 +365,8 @@
     if (!confirm('Delete user email address? All subscription rows will be removed.')) {
       return;
     }
-    const res = await apiFetch(`/api/v1/users/${id}`, { method: 'DELETE' });
-    if (res) {
+    const res = await api.deleteUser(id);
+    if (res !== null) {
       triggerToast('User removed');
       loadUsers();
     }
@@ -414,22 +374,14 @@
 
   // Subscription toggle matrix helper
   async function toggleSubscription(feedId: number, isSubscribed: boolean) {
-    const payload = { user_id: activeUser.id, feed_id: feedId };
+    if (!activeUser) return;
     if (!isSubscribed) {
       // Create subscription
-      await apiFetch('/api/v1/subscriptions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      await api.addSubscription(activeUser.id, feedId);
       triggerToast('Subscribed successfully');
     } else {
       // Remove subscription
-      await apiFetch('/api/v1/subscriptions', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      await api.deleteSubscription(activeUser.id, feedId);
       triggerToast('Unsubscribed successfully');
     }
     // Reload users data to reflect totals
@@ -442,12 +394,7 @@
     for (const feed of filteredFeeds) {
       const isSubbed = activeUser.subscribed_feed_ids?.includes(feed.id);
       if (!isSubbed) {
-        const payload = { user_id: activeUser.id, feed_id: feed.id };
-        promises.push(apiFetch('/api/v1/subscriptions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        }));
+        promises.push(api.addSubscription(activeUser.id, feed.id));
       }
     }
     if (promises.length > 0) {
@@ -463,12 +410,7 @@
     for (const feed of filteredFeeds) {
       const isSubbed = activeUser.subscribed_feed_ids?.includes(feed.id);
       if (isSubbed) {
-        const payload = { user_id: activeUser.id, feed_id: feed.id };
-        promises.push(apiFetch('/api/v1/subscriptions', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        }));
+        promises.push(api.deleteSubscription(activeUser.id, feed.id));
       }
     }
     if (promises.length > 0) {
