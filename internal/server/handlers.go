@@ -14,6 +14,7 @@ import (
 
 	"rss2go/internal/crawler"
 	"rss2go/internal/database"
+	"rss2go/internal/logger"
 	"rss2go/internal/types"
 )
 
@@ -433,9 +434,11 @@ func (s *Server) handleGetStats(w http.ResponseWriter, r *http.Request) {
 	response := struct {
 		*types.DBStats
 		MailerMode string `json:"mailer_mode"`
+		LogLevel   string `json:"log_level"`
 	}{
 		DBStats:    stats,
 		MailerMode: s.cfg.MailerMode,
+		LogLevel:   logger.GetGlobalLevel(),
 	}
 	s.writeJSON(w, http.StatusOK, response)
 }
@@ -465,6 +468,8 @@ func (s *Server) handleGetOutbox(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetLogs streams logs as they arrive using Server-Sent Events.
+// It accepts an optional ?level= query parameter (debug/info/warn/error; default info)
+// to filter lines below that severity. History is replayed to the client on connect.
 func (s *Server) handleGetLogs(w http.ResponseWriter, r *http.Request) {
 	// Upgrade response writer to SSE event stream
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -477,12 +482,35 @@ func (s *Server) handleGetLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Parse optional ?level= threshold (default info = 1).
+	threshold := 1
+	switch strings.ToLower(r.URL.Query().Get("level")) {
+	case "debug":
+		threshold = 0
+	case "info":
+		threshold = 1
+	case "warn":
+		threshold = 2
+	case "error":
+		threshold = 3
+	}
+
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
 
 	ch := make(chan string, 100)
-	s.broadcaster.Register(ch)
+	history := s.broadcaster.RegisterWithReplay(ch)
 	defer s.broadcaster.Unregister(ch)
+
+	// Replay buffered history before entering the live loop.
+	for _, line := range history {
+		lvl := lineLevel(line)
+		if lvl != -1 && lvl < threshold {
+			continue
+		}
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", strings.TrimSpace(line))
+	}
+	flusher.Flush()
 
 	// Keep-alive heartbeat ticker to prevent socket closure
 	ticker := time.NewTicker(15 * time.Second)
@@ -491,6 +519,10 @@ func (s *Server) handleGetLogs(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case msg := <-ch:
+			lvl := lineLevel(msg)
+			if lvl != -1 && lvl < threshold {
+				continue
+			}
 			_, _ = fmt.Fprintf(w, "data: %s\n\n", strings.TrimSpace(msg))
 			flusher.Flush()
 		case <-ticker.C:
@@ -694,6 +726,24 @@ func generateMagicToken(email, secret string) string {
 func verifyMagicToken(email, token, secret string) bool {
 	expected := generateMagicToken(email, secret)
 	return hmac.Equal([]byte(token), []byte(expected))
+}
+
+// lineLevel classifies a raw log line by its severity level.
+// Returns 0=DEBUG, 1=INFO, 2=WARN, 3=ERROR, or -1 if no level marker is found.
+func lineLevel(line string) int {
+	upper := strings.ToUpper(line)
+	switch {
+	case strings.Contains(upper, "LEVEL=ERROR") || strings.Contains(upper, " ERR ") || strings.HasSuffix(upper, " ERR"):
+		return 3
+	case strings.Contains(upper, "LEVEL=WARN") || strings.Contains(upper, " WRN ") || strings.HasSuffix(upper, " WRN"):
+		return 2
+	case strings.Contains(upper, "LEVEL=INFO") || strings.Contains(upper, " INF ") || strings.HasSuffix(upper, " INF"):
+		return 1
+	case strings.Contains(upper, "LEVEL=DEBUG") || strings.Contains(upper, " DBG ") || strings.HasSuffix(upper, " DBG"):
+		return 0
+	default:
+		return -1
+	}
 }
 
 type feedItemResponse struct {

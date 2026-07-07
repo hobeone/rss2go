@@ -246,17 +246,24 @@ func (s *SessionManager) Logout() {
 	s.expiry = time.Time{}
 }
 
-// LogBroadcaster manages concurrent SSE client channels.
+// LogBroadcaster manages concurrent SSE client channels and maintains a circular
+// ring buffer of the last 100 log lines for replay on new connections.
 type LogBroadcaster struct {
-	mu      sync.Mutex
-	clients map[chan string]bool
+	mu       sync.Mutex
+	clients  map[chan string]bool
+	ring     [100]string
+	ringHead int // index where the next write goes
+	ringLen  int // number of valid entries (capped at 100)
 }
 
-// Register registers a new output channel for log streaming.
-func (b *LogBroadcaster) Register(ch chan string) {
+// RegisterWithReplay atomically registers a new client channel and returns a
+// snapshot of buffered history (oldest→newest) in one lock acquisition, so
+// there is no race between replaying history and receiving new live lines.
+func (b *LogBroadcaster) RegisterWithReplay(ch chan string) []string {
 	b.mu.Lock()
 	defer b.mu.Unlock() // --- no lock held below this line ---
 	b.clients[ch] = true
+	return b.historyLocked()
 }
 
 // Unregister removes a client channel.
@@ -266,16 +273,46 @@ func (b *LogBroadcaster) Unregister(ch chan string) {
 	delete(b.clients, ch)
 }
 
-// Broadcast dispatches a log message to all active client channels.
+// Broadcast stores msg in the ring buffer and dispatches it to all active clients.
 func (b *LogBroadcaster) Broadcast(msg string) {
 	b.mu.Lock()
 	defer b.mu.Unlock() // --- no lock held below this line ---
+
+	// Write into ring, overwriting oldest when full.
+	b.ring[b.ringHead] = msg
+	b.ringHead = (b.ringHead + 1) % len(b.ring)
+	if b.ringLen < len(b.ring) {
+		b.ringLen++
+	}
+
 	for ch := range b.clients {
 		select {
 		case ch <- msg:
 		default:
 		}
 	}
+}
+
+// History returns buffered lines in chronological order (oldest→newest) under the lock.
+func (b *LogBroadcaster) History() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock() // --- no lock held below this line ---
+	return b.historyLocked()
+}
+
+// historyLocked returns the ring buffer contents in chronological order.
+// Caller must hold b.mu.
+func (b *LogBroadcaster) historyLocked() []string {
+	if b.ringLen == 0 {
+		return nil
+	}
+	out := make([]string, b.ringLen)
+	// oldest entry starts at (ringHead - ringLen + len(ring)) % len(ring)
+	start := (b.ringHead - b.ringLen + len(b.ring)) % len(b.ring)
+	for i := range b.ringLen {
+		out[i] = b.ring[(start+i)%len(b.ring)]
+	}
+	return out
 }
 
 var ansiStrip = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)

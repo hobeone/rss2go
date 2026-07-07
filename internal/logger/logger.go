@@ -58,6 +58,11 @@ func SetLogLevels(global slog.Level, compLevels map[string]slog.Level) {
 	componentLevelsMu.Unlock()
 }
 
+// GetGlobalLevel returns the current global log level as a lowercase string.
+func GetGlobalLevel() string {
+	return strings.ToLower(globalLevelVar.Level().String())
+}
+
 // Setup returns a configured *slog.Logger that writes to console (tint),
 // and optionally to a log file, and/or a custom console writer.
 func Setup(opts LoggingOptions) (*slog.Logger, io.Closer, error) {

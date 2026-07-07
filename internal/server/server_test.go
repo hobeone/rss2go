@@ -927,3 +927,158 @@ func (t *interceptingTransport) RoundTrip(req *http.Request) (*http.Response, er
 	req.URL.Host = t.targetHost
 	return t.underlying.RoundTrip(req)
 }
+
+// TestLogBroadcasterRingBuffer verifies History() returns lines in order and caps at 100.
+func TestLogBroadcasterRingBuffer(t *testing.T) {
+	b := NewLogBroadcaster()
+
+	// Broadcast 150 lines — only last 100 should survive.
+	for i := range 150 {
+		b.Broadcast(fmt.Sprintf("line-%d", i))
+	}
+
+	hist := b.History()
+	if len(hist) != 100 {
+		t.Fatalf("expected 100 history lines, got %d", len(hist))
+	}
+	// Oldest surviving line must be line-50, newest line-149.
+	if hist[0] != "line-50" {
+		t.Errorf("expected hist[0]=line-50, got %q", hist[0])
+	}
+	if hist[99] != "line-149" {
+		t.Errorf("expected hist[99]=line-149, got %q", hist[99])
+	}
+}
+
+// TestLogBroadcasterRegisterWithReplay verifies RegisterWithReplay atomically
+// returns history and registers the channel.
+func TestLogBroadcasterRegisterWithReplay(t *testing.T) {
+	b := NewLogBroadcaster()
+
+	// Pre-load 3 lines.
+	b.Broadcast("alpha")
+	b.Broadcast("beta")
+	b.Broadcast("gamma")
+
+	ch := make(chan string, 10)
+	hist := b.RegisterWithReplay(ch)
+	defer b.Unregister(ch)
+
+	if len(hist) != 3 {
+		t.Fatalf("expected 3 history lines, got %d", len(hist))
+	}
+	if hist[0] != "alpha" || hist[1] != "beta" || hist[2] != "gamma" {
+		t.Errorf("history order wrong: %v", hist)
+	}
+
+	// Now broadcast a live message — it should arrive on ch.
+	b.Broadcast("delta")
+	select {
+	case msg := <-ch:
+		if msg != "delta" {
+			t.Errorf("expected live 'delta', got %q", msg)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Error("timed out waiting for live broadcast after RegisterWithReplay")
+	}
+}
+
+// TestLineLevelHelper verifies the lineLevel helper classifies log lines correctly.
+func TestLineLevelHelper(t *testing.T) {
+	tests := []struct {
+		line string
+		want int
+	}{
+		{"time=... level=DEBUG msg=hello", 0},
+		{"time=... DBG hello", 0},
+		{"time=... level=INFO msg=hello", 1},
+		{"time=... INF hello", 1},
+		{"time=... level=WARN msg=hello", 2},
+		{"time=... WRN hello", 2},
+		{"time=... level=ERROR msg=hello", 3},
+		{"time=... ERR hello", 3},
+		{": heartbeat", -1},
+		{"no level marker here", -1},
+	}
+	for _, tt := range tests {
+		got := lineLevel(tt.line)
+		if got != tt.want {
+			t.Errorf("lineLevel(%q) = %d, want %d", tt.line, got, tt.want)
+		}
+	}
+}
+
+// TestHandleGetLogsLevelFilter verifies that ?level=warn suppresses DEBUG lines.
+func TestHandleGetLogsLevelFilter(t *testing.T) {
+	repo := setupTestDB(t)
+	s, ts := makeTestServer(t, repo, "")
+	defer ts.Close()
+
+	// Wire a text handler writing to the SSE broadcaster.
+	writer := &sseWriter{
+		broadcaster: s.broadcaster,
+		out:         io.Discard,
+	}
+	logger := slog.New(slog.NewTextHandler(writer, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	oldLogger := slog.Default()
+	slog.SetDefault(logger)
+	defer slog.SetDefault(oldLogger)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	req, _ := http.NewRequestWithContext(ctx, "GET", ts.URL+"/api/v1/logs?level=warn", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /logs?level=warn failed: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	// Give the stream a moment to open, then emit one DEBUG and one WARN line.
+	time.Sleep(20 * time.Millisecond)
+	slog.Debug("suppressed debug line")
+	slog.Warn("visible warn line")
+
+	buf := make([]byte, 4096)
+	n, _ := resp.Body.Read(buf)
+	output := string(buf[:n])
+
+	if strings.Contains(output, "suppressed debug line") {
+		t.Errorf("expected DEBUG line to be suppressed at warn threshold, got: %q", output)
+	}
+	if !strings.Contains(output, "visible warn line") {
+		t.Errorf("expected WARN line to pass through filter, got: %q", output)
+	}
+}
+
+// TestHandleGetLogsHistoryReplay verifies that pre-buffered lines are replayed on connect.
+func TestHandleGetLogsHistoryReplay(t *testing.T) {
+	repo := setupTestDB(t)
+	s, ts := makeTestServer(t, repo, "")
+	defer ts.Close()
+
+	// Pre-load some history before any client connects.
+	s.broadcaster.Broadcast("pre-connect-line-1")
+	s.broadcaster.Broadcast("pre-connect-line-2")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	req, _ := http.NewRequestWithContext(ctx, "GET", ts.URL+"/api/v1/logs", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /logs failed: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	buf := make([]byte, 4096)
+	n, _ := resp.Body.Read(buf)
+	output := string(buf[:n])
+
+	if !strings.Contains(output, "pre-connect-line-1") {
+		t.Errorf("expected replayed history line 1 in SSE stream, got: %q", output)
+	}
+	if !strings.Contains(output, "pre-connect-line-2") {
+		t.Errorf("expected replayed history line 2 in SSE stream, got: %q", output)
+	}
+}

@@ -192,7 +192,7 @@
         {/if}
 
         {#if currentTab === 'logs'}
-          <LogConsole />
+          <LogConsole logLevel={stats?.log_level ?? 'info'} />
         {/if}
 
       </main>
