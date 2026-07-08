@@ -998,3 +998,72 @@ func TestHandleGetLogsHistoryReplay(t *testing.T) {
 		t.Errorf("expected replayed history line 2 in SSE stream, got: %q", output)
 	}
 }
+
+func TestServerCreateFeedWithSubscribers(t *testing.T) {
+	repo := setupTestDB(t)
+	_, ts := makeTestServer(t, repo)
+	defer ts.Close()
+
+	ctx := context.Background()
+
+	// Create two users
+	u1 := &types.User{Email: "user1@test.com"}
+	_ = repo.CreateUser(ctx, u1)
+	u2 := &types.User{Email: "user2@test.com"}
+	_ = repo.CreateUser(ctx, u2)
+
+	// Case 1: Subscribe selected users (only user 1)
+	payload1 := fmt.Sprintf(`{
+		"title": "Selected Feed",
+		"url": "http://selected.url",
+		"subscribe_user_ids": [%d]
+	}`, u1.ID)
+
+	resp, err := http.Post(ts.URL+"/api/v1/feeds", "application/json", strings.NewReader(payload1))
+	if err != nil {
+		t.Fatalf("POST /feeds failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+	var f1 types.Feed
+	_ = json.NewDecoder(resp.Body).Decode(&f1)
+
+	// Check subscriptions
+	u1Fetched, _ := repo.GetUser(ctx, u1.ID)
+	if len(u1Fetched.SubscribedFeedIDs) != 1 || u1Fetched.SubscribedFeedIDs[0] != f1.ID {
+		t.Errorf("expected user 1 to be subscribed to feed 1, got %v", u1Fetched.SubscribedFeedIDs)
+	}
+	u2Fetched, _ := repo.GetUser(ctx, u2.ID)
+	if len(u2Fetched.SubscribedFeedIDs) != 0 {
+		t.Errorf("expected user 2 to have no subscriptions, got %v", u2Fetched.SubscribedFeedIDs)
+	}
+
+	// Case 2: Subscribe all
+	payload2 := `{
+		"title": "All Feed",
+		"url": "http://all.url",
+		"subscribe_all": true
+	}`
+
+	resp, err = http.Post(ts.URL+"/api/v1/feeds", "application/json", strings.NewReader(payload2))
+	if err != nil {
+		t.Fatalf("POST /feeds failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+	var f2 types.Feed
+	_ = json.NewDecoder(resp.Body).Decode(&f2)
+
+	// Check subscriptions: both users should have 2 feeds subscribed (since u1 had f1, now both get f2)
+	u1Fetched, _ = repo.GetUser(ctx, u1.ID)
+	if len(u1Fetched.SubscribedFeedIDs) != 2 {
+		t.Errorf("expected user 1 to have 2 subscriptions, got %d", len(u1Fetched.SubscribedFeedIDs))
+	}
+	u2Fetched, _ = repo.GetUser(ctx, u2.ID)
+	if len(u2Fetched.SubscribedFeedIDs) != 1 || u2Fetched.SubscribedFeedIDs[0] != f2.ID {
+		t.Errorf("expected user 2 to be subscribed to f2, got %v", u2Fetched.SubscribedFeedIDs)
+	}
+}
+

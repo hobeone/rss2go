@@ -11,7 +11,8 @@ vi.mock('../api', () => ({
   testFeed: vi.fn(),
   catchupFeed: vi.fn(),
   scanFeed: vi.fn(),
-  rewindFeed: vi.fn()
+  rewindFeed: vi.fn(),
+  fetchUsers: vi.fn()
 }))
 
 describe('FeedManager', () => {
@@ -22,6 +23,10 @@ describe('FeedManager', () => {
   const mockItems = [
     { id: 10, title: 'Go Release 1.24', link: 'https://tech.com/go124', published_at: '2026-07-07T12:00:00Z', seen: true }
   ]
+  const mockUsers = [
+    { id: 101, email: 'alice@example.com' },
+    { id: 102, email: 'bob@example.com' }
+  ]
   const mockTriggerToast = vi.fn()
   const mockOnRefresh = vi.fn()
 
@@ -30,6 +35,7 @@ describe('FeedManager', () => {
     mockTriggerToast.mockClear()
     mockOnRefresh.mockClear()
     vi.mocked(api.fetchFeedItems).mockResolvedValue(mockItems)
+    vi.mocked(api.fetchUsers).mockResolvedValue(mockUsers)
   })
 
   it('renders feeds lists correctly', () => {
@@ -40,7 +46,7 @@ describe('FeedManager', () => {
     expect(screen.getByText('Cooking Blog')).toBeInTheDocument()
   })
 
-  it('opens add feed modal and submits form', async () => {
+  it('opens add feed modal and submits form with default subscriber settings', async () => {
     vi.mocked(api.addFeed).mockResolvedValue({ id: 3, title: 'News' })
 
     render(FeedManager, { feeds: mockFeeds, triggerToast: mockTriggerToast, onRefresh: mockOnRefresh })
@@ -52,7 +58,6 @@ describe('FeedManager', () => {
 
     const titleInput = screen.getByPlaceholderText('Engineering Blog')
     const urlInput = screen.getByPlaceholderText('https://site.com/feed.xml')
-    const submitBtn = screen.getByRole('button', { name: 'Register Feed' })
 
     await fireEvent.input(titleInput, { target: { value: 'News Blog' } })
     await fireEvent.input(urlInput, { target: { value: 'https://news.com/feed.xml' } })
@@ -62,10 +67,69 @@ describe('FeedManager', () => {
 
     expect(api.addFeed).toHaveBeenCalledWith(expect.objectContaining({
       title: 'News Blog',
-      url: 'https://news.com/feed.xml'
+      url: 'https://news.com/feed.xml',
+      subscribe_all: false,
+      subscribe_user_ids: []
     }))
     expect(mockTriggerToast).toHaveBeenCalledWith('Feed created successfully')
     expect(mockOnRefresh).toHaveBeenCalled()
+  })
+
+  it('opens add feed modal and submits form with subscribe_all: true', async () => {
+    vi.mocked(api.addFeed).mockResolvedValue({ id: 3, title: 'News' })
+
+    render(FeedManager, { feeds: mockFeeds, triggerToast: mockTriggerToast, onRefresh: mockOnRefresh })
+
+    const addBtn = screen.getByRole('button', { name: '+ Add Feed Source' })
+    await fireEvent.click(addBtn)
+
+    const titleInput = screen.getByPlaceholderText('Engineering Blog')
+    const urlInput = screen.getByPlaceholderText('https://site.com/feed.xml')
+
+    await fireEvent.input(titleInput, { target: { value: 'All News' } })
+    await fireEvent.input(urlInput, { target: { value: 'https://all.com/feed.xml' } })
+
+    const subscribeAllCheckbox = screen.getByLabelText('Subscribe all current users')
+    await fireEvent.click(subscribeAllCheckbox)
+    
+    const form = titleInput.closest('form')!
+    await fireEvent.submit(form)
+
+    expect(api.addFeed).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'All News',
+      url: 'https://all.com/feed.xml',
+      subscribe_all: true,
+      subscribe_user_ids: []
+    }))
+  })
+
+  it('opens add feed modal and submits form with selected users', async () => {
+    vi.mocked(api.addFeed).mockResolvedValue({ id: 3, title: 'News' })
+
+    render(FeedManager, { feeds: mockFeeds, triggerToast: mockTriggerToast, onRefresh: mockOnRefresh })
+
+    const addBtn = screen.getByRole('button', { name: '+ Add Feed Source' })
+    await fireEvent.click(addBtn)
+
+    const titleInput = screen.getByPlaceholderText('Engineering Blog')
+    const urlInput = screen.getByPlaceholderText('https://site.com/feed.xml')
+
+    await fireEvent.input(titleInput, { target: { value: 'Selected News' } })
+    await fireEvent.input(urlInput, { target: { value: 'https://sel.com/feed.xml' } })
+
+    // Wait for users to load and find the checkbox for alice@example.com
+    const aliceCheckbox = await screen.findByLabelText('alice@example.com')
+    await fireEvent.click(aliceCheckbox)
+
+    const form = titleInput.closest('form')!
+    await fireEvent.submit(form)
+
+    expect(api.addFeed).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Selected News',
+      url: 'https://sel.com/feed.xml',
+      subscribe_all: false,
+      subscribe_user_ids: [101]
+    }))
   })
 
   it('opens feed details on card click', async () => {

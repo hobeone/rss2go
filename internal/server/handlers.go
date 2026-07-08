@@ -203,28 +203,59 @@ func (s *Server) handleGetFeeds(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, feeds)
 }
 
+type createFeedRequest struct {
+	types.Feed
+	SubscribeUserIDs []int64 `json:"subscribe_user_ids"`
+	SubscribeAll     bool    `json:"subscribe_all"`
+}
+
 // handleCreateFeed enqueues a new feed source.
 func (s *Server) handleCreateFeed(w http.ResponseWriter, r *http.Request) {
-	var feed types.Feed
-	if err := json.NewDecoder(r.Body).Decode(&feed); err != nil {
+	var req createFeedRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		s.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
 		return
 	}
 
-	if feed.Title == "" || feed.URL == "" {
+	if req.Title == "" || req.URL == "" {
 		s.writeError(w, http.StatusBadRequest, "Title and URL are required")
 		return
 	}
 
-	feed.NextPollAt = time.Now()
-	feed.BackoffFactor = 1.0
+	req.NextPollAt = time.Now()
+	req.BackoffFactor = 1.0
 
-	if err := s.repo.CreateFeed(r.Context(), &feed); err != nil {
+	err := s.repo.WithTx(r.Context(), func(txRepo *database.Repository) error {
+		if err := txRepo.CreateFeed(r.Context(), &req.Feed); err != nil {
+			return err
+		}
+
+		if req.SubscribeAll {
+			users, err := txRepo.ListUsers(r.Context())
+			if err != nil {
+				return err
+			}
+			for _, user := range users {
+				if err := txRepo.Subscribe(r.Context(), user.ID, req.ID); err != nil {
+					return err
+				}
+			}
+		} else {
+			for _, userID := range req.SubscribeUserIDs {
+				if err := txRepo.Subscribe(r.Context(), userID, req.ID); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	s.writeJSON(w, http.StatusCreated, feed)
+	s.writeJSON(w, http.StatusCreated, req.Feed)
 }
 
 // handleGetFeedDetails returns configuration and logs for a single feed.

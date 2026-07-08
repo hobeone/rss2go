@@ -22,6 +22,10 @@
   let isTestingFeed = $state(false);
   let rewindLimit = $state(10);
 
+  let users = $state<any[]>([]);
+  let subscribeAll = $state(false);
+  let selectedUserIDs = $state<number[]>([]);
+
   let feedForm = $state({
     id: 0,
     title: '',
@@ -67,7 +71,7 @@
     }
   });
 
-  function openAddFeed() {
+  async function openAddFeed() {
     feedForm = {
       id: 0,
       title: '',
@@ -78,6 +82,17 @@
       extraction_strategy: 'heuristic',
       css_selector: ''
     };
+    subscribeAll = false;
+    selectedUserIDs = [];
+    users = [];
+    try {
+      const data = await api.fetchUsers();
+      if (data) {
+        users = data;
+      }
+    } catch (e) {
+      console.error(e);
+    }
     isAddFeedOpen = true;
   }
 
@@ -97,7 +112,7 @@
 
   async function submitFeedForm(e: SubmitEvent) {
     e.preventDefault();
-    const payload = {
+    const payload: any = {
       title: feedForm.title,
       url: feedForm.url,
       poll_interval_secs: Number(feedForm.poll_interval_secs),
@@ -106,6 +121,10 @@
       extraction_strategy: feedForm.extraction_strategy,
       css_selector: feedForm.css_selector || null
     };
+    if (isAddFeedOpen) {
+      payload.subscribe_all = subscribeAll;
+      payload.subscribe_user_ids = selectedUserIDs;
+    }
     try {
       if (isAddFeedOpen) {
         const res = await api.addFeed(payload);
@@ -454,6 +473,40 @@
                 <span class="m-input-label">Custom DOM CSS Selector (e.g. article.post-content)</span>
                 <input type="text" placeholder="article.post-body" class="m-input" bind:value={feedForm.css_selector} required />
               </div>
+            {/if}
+          </div>
+        {/if}
+
+        {#if isAddFeedOpen}
+          <div style="border-top: 1px solid var(--md-sys-color-outline-variant); padding-top: 16px;">
+            <span class="m-input-label" style="margin-bottom: 8px; display: block; font-weight: 500;">Feed Subscriber Allocation</span>
+            <label class="m-checkbox-label" style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+              <input type="checkbox" class="m-checkbox" bind:checked={subscribeAll} />
+              Subscribe all current users
+            </label>
+            
+            {#if !subscribeAll && users.length > 0}
+              <div style="border: 1px solid var(--md-sys-color-outline-variant); border-radius: 8px; padding: 12px; max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-top: 8px; background: rgba(0,0,0,0.1);" class="subscriber-select-list">
+                {#each users as user (user.id)}
+                  <label class="m-checkbox-label" style="font-size: 0.85rem; display: flex; align-items: center; gap: 8px;">
+                    <input 
+                      type="checkbox" 
+                      class="m-checkbox" 
+                      checked={selectedUserIDs.includes(user.id)} 
+                      onchange={(e) => {
+                        if (e.currentTarget.checked) {
+                          selectedUserIDs = [...selectedUserIDs, user.id];
+                        } else {
+                          selectedUserIDs = selectedUserIDs.filter(id => id !== user.id);
+                        }
+                      }} 
+                    />
+                    {user.email}
+                  </label>
+                {/each}
+              </div>
+            {:else if !subscribeAll && users.length === 0}
+              <p class="m-body-medium" style="color: var(--md-sys-color-on-surface-variant); font-style: italic;">No users registered yet. Add users in the Subscribers tab.</p>
             {/if}
           </div>
         {/if}
