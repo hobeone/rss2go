@@ -38,7 +38,7 @@ func setupTestDB(t *testing.T) *database.Repository {
 	return database.NewRepository(db)
 }
 
-func makeTestServer(t *testing.T, repo *database.Repository, password string) (*Server, *httptest.Server) {
+func makeTestServer(t *testing.T, repo *database.Repository) (*Server, *httptest.Server) {
 	t.Helper()
 	cr := crawler.NewCrawler(nil)
 	ex := extractor.NewExtractor(nil)
@@ -47,7 +47,6 @@ func makeTestServer(t *testing.T, repo *database.Repository, password string) (*
 
 	cfg := Config{
 		Addr:              "127.0.0.1:0",
-		Password:          password,
 		MagicSecret:       "test-secret-key-12345",
 		HeartbeatInterval: 5 * time.Millisecond,
 		ShutdownTimeout:   50 * time.Millisecond,
@@ -63,93 +62,10 @@ func makeTestServer(t *testing.T, repo *database.Repository, password string) (*
 	return s, ts
 }
 
-func TestServerAuth(t *testing.T) {
-	repo := setupTestDB(t)
-	_, ts := makeTestServer(t, repo, "admin-pass")
-	defer ts.Close()
-
-	// 1. Get feeds without authentication (expect 401)
-	resp, err := http.Get(ts.URL + "/api/v1/feeds")
-	if err != nil {
-		t.Fatalf("GET /feeds failed: %v", err)
-	}
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Errorf("expected status 401, got %d", resp.StatusCode)
-	}
-
-	// 2. Login with incorrect password (expect 401)
-	loginBody, _ := json.Marshal(loginRequest{Password: "wrong-pass"})
-	resp, err = http.Post(ts.URL+"/api/v1/login", "application/json", bytes.NewReader(loginBody))
-	if err != nil {
-		t.Fatalf("POST /login failed: %v", err)
-	}
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Errorf("expected status 401 on login failure, got %d", resp.StatusCode)
-	}
-
-	// 3. Login with correct password (expect 200 + Cookie)
-	loginBody, _ = json.Marshal(loginRequest{Password: "admin-pass"})
-	resp, err = http.Post(ts.URL+"/api/v1/login", "application/json", bytes.NewReader(loginBody))
-	if err != nil {
-		t.Fatalf("POST /login failed: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("expected status 200, got %d", resp.StatusCode)
-	}
-
-	cookies := resp.Cookies()
-	var sessionCookie *http.Cookie
-	for _, c := range cookies {
-		if c.Name == "session_id" {
-			sessionCookie = c
-			break
-		}
-	}
-	if sessionCookie == nil {
-		t.Fatalf("expected session_id cookie in response")
-	}
-	if sessionCookie.Expires.Before(time.Now().Add(23 * time.Hour)) {
-		t.Errorf("expected session cookie expiry to be in ~24h, got %v", sessionCookie.Expires)
-	}
-
-	// 4. Request /feeds using the session cookie (expect 200)
-	req, _ := http.NewRequest("GET", ts.URL+"/api/v1/feeds", nil)
-	req.AddCookie(sessionCookie)
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET /feeds with auth failed: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("expected status 200 with session cookie, got %d", resp.StatusCode)
-	}
-
-	// 5. Logout (expect 200)
-	req, _ = http.NewRequest("POST", ts.URL+"/api/v1/logout", nil)
-	req.AddCookie(sessionCookie)
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("POST /logout failed: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("expected status 200 on logout, got %d", resp.StatusCode)
-	}
-
-	// 6. Request /feeds again (expect 401)
-	req, _ = http.NewRequest("GET", ts.URL+"/api/v1/feeds", nil)
-	req.AddCookie(sessionCookie)
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET /feeds post-logout failed: %v", err)
-	}
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Errorf("expected status 401 post-logout, got %d", resp.StatusCode)
-	}
-}
-
 func TestServerFeedsAndUsersCRUD(t *testing.T) {
 	repo := setupTestDB(t)
 	// Server without password has authentication disabled (simplifies CRUD tests)
-	_, ts := makeTestServer(t, repo, "")
+	_, ts := makeTestServer(t, repo)
 	defer ts.Close()
 
 	// 1. Create a Feed
@@ -279,7 +195,7 @@ func TestServerFeedsAndUsersCRUD(t *testing.T) {
 
 func TestServerSubscriberMagicLinks(t *testing.T) {
 	repo := setupTestDB(t)
-	s, ts := makeTestServer(t, repo, "")
+	s, ts := makeTestServer(t, repo)
 	defer ts.Close()
 
 	ctx := context.Background()
@@ -362,7 +278,7 @@ func TestServerSubscriberMagicLinks(t *testing.T) {
 
 func TestServerStatsAndSSE(t *testing.T) {
 	repo := setupTestDB(t)
-	_, ts := makeTestServer(t, repo, "")
+	_, ts := makeTestServer(t, repo)
 	defer ts.Close()
 
 	ctx := context.Background()
@@ -462,7 +378,7 @@ func generateMockFeedXML(serverURL string, itemsCount int) string {
 
 func TestServerControlActions(t *testing.T) {
 	repo := setupTestDB(t)
-	s, ts := makeTestServer(t, repo, "")
+	s, ts := makeTestServer(t, repo)
 	defer ts.Close()
 
 	ctx := context.Background()
@@ -734,7 +650,7 @@ func TestServerControlActions(t *testing.T) {
 
 func TestServerStartStop(t *testing.T) {
 	repo := setupTestDB(t)
-	s, _ := makeTestServer(t, repo, "")
+	s, _ := makeTestServer(t, repo)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var runErr error
@@ -773,7 +689,7 @@ func TestServerStartStop(t *testing.T) {
 
 func TestServerStartError(t *testing.T) {
 	repo := setupTestDB(t)
-	s, _ := makeTestServer(t, repo, "")
+	s, _ := makeTestServer(t, repo)
 	s.cfg.Addr = "999.999.999.999:9999" // invalid bind address to force ListenAndServe error
 
 	ctx := context.Background()
@@ -785,7 +701,7 @@ func TestServerStartError(t *testing.T) {
 
 func TestServerLiveLogsSSE(t *testing.T) {
 	repo := setupTestDB(t)
-	s, ts := makeTestServer(t, repo, "")
+	s, ts := makeTestServer(t, repo)
 	defer ts.Close()
 
 	// Hook structured slog library into our SSE broadcaster manually during test
@@ -839,7 +755,7 @@ func TestServerLiveLogsSSE(t *testing.T) {
 
 func TestServerSPAFileSystemFallback(t *testing.T) {
 	repo := setupTestDB(t)
-	_, ts := makeTestServer(t, repo, "")
+	_, ts := makeTestServer(t, repo)
 	defer ts.Close()
 
 	// Request non-existent asset to check SPA fallback
@@ -889,7 +805,7 @@ func TestServerSubscriberUnsubscribeError(t *testing.T) {
 	mockTX := &erroringDBTX{DBTX: db}
 	repo := database.NewRepository(mockTX)
 
-	_, ts := makeTestServer(t, repo, "")
+	_, ts := makeTestServer(t, repo)
 	defer ts.Close()
 
 	// Create user first using direct DB repo
@@ -1011,7 +927,7 @@ func TestLineLevelHelper(t *testing.T) {
 // TestHandleGetLogsLevelFilter verifies that ?level=warn suppresses DEBUG lines.
 func TestHandleGetLogsLevelFilter(t *testing.T) {
 	repo := setupTestDB(t)
-	s, ts := makeTestServer(t, repo, "")
+	s, ts := makeTestServer(t, repo)
 	defer ts.Close()
 
 	// Wire a text handler writing to the SSE broadcaster.
@@ -1054,7 +970,7 @@ func TestHandleGetLogsLevelFilter(t *testing.T) {
 // TestHandleGetLogsHistoryReplay verifies that pre-buffered lines are replayed on connect.
 func TestHandleGetLogsHistoryReplay(t *testing.T) {
 	repo := setupTestDB(t)
-	s, ts := makeTestServer(t, repo, "")
+	s, ts := makeTestServer(t, repo)
 	defer ts.Close()
 
 	// Pre-load some history before any client connects.

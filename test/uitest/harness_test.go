@@ -64,7 +64,6 @@ func newTestEnv(t *testing.T) *testEnv {
 
 	srvCfg := server.Config{
 		Addr:     "127.0.0.1:0", // Ephemeral port
-		Password: testPassword,
 	}
 	srv := server.New(repo, sched, cr, ex, sa, srvCfg, nil)
 
@@ -183,38 +182,7 @@ func (e *testEnv) navigate(t *testing.T, page playwright.Page, path string) {
 	}
 }
 
-func (e *testEnv) unlockPanel(t *testing.T, page playwright.Page) {
-	t.Helper()
-	e.navigate(t, page, "/")
 
-	// Fill password input.
-	input := page.Locator("input[type='password']")
-	if err := input.WaitFor(playwright.LocatorWaitForOptions{
-		State:   playwright.WaitForSelectorStateVisible,
-		Timeout: playwright.Float(3000),
-	}); err != nil {
-		t.Fatalf("password input not visible: %v", err)
-	}
-
-	if err := input.Fill(testPassword); err != nil {
-		t.Fatalf("fill password: %v", err)
-	}
-
-	// Click submit.
-	submitBtn := page.Locator("button[type='submit']")
-	if err := submitBtn.Click(); err != nil {
-		t.Fatalf("click unlock: %v", err)
-	}
-
-	// Wait for sidebar navigation to show.
-	sidebar := page.Locator("aside.sidebar")
-	if err := sidebar.WaitFor(playwright.LocatorWaitForOptions{
-		State:   playwright.WaitForSelectorStateVisible,
-		Timeout: playwright.Float(5000),
-	}); err != nil {
-		t.Fatalf("sidebar not visible after unlock: %v", err)
-	}
-}
 
 func screenshotOnFailure(t *testing.T, page playwright.Page) {
 	t.Helper()

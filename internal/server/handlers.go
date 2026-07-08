@@ -18,10 +18,7 @@ import (
 	"rss2go/internal/types"
 )
 
-// Helper response structures
-type loginRequest struct {
-	Password string `json:"password"`
-}
+
 
 type unsubscribeRequest struct {
 	Email   string  `json:"email"`
@@ -75,49 +72,7 @@ func (s *Server) writeError(w http.ResponseWriter, status int, msg string) {
 	s.writeJSON(w, status, map[string]string{"error": msg})
 }
 
-// handleLogin validates credentials and returns a secure HTTP-Only cookie.
-func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
-	var req loginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.writeError(w, http.StatusBadRequest, "Invalid JSON payload")
-		return
-	}
 
-	token, err := s.session.Login(req.Password)
-	if err != nil {
-		s.writeError(w, http.StatusUnauthorized, err.Error())
-		return
-	}
-
-	// Set session ID in HTTP-Only cookie
-	http.SetCookie(w, &http.Cookie{
-		Name:     "session_id",
-		Value:    token,
-		Path:     "/",
-		Expires:  time.Now().Add(24 * time.Hour),
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	})
-
-	s.writeJSON(w, http.StatusOK, map[string]string{"message": "Logged in successfully"})
-}
-
-// handleLogout revokes the session token and clears the cookie.
-func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	s.session.Logout()
-
-	// Clear session cookie
-	http.SetCookie(w, &http.Cookie{
-		Name:     "session_id",
-		Value:    "",
-		Path:     "/",
-		Expires:  time.Unix(0, 0),
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	})
-
-	s.writeJSON(w, http.StatusOK, map[string]string{"message": "Logged out successfully"})
-}
 
 // handleSubscriberManage verifies public magic tokens and returns subscription preferences.
 func (s *Server) handleSubscriberManage(w http.ResponseWriter, r *http.Request) {

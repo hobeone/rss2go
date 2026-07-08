@@ -1,9 +1,4 @@
-let onUnauthorizedCallback: (() => void) | null = null;
 let onErrorCallback: ((msg: string) => void) | null = null;
-
-export function registerOnUnauthorized(callback: () => void) {
-  onUnauthorizedCallback = callback;
-}
 
 export function registerOnError(callback: (msg: string) => void) {
   onErrorCallback = callback;
@@ -16,12 +11,6 @@ async function apiFetch(path: string, options: RequestInit = {}) {
       cache: 'no-store',
       ...options
     });
-    if (resp.status === 401) {
-      if (onUnauthorizedCallback) {
-        onUnauthorizedCallback();
-      }
-      return null;
-    }
     if (!resp.ok) {
       const text = await resp.text();
       throw new Error(text || `HTTP error ${resp.status}`);
@@ -37,19 +26,6 @@ async function apiFetch(path: string, options: RequestInit = {}) {
     }
     throw err;
   }
-}
-
-export async function login(password: string): Promise<boolean> {
-  const resp = await fetch('/api/v1/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password })
-  });
-  return resp.status === 200;
-}
-
-export async function logout(): Promise<void> {
-  await fetch('/api/v1/logout', { method: 'POST' });
 }
 
 export async function fetchStats(): Promise<any> {

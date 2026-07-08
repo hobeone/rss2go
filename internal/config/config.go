@@ -17,7 +17,6 @@ import (
 type Config struct {
 	DBPath       string            `yaml:"db_path"`
 	Addr         string            `yaml:"addr"`
-	Password     string            `yaml:"password"`
 	MailerMode   string            `yaml:"mailer_mode"`
 	SMTPHost     string            `yaml:"smtp_host"`
 	SMTPPort     int               `yaml:"smtp_port"`
@@ -38,7 +37,6 @@ func Default() *Config {
 	return &Config{
 		DBPath:       "rss2go.db",
 		Addr:         ":8080",
-		Password:     "",
 		MailerMode:   "sendmail",
 		SMTPHost:     "localhost",
 		SMTPPort:     587,
@@ -103,9 +101,6 @@ func Load(args []string) (*Config, error) {
 	if val, exists := os.LookupEnv("RSS2GO_ADDR"); exists {
 		cfg.Addr = val
 	}
-	if val, exists := os.LookupEnv("RSS2GO_PASSWORD"); exists {
-		cfg.Password = val
-	}
 	if val, exists := os.LookupEnv("RSS2GO_MAILER"); exists {
 		cfg.MailerMode = val
 	}
@@ -164,7 +159,6 @@ func Load(args []string) (*Config, error) {
 
 	dbFlag := mainFs.String("db", "", "SQLite database path (default \"rss2go.db\")")
 	addrFlag := mainFs.String("addr", "", "Bind address for API dashboard (default \":8080\")")
-	passFlag := mainFs.String("pass", "", "Operator panel authentication password")
 	mailerFlag := mainFs.String("mailer", "", "Outbox delivery system ('smtp', 'sendmail', or 'mock'; default \"sendmail\")")
 	smtpHostFlag := mainFs.String("smtp-host", "", "SMTP server hostname (default \"localhost\")")
 	smtpPortFlag := mainFs.Int("smtp-port", 0, "SMTP server port (default 587)")
@@ -195,8 +189,6 @@ func Load(args []string) (*Config, error) {
 			cfg.DBPath = *dbFlag
 		case "addr":
 			cfg.Addr = *addrFlag
-		case "pass":
-			cfg.Password = *passFlag
 		case "mailer":
 			cfg.MailerMode = *mailerFlag
 		case "smtp-host":

@@ -190,7 +190,6 @@ func main() {
 	slog.Info("Configuring API server", "addr", cfg.Addr)
 	srv := server.New(repo, sched, cr, ex, sa, server.Config{
 		Addr:        cfg.Addr,
-		Password:    cfg.Password,
 		Broadcaster: broadcaster,
 		MailerMode:  cfg.MailerMode,
 	}, slog.Default().With("component", "api"))

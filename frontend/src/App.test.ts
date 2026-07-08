@@ -7,7 +7,6 @@ vi.mock('./lib/api', () => ({
   fetchStats: vi.fn(),
   fetchFeeds: vi.fn(),
   fetchOutbox: vi.fn(),
-  logout: vi.fn(),
   fetchUsers: vi.fn()
 }))
 
@@ -40,23 +39,9 @@ describe('App Component Layout Shell', () => {
     vi.mocked(api.fetchUsers).mockResolvedValue([])
   })
 
-  it('verifies session and shows Login panel if unauthorized', async () => {
-    vi.mocked(api.fetchStats).mockRejectedValue(new Error('Unauthorized'))
-
+  it('loads feeds dashboard automatically on mount', async () => {
     render(App)
 
-    // Initially shows loading verification
-    expect(screen.getByText('Verifying operator session...')).toBeInTheDocument()
-
-    // Wait for the auth failure state to render LoginPanel
-    const title = await screen.findByText('rss2go aggregate')
-    expect(title).toBeInTheDocument()
-  })
-
-  it('logs in automatically if active session is found', async () => {
-    render(App)
-
-    // Should auto-transition to feeds dashboard tab
     const title = await screen.findByText('rss2go panel')
     expect(title).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Feeds' })).toBeInTheDocument()
@@ -66,7 +51,6 @@ describe('App Component Layout Shell', () => {
   it('can navigate between dashboard sidebar tabs', async () => {
     render(App)
 
-    // Find sidebar and tabs
     await screen.findByText('rss2go panel')
     
     // Switch to Subscribers tab
@@ -83,21 +67,5 @@ describe('App Component Layout Shell', () => {
     const logsTab = screen.getByRole('button', { name: '💻 Live Logs' })
     await fireEvent.click(logsTab)
     expect(screen.getByRole('heading', { name: 'Aggregator Console Logs' })).toBeInTheDocument()
-  })
-
-  it('triggers logout and returns to operator login prompt', async () => {
-    vi.mocked(api.logout).mockResolvedValue(undefined)
-
-    render(App)
-
-    await screen.findByText('rss2go panel')
-    
-    const logoutBtn = screen.getByRole('button', { name: 'Logout Panel' })
-    await fireEvent.click(logoutBtn)
-
-    expect(api.logout).toHaveBeenCalled()
-    const loginTitle = await screen.findByText('rss2go aggregate')
-    expect(loginTitle).toBeInTheDocument()
-    expect(screen.getByText('Logged out successfully')).toBeInTheDocument()
   })
 })

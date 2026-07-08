@@ -25,7 +25,6 @@ import (
 // Config holds the HTTP server configurations.
 type Config struct {
 	Addr              string
-	Password          string
 	MagicSecret       string
 	HeartbeatInterval time.Duration
 	ShutdownTimeout   time.Duration
@@ -41,7 +40,6 @@ type Server struct {
 	extractor   *extractor.Extractor
 	sanitizer   *sanitizer.Sanitizer
 	broadcaster *LogBroadcaster
-	session     *SessionManager
 	cfg         Config
 	httpServer  *http.Server
 	log         *slog.Logger
@@ -88,7 +86,6 @@ func New(
 		extractor:   ex,
 		sanitizer:   sa,
 		broadcaster: b,
-		session:     &SessionManager{password: cfg.Password},
 		cfg:         cfg,
 		log:         log,
 	}
@@ -98,39 +95,32 @@ func New(
 func (s *Server) Handler() (http.Handler, error) {
 	mux := http.NewServeMux()
 
-	// Register public endpoints
-	mux.HandleFunc("POST /api/v1/login", s.handleLogin)
-	mux.HandleFunc("POST /api/v1/logout", s.handleLogout)
+	// Register endpoints directly (no auth required)
 	mux.HandleFunc("GET /api/v1/subscriber/manage", s.handleSubscriberManage)
 	mux.HandleFunc("POST /api/v1/subscriber/unsubscribe", s.handleSubscriberUnsubscribe)
 
-	// Register protected API endpoints
-	protectedMux := http.NewServeMux()
-	protectedMux.HandleFunc("GET /api/v1/feeds", s.handleGetFeeds)
-	protectedMux.HandleFunc("POST /api/v1/feeds", s.handleCreateFeed)
-	protectedMux.HandleFunc("GET /api/v1/feeds/{id}", s.handleGetFeedDetails)
-	protectedMux.HandleFunc("GET /api/v1/feeds/{id}/items", s.handleGetFeedItems)
-	protectedMux.HandleFunc("PUT /api/v1/feeds/{id}", s.handleUpdateFeed)
-	protectedMux.HandleFunc("DELETE /api/v1/feeds/{id}", s.handleDeleteFeed)
+	mux.HandleFunc("GET /api/v1/feeds", s.handleGetFeeds)
+	mux.HandleFunc("POST /api/v1/feeds", s.handleCreateFeed)
+	mux.HandleFunc("GET /api/v1/feeds/{id}", s.handleGetFeedDetails)
+	mux.HandleFunc("GET /api/v1/feeds/{id}/items", s.handleGetFeedItems)
+	mux.HandleFunc("PUT /api/v1/feeds/{id}", s.handleUpdateFeed)
+	mux.HandleFunc("DELETE /api/v1/feeds/{id}", s.handleDeleteFeed)
 
-	protectedMux.HandleFunc("GET /api/v1/users", s.handleGetUsers)
-	protectedMux.HandleFunc("POST /api/v1/users", s.handleCreateUser)
-	protectedMux.HandleFunc("DELETE /api/v1/users/{id}", s.handleDeleteUser)
+	mux.HandleFunc("GET /api/v1/users", s.handleGetUsers)
+	mux.HandleFunc("POST /api/v1/users", s.handleCreateUser)
+	mux.HandleFunc("DELETE /api/v1/users/{id}", s.handleDeleteUser)
 
-	protectedMux.HandleFunc("POST /api/v1/subscriptions", s.handleSubscribe)
-	protectedMux.HandleFunc("DELETE /api/v1/subscriptions", s.handleUnsubscribe)
+	mux.HandleFunc("POST /api/v1/subscriptions", s.handleSubscribe)
+	mux.HandleFunc("DELETE /api/v1/subscriptions", s.handleUnsubscribe)
 
-	protectedMux.HandleFunc("GET /api/v1/stats", s.handleGetStats)
-	protectedMux.HandleFunc("GET /api/v1/logs", s.handleGetLogs)
-	protectedMux.HandleFunc("GET /api/v1/outbox", s.handleGetOutbox)
+	mux.HandleFunc("GET /api/v1/stats", s.handleGetStats)
+	mux.HandleFunc("GET /api/v1/logs", s.handleGetLogs)
+	mux.HandleFunc("GET /api/v1/outbox", s.handleGetOutbox)
 
-	protectedMux.HandleFunc("POST /api/v1/feeds/{id}/test", s.handleTestFeed)
-	protectedMux.HandleFunc("POST /api/v1/feeds/{id}/scan", s.handleScanFeed)
-	protectedMux.HandleFunc("POST /api/v1/feeds/{id}/catchup", s.handleCatchupFeed)
-	protectedMux.HandleFunc("POST /api/v1/feeds/{id}/rewind", s.handleRewindFeed)
-
-	// Mount protected routes wrapped with session checking
-	mux.Handle("/api/v1/", s.authMiddleware(protectedMux))
+	mux.HandleFunc("POST /api/v1/feeds/{id}/test", s.handleTestFeed)
+	mux.HandleFunc("POST /api/v1/feeds/{id}/scan", s.handleScanFeed)
+	mux.HandleFunc("POST /api/v1/feeds/{id}/catchup", s.handleCatchupFeed)
+	mux.HandleFunc("POST /api/v1/feeds/{id}/rewind", s.handleRewindFeed)
 
 	// Mount Svelte SPA static files (with SPA fallback routing)
 	subFS, err := fs.Sub(ui.Files, "dist")
@@ -177,74 +167,7 @@ func (s *Server) Stop() {
 	}
 }
 
-// authMiddleware enforces operator panel authentication using HTTP-Only cookies.
-func (s *Server) authMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s.cfg.Password == "" {
-			next.ServeHTTP(w, r)
-			return
-		}
 
-		cookie, err := r.Cookie("session_id")
-		if err != nil || !s.session.Validate(cookie.Value) {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
-
-// SessionManager manages single-session state in-memory for the single-operator panel.
-type SessionManager struct {
-	mu       sync.Mutex
-	token    string
-	expiry   time.Time
-	password string
-}
-
-// Login validates credentials and issues a secure session token.
-func (s *SessionManager) Login(password string) (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock() // --- no lock held below this line ---
-
-	if s.password == "" {
-		return "", fmt.Errorf("auth: no password configured")
-	}
-
-	if password != s.password {
-		return "", fmt.Errorf("auth: invalid password")
-	}
-
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("auth: generate session token: %w", err)
-	}
-
-	s.token = hex.EncodeToString(b)
-	s.expiry = time.Now().Add(24 * time.Hour)
-	return s.token, nil
-}
-
-// Validate verifies whether the session token is active and valid.
-func (s *SessionManager) Validate(token string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock() // --- no lock held below this line ---
-
-	if s.password == "" {
-		return true
-	}
-
-	return token == s.token && time.Now().Before(s.expiry)
-}
-
-// Logout revokes the current session token.
-func (s *SessionManager) Logout() {
-	s.mu.Lock()
-	defer s.mu.Unlock() // --- no lock held below this line ---
-	s.token = ""
-	s.expiry = time.Time{}
-}
 
 // LogBroadcaster manages concurrent SSE client channels and maintains a circular
 // ring buffer of the last 100 log lines for replay on new connections.

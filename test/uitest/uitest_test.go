@@ -11,51 +11,7 @@ import (
 	"rss2go/internal/types"
 )
 
-func TestLoginPageFlow(t *testing.T) {
-	t.Parallel()
-	env := newTestEnv(t)
-	page := env.newPage(t)
-	screenshotOnFailure(t, page)
 
-	env.navigate(t, page, "/")
-
-	// Fill wrong password.
-	input := page.Locator("input[type='password']")
-	if err := input.Fill("wrong-pwd"); err != nil {
-		t.Fatalf("fill password: %v", err)
-	}
-
-	submitBtn := page.Locator("button[type='submit']")
-	if err := submitBtn.Click(); err != nil {
-		t.Fatalf("click login: %v", err)
-	}
-
-	// Should show error.
-	errLabel := page.GetByText("Invalid credentials")
-	if err := errLabel.WaitFor(playwright.LocatorWaitForOptions{
-		State:   playwright.WaitForSelectorStateVisible,
-		Timeout: playwright.Float(3000),
-	}); err != nil {
-		t.Errorf("error label not visible: %v", err)
-	}
-
-	// Fill correct password.
-	if err := input.Fill(testPassword); err != nil {
-		t.Fatalf("fill password: %v", err)
-	}
-	if err := submitBtn.Click(); err != nil {
-		t.Fatalf("click login: %v", err)
-	}
-
-	// Should unlock and show sidebar.
-	brand := page.Locator(".sidebar-brand")
-	if err := brand.WaitFor(playwright.LocatorWaitForOptions{
-		State:   playwright.WaitForSelectorStateVisible,
-		Timeout: playwright.Float(3000),
-	}); err != nil {
-		t.Errorf("sidebar brand not visible after login: %v", err)
-	}
-}
 
 func TestFeedsTabSearching(t *testing.T) {
 	t.Parallel()
@@ -77,7 +33,7 @@ func TestFeedsTabSearching(t *testing.T) {
 	page := env.newPage(t)
 	screenshotOnFailure(t, page)
 
-	env.unlockPanel(t, page)
+	env.navigate(t, page, "/")
 
 	// Wait for feeds grid to load.
 	if err := page.GetByText("Tech News Feed").WaitFor(playwright.LocatorWaitForOptions{
@@ -113,7 +69,7 @@ func TestFeedAddAndDelete(t *testing.T) {
 	page := env.newPage(t)
 	screenshotOnFailure(t, page)
 
-	env.unlockPanel(t, page)
+	env.navigate(t, page, "/")
 
 	// Click "+ Add Feed Source".
 	addBtn := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Add Feed Source"})
@@ -206,7 +162,7 @@ func TestFeedDetailsPopupAndItems(t *testing.T) {
 	page := env.newPage(t)
 	screenshotOnFailure(t, page)
 
-	env.unlockPanel(t, page)
+	env.navigate(t, page, "/")
 
 	// Click feed card.
 	card := page.Locator("h3").GetByText("Hermetic Feed")
@@ -278,7 +234,7 @@ func TestSubscribersSplitPanelLayout(t *testing.T) {
 	page := env.newPage(t)
 	screenshotOnFailure(t, page)
 
-	env.unlockPanel(t, page)
+	env.navigate(t, page, "/")
 
 	// Click "Subscribers" sidebar nav button.
 	subscribersNav := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Subscribers"})
@@ -324,7 +280,7 @@ func TestSubscriberAddAndDelete(t *testing.T) {
 	page := env.newPage(t)
 	screenshotOnFailure(t, page)
 
-	env.unlockPanel(t, page)
+	env.navigate(t, page, "/")
 
 	// Click "Subscribers" sidebar nav button.
 	subscribersNav := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Subscribers"})
@@ -377,7 +333,7 @@ func TestFeedEditFlow(t *testing.T) {
 	page := env.newPage(t)
 	screenshotOnFailure(t, page)
 
-	env.unlockPanel(t, page)
+	env.navigate(t, page, "/")
 
 	// Click "+ Add Feed Source".
 	addBtn := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Add Feed Source"})
