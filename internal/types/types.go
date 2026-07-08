@@ -11,7 +11,6 @@ const (
 	StrategySummary   ExtractionStrategy = "summary"   // Fallback to feed item summary/excerpt
 	StrategyHeuristic ExtractionStrategy = "heuristic" // Automated reader mode heuristic
 	StrategySelector  ExtractionStrategy = "selector"  // Target structural element via CSS selector
-	StrategyCss       ExtractionStrategy = "css"       // Alias for StrategySelector (legacy UI value)
 )
 
 // Feed represents a tracked RSS/Atom feed source.
