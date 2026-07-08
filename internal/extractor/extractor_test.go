@@ -87,6 +87,29 @@ func TestExtractUnsupportedStrategy(t *testing.T) {
 	}
 }
 
+func TestExtractCssAlias(t *testing.T) {
+	// StrategyCss ("css") was the value the UI sent before the frontend fix.
+	// Existing DB rows may still carry this value; the extractor must handle it
+	// identically to StrategySelector ("selector").
+	e := NewExtractor(nil)
+
+	r := strings.NewReader(sampleArticleHTML)
+	res, err := e.ExtractFromReader(r, "https://example.com", types.StrategyCss, "article .content")
+	if err != nil {
+		t.Fatalf("StrategyCss alias: unexpected error: %v", err)
+	}
+	if !strings.Contains(res, "This is the main readable content") {
+		t.Errorf("StrategyCss alias: expected main article text, got %q", res)
+	}
+
+	// Empty selector must still be rejected
+	r = strings.NewReader(sampleArticleHTML)
+	_, err = e.ExtractFromReader(r, "https://example.com", types.StrategyCss, "")
+	if err == nil {
+		t.Fatal("StrategyCss alias: expected error for empty selector, got nil")
+	}
+}
+
 func TestExtractNetworkCalls(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")

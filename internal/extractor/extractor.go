@@ -72,7 +72,7 @@ func (e *Extractor) ExtractFromReader(r io.Reader, targetURL string, strategy ty
 		}
 		return article.Content, nil
 
-	case types.StrategySelector:
+	case types.StrategySelector, types.StrategyCss:
 		if selector == "" {
 			return "", fmt.Errorf("extractor: structural selector strategy requires a non-empty CSS selector")
 		}

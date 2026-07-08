@@ -446,10 +446,10 @@
               <span class="m-input-label">Extraction Strategy Selection</span>
               <select class="m-input m-select" bind:value={feedForm.extraction_strategy}>
                 <option value="heuristic">Fallback Standard Readability Heuristics</option>
-                <option value="css">Targeted Custom CSS Selector</option>
+                <option value="selector">Targeted Custom CSS Selector</option>
               </select>
             </div>
-            {#if feedForm.extraction_strategy === 'css'}
+            {#if feedForm.extraction_strategy === 'selector' || feedForm.extraction_strategy === 'css'}
               <div class="m-input-group">
                 <span class="m-input-label">Custom DOM CSS Selector (e.g. article.post-content)</span>
                 <input type="text" placeholder="article.post-body" class="m-input" bind:value={feedForm.css_selector} required />
