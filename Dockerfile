@@ -1,5 +1,5 @@
 # Stage 1: Build the Svelte UI
-FROM oven/bun:1.3-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0 AS ui-builder
+FROM oven/bun:1.3-alpine AS ui-builder
 WORKDIR /ui
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN bun install
@@ -7,7 +7,7 @@ COPY frontend/ ./
 RUN bun run build
 
 # Stage 2: Build the Go application
-FROM golang:1.26.5-alpine@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2 AS go-builder
+FROM golang:1.26.5-alpine AS go-builder
 WORKDIR /src
 RUN apk add --no-cache git
 COPY go.mod go.sum ./
@@ -19,7 +19,7 @@ RUN git config --global --add safe.directory /src || true
 RUN GOOS=linux go build -v -buildvcs=true -o /app/rss2go ./cmd/rss2go
 
 # Stage 3: Final lightweight execution environment
-FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates tzdata su-exec
 RUN adduser -D rss2go
 RUN mkdir -p /app/config /app/db && chown -R rss2go:rss2go /app
