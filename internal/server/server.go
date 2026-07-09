@@ -167,8 +167,6 @@ func (s *Server) Stop() {
 	}
 }
 
-
-
 // LogBroadcaster manages concurrent SSE client channels and maintains a circular
 // ring buffer of the last 100 log lines for replay on new connections.
 type LogBroadcaster struct {

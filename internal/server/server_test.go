@@ -1066,4 +1066,3 @@ func TestServerCreateFeedWithSubscribers(t *testing.T) {
 		t.Errorf("expected user 2 to be subscribed to f2, got %v", u2Fetched.SubscribedFeedIDs)
 	}
 }
-

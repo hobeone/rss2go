@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/playwright-community/playwright-go"
+	"github.com/mxschmitt/playwright-go"
 
 	"rss2go/internal/crawler"
 	"rss2go/internal/database"
@@ -63,7 +63,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	sched := scheduler.New(repo, cr, ex, sa, schedCfg, nil)
 
 	srvCfg := server.Config{
-		Addr:     "127.0.0.1:0", // Ephemeral port
+		Addr: "127.0.0.1:0", // Ephemeral port
 	}
 	srv := server.New(repo, sched, cr, ex, sa, srvCfg, nil)
 
@@ -181,8 +181,6 @@ func (e *testEnv) navigate(t *testing.T, page playwright.Page, path string) {
 		t.Fatalf("page.Goto(%s): %v", url, err)
 	}
 }
-
-
 
 func screenshotOnFailure(t *testing.T, page playwright.Page) {
 	t.Helper()

@@ -6,12 +6,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/playwright-community/playwright-go"
+	"github.com/mxschmitt/playwright-go"
 
 	"rss2go/internal/types"
 )
-
-
 
 func TestFeedsTabSearching(t *testing.T) {
 	t.Parallel()

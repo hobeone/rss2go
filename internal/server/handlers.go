@@ -18,8 +18,6 @@ import (
 	"rss2go/internal/types"
 )
 
-
-
 type unsubscribeRequest struct {
 	Email   string  `json:"email"`
 	Token   string  `json:"token"`
@@ -71,8 +69,6 @@ func (s *Server) writeJSON(w http.ResponseWriter, status int, data any) {
 func (s *Server) writeError(w http.ResponseWriter, status int, msg string) {
 	s.writeJSON(w, status, map[string]string{"error": msg})
 }
-
-
 
 // handleSubscriberManage verifies public magic tokens and returns subscription preferences.
 func (s *Server) handleSubscriberManage(w http.ResponseWriter, r *http.Request) {
