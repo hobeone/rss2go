@@ -12,9 +12,11 @@
       "groupName": "golang.org/x modules"
     },
     {
-      "description": "Bundle the go.mod toolchain directive with the Dockerfile's golang base image into one PR, so both stay pinned to the same Go version together.",
+      "description": "Bundle the go.mod toolchain directive with the Dockerfile's golang base image into one PR, so both stay pinned to the same Go version together. rss2go's go.mod has no separate `toolchain` line - the `go` directive itself is pinned to a full patch version (e.g. `go 1.26.4`) and serves that role. Renovate's default policy is to never bump the bare `go` directive (it treats it as a minimum-compatibility floor, not a pinned version), so matchDepNames+rangeStrategy=bump are required to opt in.",
       "matchManagers": ["gomod"],
       "matchDepTypes": ["golang"],
+      "matchDepNames": ["go"],
+      "rangeStrategy": "bump",
       "groupName": "go toolchain version"
     },
     {
