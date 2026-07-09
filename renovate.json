@@ -22,6 +22,11 @@
       "matchManagers": ["dockerfile"],
       "matchDepNames": ["golang"],
       "groupName": "go toolchain version"
+    },
+    {
+      "description": "Ignore typescript v7+ upgrades due to missing compiler API in v7.0",
+      "matchPackageNames": ["typescript"],
+      "allowedVersions": "< 7.0.0"
     }
   ]
 }
