@@ -5,7 +5,7 @@ go 1.26.4
 require (
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/go-shiori/go-readability v0.0.0-20251205110129-5db1dc9836f0
-	github.com/lmittmann/tint v1.1.3
+	github.com/lmittmann/tint v1.2.0
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/mmcdole/gofeed v1.3.0
 	github.com/mxschmitt/playwright-go v0.6100.0
