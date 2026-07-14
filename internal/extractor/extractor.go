@@ -11,8 +11,8 @@ import (
 
 	"rss2go/internal/types"
 
+	readability "codeberg.org/readeck/go-readability/v2"
 	"github.com/PuerkitoBio/goquery"
-	readability "github.com/go-shiori/go-readability"
 )
 
 // Extractor manages fetching remote destination articles and extracting their primary content.
