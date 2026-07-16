@@ -1,6 +1,7 @@
 package extractor
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -70,7 +71,11 @@ func (e *Extractor) ExtractFromReader(r io.Reader, targetURL string, strategy ty
 		if err != nil {
 			return "", fmt.Errorf("extractor: readability extraction failed: %w", err)
 		}
-		return article.Content, nil
+		var buf bytes.Buffer
+		if err := article.RenderHTML(&buf); err != nil {
+			return "", fmt.Errorf("extractor: render article HTML: %w", err)
+		}
+		return buf.String(), nil
 
 	case types.StrategySelector:
 		if selector == "" {
