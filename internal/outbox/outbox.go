@@ -2,6 +2,7 @@ package outbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -20,13 +21,28 @@ type Config struct {
 	PollInterval   time.Duration
 }
 
-// Queue manages background processing of the durable email outbox.
+// Queue manages background processing of the durable email outbox. Delivery
+// is fully sequential within Start's own goroutine — items are drained one
+// at a time (oldest-due-first) rather than fanned out to a goroutine per
+// item, keeping a poll cycle to at most one simultaneous SMTP
+// connection/login regardless of how many items are pending. This is a
+// property of how Queue drains its own batch, not a requirement
+// notifier.Sender itself imposes.
 type Queue struct {
-	repo         *database.Repository
-	sender       notifier.Sender
-	cfg          Config
-	inFlight     map[int64]bool
-	inFlightMu   sync.Mutex
+	repo   *database.Repository
+	sender notifier.Sender
+	cfg    Config
+
+	// mu guards stopped, checked atomically alongside wg.Add in
+	// tryBeginCycle so a Stop() call can never race a new cycle starting:
+	// either tryBeginCycle wins and registers the cycle before Stop sees
+	// it, or Stop sets stopped first and tryBeginCycle refuses to start.
+	// Without this, a fast PollInterval racing an external Stop() call can
+	// call wg.Add concurrently with wg.Wait, which the runtime detects as
+	// WaitGroup misuse and panics on.
+	mu      sync.Mutex
+	stopped bool
+
 	wg           sync.WaitGroup
 	shutdownCh   chan struct{}
 	shutdownOnce sync.Once
@@ -55,10 +71,24 @@ func NewQueue(repo *database.Repository, sender notifier.Sender, cfg Config, log
 		repo:       repo,
 		sender:     sender,
 		cfg:        cfg,
-		inFlight:   make(map[int64]bool),
 		shutdownCh: make(chan struct{}),
 		log:        log,
 	}
+}
+
+// tryBeginCycle atomically checks whether shutdown has been requested and,
+// if not, registers one in-flight processPending cycle with wg. Returns
+// false if Stop has already been called, in which case the caller must not
+// start a new cycle — see the Queue.mu doc comment for why this must be
+// atomic rather than a separate check-then-Add.
+func (q *Queue) tryBeginCycle() bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.stopped {
+		return false
+	}
+	q.wg.Add(1)
+	return true
 }
 
 // Start launches the outbox processing loop. It blocks until context is cancelled or Stop is called.
@@ -67,9 +97,19 @@ func (q *Queue) Start(ctx context.Context) error {
 	defer ticker.Stop()
 
 	for {
-		// Process pending items
-		if err := q.processPending(ctx); err != nil {
-			q.log.Error("Processing error", "err", err)
+		// wg is scoped to this one processPending call (not Start's whole
+		// lifetime): Start calls Stop() itself below on ctx.Done(), and by
+		// that point processPending has already returned, so the counter
+		// is back at 0 and Stop()'s Wait() returns immediately — scoping
+		// Add/Done around all of Start instead would self-deadlock, since
+		// Start would be blocked inside its own Stop() call waiting for a
+		// Done() that only fires when Start returns.
+		if q.tryBeginCycle() {
+			err := q.processPending(ctx)
+			q.wg.Done()
+			if err != nil && !errors.Is(err, context.Canceled) {
+				q.log.Error("Processing error", "err", err)
+			}
 		}
 
 		select {
@@ -86,12 +126,18 @@ func (q *Queue) Start(ctx context.Context) error {
 // Stop gracefully stops the queue processor, waiting for in-flight deliveries to complete.
 func (q *Queue) Stop() {
 	q.shutdownOnce.Do(func() {
+		q.mu.Lock()
+		q.stopped = true
+		q.mu.Unlock()
 		close(q.shutdownCh)
 		q.wg.Wait()
 	})
 }
 
-// processPending queries items ready for delivery and spawns worker goroutines.
+// processPending queries items ready for delivery and delivers them
+// sequentially, oldest-due-first. No goroutines are spawned here: the
+// previous per-item fan-out is what caused a burst of pending items to open
+// N concurrent SMTP connections/logins at once.
 func (q *Queue) processPending(ctx context.Context) error {
 	// Only fetch items where retry count is below limits
 	items, err := q.repo.ListPendingOutboxItems(ctx, time.Now())
@@ -100,30 +146,21 @@ func (q *Queue) processPending(ctx context.Context) error {
 	}
 
 	for _, item := range items {
+		// Bail out of the batch on a canceled context rather than working
+		// through every remaining item first: since delivery is sequential,
+		// skipping this check would let a cancellation partway through a
+		// large batch cost up to len(items)*opTimeout before Start's loop
+		// can even reach its own ctx.Done() case.
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		// Filter out items already hit max retries
 		if item.RetryCount >= q.cfg.MaxRetries {
 			continue
 		}
 
-		q.inFlightMu.Lock()
-		if q.inFlight[item.ID] {
-			q.inFlightMu.Unlock()
-			continue
-		}
-		q.inFlight[item.ID] = true
-		q.inFlightMu.Unlock()
-
-		q.wg.Add(1)
-		go func(it *types.OutboxItem) {
-			defer q.wg.Done()
-			defer func() {
-				q.inFlightMu.Lock()
-				delete(q.inFlight, it.ID)
-				q.inFlightMu.Unlock()
-			}()
-
-			q.deliverItem(ctx, it)
-		}(item)
+		q.deliverItem(ctx, item)
 	}
 
 	return nil
