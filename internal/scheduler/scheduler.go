@@ -106,6 +106,10 @@ func (s *Scheduler) pollFeeds(ctx context.Context) error {
 		return fmt.Errorf("scheduler: list due feeds: %w", err)
 	}
 
+	if len(feeds) > 0 {
+		s.log.Debug("Polled due feeds", "count", len(feeds))
+	}
+
 	// Semaphore to bound concurrency
 	sem := make(chan struct{}, s.cfg.MaxWorkers)
 
@@ -121,6 +125,7 @@ func (s *Scheduler) pollFeeds(ctx context.Context) error {
 		s.inFlightMu.Lock()
 		if s.inFlight[f.ID] {
 			s.inFlightMu.Unlock()
+			s.log.Debug("Feed crawl already in flight, skipping poll", "feed_id", f.ID, "title", f.Title)
 			continue
 		}
 		s.inFlight[f.ID] = true
@@ -142,6 +147,7 @@ func (s *Scheduler) pollFeeds(ctx context.Context) error {
 			}(f)
 		default:
 			// Worker pool is full; release in-flight state and skip for this poll interval
+			s.log.Warn("Worker pool full, postponing feed crawl", "feed_id", f.ID, "title", f.Title)
 			s.inFlightMu.Lock()
 			delete(s.inFlight, f.ID)
 			s.inFlightMu.Unlock() // --- no lock held below this line ---

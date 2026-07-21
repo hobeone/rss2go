@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -26,17 +27,24 @@ type Result struct {
 // Crawler manages fetching and parsing of remote feed sources.
 type Crawler struct {
 	client *http.Client
+	log    *slog.Logger
 }
 
-// NewCrawler creates a new Crawler instance with the specified HTTP client.
-// If client is nil, http.DefaultClient is used.
-func NewCrawler(client *http.Client) *Crawler {
+// NewCrawler creates a new Crawler instance with the specified HTTP client and optional logger.
+// If client is nil, http.DefaultClient is used. If log is nil, slog.Default() is used.
+func NewCrawler(client *http.Client, log ...*slog.Logger) *Crawler {
 	if client == nil {
 		client = &http.Client{
 			Timeout: 30 * time.Second,
 		}
 	}
-	return &Crawler{client: client}
+	var l *slog.Logger
+	if len(log) > 0 && log[0] != nil {
+		l = log[0]
+	} else {
+		l = slog.Default().With("component", "crawler")
+	}
+	return &Crawler{client: client, log: l}
 }
 
 // Crawl fetches the feed, respects HTTP cache headers, parses it, and extracts cache markers.
@@ -50,8 +58,11 @@ func (c *Crawler) Crawl(ctx context.Context, f *types.Feed) (*Result, error) {
 		u = strings.TrimSuffix(u, "&")
 	}
 
+	c.log.Debug("Starting feed crawl", "feed_id", f.ID, "url", u, "etag", f.ETag, "last_modified", f.LastModified)
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
+		c.log.Error("Failed to create HTTP request", "url", u, "err", err)
 		return nil, fmt.Errorf("crawler: create request: %w", err)
 	}
 
@@ -66,24 +77,32 @@ func (c *Crawler) Crawl(ctx context.Context, f *types.Feed) (*Result, error) {
 	// Identify as rss2go crawler
 	req.Header.Set("User-Agent", "rss2go/1.0 (Syndication Aggregator Daemon)")
 
+	start := time.Now()
 	resp, err := c.client.Do(req)
+	duration := time.Since(start)
 	if err != nil {
+		c.log.Debug("Feed HTTP fetch failed", "url", u, "duration", duration, "err", err)
 		return nil, fmt.Errorf("crawler: fetch failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+
+	c.log.Debug("Feed HTTP response received", "url", u, "status", resp.StatusCode, "duration", duration)
 
 	// Parse Retry-After headers if rate-limited or unavailable
 	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable {
 		retryVal := resp.Header.Get("Retry-After")
 		duration := parseRetryAfter(retryVal)
+		c.log.Debug("Feed rate limited or unavailable", "url", u, "status", resp.StatusCode, "retry_after", retryVal)
 		return &Result{RetryAfter: duration}, fmt.Errorf("crawler: server returned status %d", resp.StatusCode)
 	}
 
 	if resp.StatusCode == http.StatusNotModified {
+		c.log.Debug("Feed not modified (304)", "url", u)
 		return &Result{NotModified: true}, nil
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		c.log.Debug("Feed HTTP non-200 status", "url", u, "status", resp.StatusCode)
 		return nil, fmt.Errorf("crawler: server returned status %d %s", resp.StatusCode, resp.Status)
 	}
 
@@ -94,14 +113,18 @@ func (c *Crawler) Crawl(ctx context.Context, f *types.Feed) (*Result, error) {
 	// Read and parse feed body
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
+		c.log.Debug("Failed reading feed response body", "url", u, "err", err)
 		return nil, fmt.Errorf("crawler: read body: %w", err)
 	}
 
 	parser := gofeed.NewParser()
 	parsedFeed, err := parser.ParseString(string(bodyBytes))
 	if err != nil {
+		c.log.Debug("Failed parsing feed XML/Atom", "url", u, "bytes", len(bodyBytes), "err", err)
 		return nil, fmt.Errorf("crawler: parse feed: %w", err)
 	}
+
+	c.log.Debug("Feed successfully parsed", "url", u, "title", parsedFeed.Title, "items", len(parsedFeed.Items))
 
 	if mutateToInvalid {
 		f.URL = "http://invalid url/feed.xml"

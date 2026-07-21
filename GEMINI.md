@@ -53,6 +53,7 @@ All five must pass. Do not commit with failing tests, vet errors, or lint warnin
 
 - **Idioms:** "Accept interfaces, return structs." Define interfaces at the consumer side.
 - **Context:** Every blocking or cancellable operation **must** accept `context.Context` as the first parameter.
+- **Logging:** Use standard library `log/slog`. Every subsystem struct must accept a `*slog.Logger` in its constructor (defaulting to `slog.Default().With("component", "<name>")` if `nil`). Prefer structured key-value pairs (`url`, `id`, `err`, `duration`) over free-text formatting. Use `Debug` for operational tracing, `Info` for state transitions, `Warn` for fallbacks, and `Error` for unrecoverable step failures.
 - **Errors:** Wrap with `fmt.Errorf("component: ...: %w", err)`. Never use `%v` for errors that will be inspected.
 - **No hacks:** No `init()` for setup. No `panic` for control flow. No `time.Sleep` in tests — use channels or `sync.WaitGroup`.
 - **Standard library first:** Prefer `slices`, `maps`, `errors.Is/As`, `min`/`max` builtins over custom helpers or reflection.

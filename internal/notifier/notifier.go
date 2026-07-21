@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/smtp"
 	"os/exec"
@@ -39,11 +40,18 @@ type Sender interface {
 // SMTPSender implements email dispatching via SMTP.
 type SMTPSender struct {
 	cfg SMTPConfig
+	log *slog.Logger
 }
 
-// NewSMTPSender creates a new SMTPSender.
-func NewSMTPSender(cfg SMTPConfig) *SMTPSender {
-	return &SMTPSender{cfg: cfg}
+// NewSMTPSender creates a new SMTPSender with optional logger.
+func NewSMTPSender(cfg SMTPConfig, log ...*slog.Logger) *SMTPSender {
+	var l *slog.Logger
+	if len(log) > 0 && log[0] != nil {
+		l = log[0]
+	} else {
+		l = slog.Default().With("component", "notifier")
+	}
+	return &SMTPSender{cfg: cfg, log: l}
 }
 
 // Send dispatches an HTML email to recipients via SMTP.
@@ -51,6 +59,8 @@ func (s *SMTPSender) Send(ctx context.Context, subject string, body string, reci
 	if len(recipients) == 0 {
 		return fmt.Errorf("notifier: smtp: no recipients specified")
 	}
+
+	s.log.Debug("Starting SMTP email delivery", "host", s.cfg.Host, "port", s.cfg.Port, "recipients_count", len(recipients), "subject", subject)
 
 	cleanedSubject := CleanHeader(subject)
 	msg := buildMessage(s.cfg.From, recipients, cleanedSubject, body)
@@ -72,12 +82,14 @@ func (s *SMTPSender) Send(ctx context.Context, subject string, body string, reci
 		conn, err = dialer.DialContext(ctx, "tcp", addr)
 	}
 	if err != nil {
+		s.log.Debug("SMTP connection failed", "addr", addr, "security", s.cfg.Security, "err", err)
 		return fmt.Errorf("notifier: smtp dial failed: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
 
 	client, err := smtp.NewClient(conn, s.cfg.Host)
 	if err != nil {
+		s.log.Debug("Failed creating SMTP client", "host", s.cfg.Host, "err", err)
 		return fmt.Errorf("notifier: create smtp client: %w", err)
 	}
 	defer func() { _ = client.Close() }()
@@ -89,6 +101,7 @@ func (s *SMTPSender) Send(ctx context.Context, subject string, body string, reci
 			MinVersion: tls.VersionTLS12,
 		}
 		if err := client.StartTLS(tlsConfig); err != nil {
+			s.log.Debug("SMTP STARTTLS failed", "host", s.cfg.Host, "err", err)
 			return fmt.Errorf("notifier: starttls failed: %w", err)
 		}
 	}
@@ -97,17 +110,20 @@ func (s *SMTPSender) Send(ctx context.Context, subject string, body string, reci
 	if s.cfg.Username != "" {
 		auth := smtp.PlainAuth("", s.cfg.Username, s.cfg.Password, s.cfg.Host)
 		if err := client.Auth(auth); err != nil {
+			s.log.Debug("SMTP authentication failed", "user", s.cfg.Username, "err", err)
 			return fmt.Errorf("notifier: authentication failed: %w", err)
 		}
 	}
 
 	// Set sender and recipients
 	if err := client.Mail(s.cfg.From); err != nil {
+		s.log.Debug("SMTP MAIL FROM command failed", "from", s.cfg.From, "err", err)
 		return fmt.Errorf("notifier: set mail from: %w", err)
 	}
 
 	for _, to := range recipients {
 		if err := client.Rcpt(to); err != nil {
+			s.log.Debug("SMTP RCPT TO command failed", "to", to, "err", err)
 			return fmt.Errorf("notifier: set rcpt to %s: %w", to, err)
 		}
 	}
@@ -115,14 +131,17 @@ func (s *SMTPSender) Send(ctx context.Context, subject string, body string, reci
 	// Write body
 	w, err := client.Data()
 	if err != nil {
+		s.log.Debug("SMTP DATA command failed", "err", err)
 		return fmt.Errorf("notifier: open data writer: %w", err)
 	}
 	defer func() { _ = w.Close() }()
 
 	if _, err := w.Write(msg); err != nil {
+		s.log.Debug("SMTP message data write failed", "err", err)
 		return fmt.Errorf("notifier: write message data: %w", err)
 	}
 
+	s.log.Debug("SMTP email delivered successfully", "recipients_count", len(recipients), "bytes", len(msg))
 	return nil
 }
 
@@ -130,17 +149,25 @@ func (s *SMTPSender) Send(ctx context.Context, subject string, body string, reci
 type SendmailSender struct {
 	path string
 	from string
+	log  *slog.Logger
 }
 
-// NewSendmailSender creates a new SendmailSender.
+// NewSendmailSender creates a new SendmailSender with optional logger.
 // If path is empty, /usr/sbin/sendmail is used.
-func NewSendmailSender(path string, from string) *SendmailSender {
+func NewSendmailSender(path string, from string, log ...*slog.Logger) *SendmailSender {
 	if path == "" {
 		path = "/usr/sbin/sendmail"
+	}
+	var l *slog.Logger
+	if len(log) > 0 && log[0] != nil {
+		l = log[0]
+	} else {
+		l = slog.Default().With("component", "notifier")
 	}
 	return &SendmailSender{
 		path: path,
 		from: from,
+		log:  l,
 	}
 }
 
@@ -149,6 +176,8 @@ func (s *SendmailSender) Send(ctx context.Context, subject string, body string, 
 	if len(recipients) == 0 {
 		return fmt.Errorf("notifier: sendmail: no recipients specified")
 	}
+
+	s.log.Debug("Starting sendmail binary delivery", "path", s.path, "recipients_count", len(recipients), "subject", subject)
 
 	cleanedSubject := CleanHeader(subject)
 	msg := buildMessage(s.from, recipients, cleanedSubject, body)
@@ -161,9 +190,11 @@ func (s *SendmailSender) Send(ctx context.Context, subject string, body string, 
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
+		s.log.Debug("Sendmail execution failed", "path", s.path, "stderr", stderr.String(), "err", err)
 		return fmt.Errorf("notifier: sendmail failed (stderr: %q): %w", stderr.String(), err)
 	}
 
+	s.log.Debug("Sendmail binary delivery succeeded", "recipients_count", len(recipients), "bytes", len(msg))
 	return nil
 }
 
