@@ -147,10 +147,10 @@ func (s *Scheduler) pollFeeds(ctx context.Context) error {
 			}(f)
 		default:
 			// Worker pool is full; release in-flight state and skip for this poll interval
-			s.log.Warn("Worker pool full, postponing feed crawl", "feed_id", f.ID, "title", f.Title)
 			s.inFlightMu.Lock()
 			delete(s.inFlight, f.ID)
 			s.inFlightMu.Unlock() // --- no lock held below this line ---
+			s.log.Warn("Worker pool full, postponing feed crawl", "feed_id", f.ID, "title", f.Title)
 		}
 	}
 
@@ -186,7 +186,7 @@ func (s *Scheduler) processFeed(ctx context.Context, feed *types.Feed) {
 
 	if crawlErr != nil {
 		// Log crawl error
-		s.log.Error("Crawl failed", "url", feed.URL, "err", crawlErr)
+		s.log.Error("Crawl failed", "feed_id", feed.ID, "url", crawler.SanitizeURL(feed.URL), "err", crawlErr)
 
 		// Implement exponential backoff
 		feed.BackoffFactor = min(feed.BackoffFactor*1.5, 24.0)

@@ -60,9 +60,9 @@ func (s *SMTPSender) Send(ctx context.Context, subject string, body string, reci
 		return fmt.Errorf("notifier: smtp: no recipients specified")
 	}
 
-	s.log.Debug("Starting SMTP email delivery", "host", s.cfg.Host, "port", s.cfg.Port, "recipients_count", len(recipients), "subject", subject)
-
 	cleanedSubject := CleanHeader(subject)
+	s.log.Debug("Starting SMTP email delivery", "host", s.cfg.Host, "port", s.cfg.Port, "recipients_count", len(recipients), "subject", cleanedSubject)
+
 	msg := buildMessage(s.cfg.From, recipients, cleanedSubject, body)
 
 	addr := fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)
@@ -182,9 +182,9 @@ func (s *SendmailSender) Send(ctx context.Context, subject string, body string, 
 		return fmt.Errorf("notifier: sendmail: no recipients specified")
 	}
 
-	s.log.Debug("Starting sendmail binary delivery", "path", s.path, "recipients_count", len(recipients), "subject", subject)
-
 	cleanedSubject := CleanHeader(subject)
+	s.log.Debug("Starting sendmail binary delivery", "path", s.path, "recipients_count", len(recipients), "subject", cleanedSubject)
+
 	msg := buildMessage(s.from, recipients, cleanedSubject, body)
 
 	// Invoke local sendmail binary: sendmail -t

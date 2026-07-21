@@ -40,13 +40,31 @@ func NewExtractor(client *http.Client, log ...*slog.Logger) *Extractor {
 	return &Extractor{client: client, log: l}
 }
 
+// SanitizeURL strips Basic Auth credentials (user:pass) and query/fragment parameters from raw URLs for safe logging.
+func SanitizeURL(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return rawURL
+	}
+	parsed.User = nil
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String()
+}
+
 // Extract fetches the page at targetURL and extracts the content based on strategy.
 func (e *Extractor) Extract(ctx context.Context, targetURL string, strategy types.ExtractionStrategy, selector string) (string, error) {
-	e.log.Debug("Starting article extraction", "url", targetURL, "strategy", strategy, "selector", selector)
+	log := e.log
+	if log == nil {
+		log = slog.Default().With("component", "extractor")
+	}
+
+	safeURL := SanitizeURL(targetURL)
+	log.Debug("Starting article extraction", "url", safeURL, "strategy", strategy, "selector", selector)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
 	if err != nil {
-		e.log.Debug("Failed creating HTTP request for article extraction", "url", targetURL, "err", err)
+		log.Debug("Failed creating HTTP request for article extraction", "url", safeURL, "err", err)
 		return "", fmt.Errorf("extractor: create request: %w", err)
 	}
 
@@ -56,19 +74,19 @@ func (e *Extractor) Extract(ctx context.Context, targetURL string, strategy type
 	resp, err := e.client.Do(req)
 	duration := time.Since(start)
 	if err != nil {
-		e.log.Debug("Article fetch failed", "url", targetURL, "duration", duration, "err", err)
+		log.Debug("Article fetch failed", "url", safeURL, "duration", duration, "err", err)
 		return "", fmt.Errorf("extractor: fetch failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		e.log.Debug("Article fetch non-200 HTTP status", "url", targetURL, "status", resp.StatusCode)
+		log.Debug("Article fetch non-200 HTTP status", "url", safeURL, "status", resp.StatusCode)
 		return "", fmt.Errorf("extractor: fetch returned HTTP status %d", resp.StatusCode)
 	}
 
 	contentType := resp.Header.Get("Content-Type")
 	if !strings.Contains(contentType, "text/html") && !strings.Contains(contentType, "application/xhtml+xml") {
-		e.log.Debug("Article content-type unsupported for extraction", "url", targetURL, "content_type", contentType)
+		log.Debug("Article content-type unsupported for extraction", "url", safeURL, "content_type", contentType)
 		return "", fmt.Errorf("extractor: unsupported content type %q", contentType)
 	}
 
@@ -77,55 +95,62 @@ func (e *Extractor) Extract(ctx context.Context, targetURL string, strategy type
 
 // ExtractFromReader extracts content from an HTML reader.
 func (e *Extractor) ExtractFromReader(r io.Reader, targetURL string, strategy types.ExtractionStrategy, selector string) (string, error) {
+	log := e.log
+	if log == nil {
+		log = slog.Default().With("component", "extractor")
+	}
+
+	safeURL := SanitizeURL(targetURL)
+
 	switch strategy {
 	case types.StrategyHeuristic:
 		parsedURL, err := url.Parse(targetURL)
 		if err != nil {
-			e.log.Debug("Invalid target URL for readability", "url", targetURL, "err", err)
+			log.Debug("Invalid target URL for readability", "url", safeURL, "err", err)
 			return "", fmt.Errorf("extractor: invalid target URL: %w", err)
 		}
 		article, err := readability.FromReader(r, parsedURL)
 		if err != nil {
-			e.log.Debug("Readability extraction failed", "url", targetURL, "err", err)
+			log.Debug("Readability extraction failed", "url", safeURL, "err", err)
 			return "", fmt.Errorf("extractor: readability extraction failed: %w", err)
 		}
 		var buf bytes.Buffer
 		if err := article.RenderHTML(&buf); err != nil {
-			e.log.Debug("Readability HTML render failed", "url", targetURL, "err", err)
+			log.Debug("Readability HTML render failed", "url", safeURL, "err", err)
 			return "", fmt.Errorf("extractor: render article HTML: %w", err)
 		}
 		extracted := buf.String()
-		e.log.Debug("Readability extraction succeeded", "url", targetURL, "bytes", len(extracted))
+		log.Debug("Readability extraction succeeded", "url", safeURL, "bytes", len(extracted))
 		return extracted, nil
 
 	case types.StrategySelector:
 		if selector == "" {
-			e.log.Debug("CSS selector empty for selector strategy", "url", targetURL)
+			log.Debug("CSS selector empty for selector strategy", "url", safeURL)
 			return "", fmt.Errorf("extractor: structural selector strategy requires a non-empty CSS selector")
 		}
 		doc, err := goquery.NewDocumentFromReader(r)
 		if err != nil {
-			e.log.Debug("Failed parsing HTML document for selector extraction", "url", targetURL, "err", err)
+			log.Debug("Failed parsing HTML document for selector extraction", "url", safeURL, "err", err)
 			return "", fmt.Errorf("extractor: parse HTML document: %w", err)
 		}
 
 		selection := doc.Find(selector)
 		if selection.Length() == 0 {
-			e.log.Debug("CSS selector matched no elements", "url", targetURL, "selector", selector)
+			log.Debug("CSS selector matched no elements", "url", safeURL, "selector", selector)
 			return "", fmt.Errorf("extractor: CSS selector %q matched no elements", selector)
 		}
 
 		// Return the HTML of the matched elements.
 		html, err := selection.Html()
 		if err != nil {
-			e.log.Debug("Failed rendering CSS selector HTML match", "url", targetURL, "selector", selector, "err", err)
+			log.Debug("Failed rendering CSS selector HTML match", "url", safeURL, "selector", selector, "err", err)
 			return "", fmt.Errorf("extractor: render matched HTML: %w", err)
 		}
-		e.log.Debug("CSS selector extraction succeeded", "url", targetURL, "selector", selector, "bytes", len(html))
+		log.Debug("CSS selector extraction succeeded", "url", safeURL, "selector", selector, "bytes", len(html))
 		return html, nil
 
 	default:
-		e.log.Debug("Unsupported extraction strategy", "url", targetURL, "strategy", strategy)
+		log.Debug("Unsupported extraction strategy", "url", safeURL, "strategy", strategy)
 		return "", fmt.Errorf("extractor: unsupported extraction strategy %q", strategy)
 	}
 }

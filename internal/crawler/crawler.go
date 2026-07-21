@@ -1,11 +1,13 @@
 package crawler
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -47,8 +49,25 @@ func NewCrawler(client *http.Client, log ...*slog.Logger) *Crawler {
 	return &Crawler{client: client, log: l}
 }
 
+// SanitizeURL strips Basic Auth credentials (user:pass) and query/fragment parameters from raw URLs for safe logging.
+func SanitizeURL(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return rawURL
+	}
+	parsed.User = nil
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String()
+}
+
 // Crawl fetches the feed, respects HTTP cache headers, parses it, and extracts cache markers.
 func (c *Crawler) Crawl(ctx context.Context, f *types.Feed) (*Result, error) {
+	log := c.log
+	if log == nil {
+		log = slog.Default().With("component", "crawler")
+	}
+
 	u := f.URL
 	var mutateToInvalid bool
 	if strings.Contains(u, "mutate_url_to_invalid_after_crawl=1") {
@@ -58,11 +77,12 @@ func (c *Crawler) Crawl(ctx context.Context, f *types.Feed) (*Result, error) {
 		u = strings.TrimSuffix(u, "&")
 	}
 
-	c.log.Debug("Starting feed crawl", "feed_id", f.ID, "url", u, "etag", f.ETag, "last_modified", f.LastModified)
+	safeURL := SanitizeURL(u)
+	log.Debug("Starting feed crawl", "feed_id", f.ID, "url", safeURL, "etag", f.ETag, "last_modified", f.LastModified)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
-		c.log.Error("Failed to create HTTP request", "url", u, "err", err)
+		log.Debug("Failed to create HTTP request", "url", safeURL, "err", err)
 		return nil, fmt.Errorf("crawler: create request: %w", err)
 	}
 
@@ -81,28 +101,28 @@ func (c *Crawler) Crawl(ctx context.Context, f *types.Feed) (*Result, error) {
 	resp, err := c.client.Do(req)
 	duration := time.Since(start)
 	if err != nil {
-		c.log.Debug("Feed HTTP fetch failed", "url", u, "duration", duration, "err", err)
+		log.Debug("Feed HTTP fetch failed", "url", safeURL, "duration", duration, "err", err)
 		return nil, fmt.Errorf("crawler: fetch failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	c.log.Debug("Feed HTTP response received", "url", u, "status", resp.StatusCode, "duration", duration)
+	log.Debug("Feed HTTP response received", "url", safeURL, "status", resp.StatusCode, "duration", duration)
 
 	// Parse Retry-After headers if rate-limited or unavailable
 	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable {
 		retryVal := resp.Header.Get("Retry-After")
 		duration := parseRetryAfter(retryVal)
-		c.log.Debug("Feed rate limited or unavailable", "url", u, "status", resp.StatusCode, "retry_after", retryVal)
+		log.Debug("Feed rate limited or unavailable", "url", safeURL, "status", resp.StatusCode, "retry_after", retryVal)
 		return &Result{RetryAfter: duration}, fmt.Errorf("crawler: server returned status %d", resp.StatusCode)
 	}
 
 	if resp.StatusCode == http.StatusNotModified {
-		c.log.Debug("Feed not modified (304)", "url", u)
+		log.Debug("Feed not modified (304)", "url", safeURL)
 		return &Result{NotModified: true}, nil
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		c.log.Debug("Feed HTTP non-200 status", "url", u, "status", resp.StatusCode)
+		log.Debug("Feed HTTP non-200 status", "url", safeURL, "status", resp.StatusCode)
 		return nil, fmt.Errorf("crawler: server returned status %d %s", resp.StatusCode, resp.Status)
 	}
 
@@ -113,18 +133,18 @@ func (c *Crawler) Crawl(ctx context.Context, f *types.Feed) (*Result, error) {
 	// Read and parse feed body
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		c.log.Debug("Failed reading feed response body", "url", u, "err", err)
+		log.Debug("Failed reading feed response body", "url", safeURL, "err", err)
 		return nil, fmt.Errorf("crawler: read body: %w", err)
 	}
 
 	parser := gofeed.NewParser()
-	parsedFeed, err := parser.ParseString(string(bodyBytes))
+	parsedFeed, err := parser.Parse(bytes.NewReader(bodyBytes))
 	if err != nil {
-		c.log.Debug("Failed parsing feed XML/Atom", "url", u, "bytes", len(bodyBytes), "err", err)
+		log.Debug("Failed parsing feed XML/Atom", "url", safeURL, "bytes", len(bodyBytes), "err", err)
 		return nil, fmt.Errorf("crawler: parse feed: %w", err)
 	}
 
-	c.log.Debug("Feed successfully parsed", "url", u, "title", parsedFeed.Title, "items", len(parsedFeed.Items))
+	log.Debug("Feed successfully parsed", "url", safeURL, "title", parsedFeed.Title, "items", len(parsedFeed.Items))
 
 	if mutateToInvalid {
 		f.URL = "http://invalid url/feed.xml"
