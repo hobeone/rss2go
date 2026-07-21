@@ -2,6 +2,7 @@ package crawler
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -37,7 +38,7 @@ func TestCrawlHappyPath(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewCrawler(nil)
+	c := NewCrawler(nil, slog.New(slog.DiscardHandler))
 	feed := &types.Feed{
 		URL: server.URL,
 	}
@@ -77,7 +78,7 @@ func TestCrawlNotModified(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewCrawler(nil)
+	c := NewCrawler(nil, slog.New(slog.DiscardHandler))
 	feed := &types.Feed{
 		URL:          server.URL,
 		ETag:         `"etag-123"`,
@@ -104,7 +105,7 @@ func TestCrawlRetryAfterSeconds(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewCrawler(nil)
+	c := NewCrawler(nil, slog.New(slog.DiscardHandler))
 	feed := &types.Feed{URL: server.URL}
 
 	res, err := c.Crawl(context.Background(), feed)
@@ -125,7 +126,7 @@ func TestCrawlRetryAfterDate(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewCrawler(nil)
+	c := NewCrawler(nil, slog.New(slog.DiscardHandler))
 	feed := &types.Feed{URL: server.URL}
 
 	res, err := c.Crawl(context.Background(), feed)
@@ -150,7 +151,7 @@ func TestCrawlErrorConditions(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewCrawler(nil)
+	c := NewCrawler(nil, slog.New(slog.DiscardHandler))
 	feed := &types.Feed{URL: server.URL}
 
 	_, err := c.Crawl(context.Background(), feed)

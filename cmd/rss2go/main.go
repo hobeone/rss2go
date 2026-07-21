@@ -138,8 +138,8 @@ func main() {
 	repo := database.NewRepository(db)
 
 	// 2. Initialize crawler, extractor, and sanitizer
-	cr := crawler.NewCrawler(nil)
-	ex := extractor.NewExtractor(nil)
+	cr := crawler.NewCrawler(nil, slog.Default().With("component", "crawler"))
+	ex := extractor.NewExtractor(nil, slog.Default().With("component", "extractor"))
 	sa := sanitizer.NewSanitizer(800) // Default 800px width limit for emails
 
 	// 3. Initialize mail delivery notifier
@@ -163,10 +163,10 @@ func main() {
 			Password: cfg.SMTPPass,
 			From:     cfg.SMTPFrom,
 			Security: sec,
-		})
+		}, slog.Default().With("component", "notifier"))
 	case "sendmail":
 		slog.Info("Configuring sendmail binary notifier", "from", cfg.SMTPFrom)
-		delivery = notifier.NewSendmailSender("", cfg.SMTPFrom)
+		delivery = notifier.NewSendmailSender("", cfg.SMTPFrom, slog.Default().With("component", "notifier"))
 	case "mock":
 		slog.Info("Configuring dry-run mock mailer (logs only)")
 		delivery = &mockNotifier{}

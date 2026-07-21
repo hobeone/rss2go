@@ -2,6 +2,7 @@ package extractor
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -29,7 +30,7 @@ const sampleArticleHTML = `
 </html>`
 
 func TestExtractCSSSelector(t *testing.T) {
-	e := NewExtractor(nil)
+	e := NewExtractor(nil, slog.New(slog.DiscardHandler))
 
 	// Happy Path
 	r := strings.NewReader(sampleArticleHTML)
@@ -61,7 +62,7 @@ func TestExtractCSSSelector(t *testing.T) {
 }
 
 func TestExtractHeuristic(t *testing.T) {
-	e := NewExtractor(nil)
+	e := NewExtractor(nil, slog.New(slog.DiscardHandler))
 
 	r := strings.NewReader(sampleArticleHTML)
 	res, err := e.ExtractFromReader(r, "https://example.com/article", types.StrategyHeuristic, "")
@@ -79,7 +80,7 @@ func TestExtractHeuristic(t *testing.T) {
 }
 
 func TestExtractUnsupportedStrategy(t *testing.T) {
-	e := NewExtractor(nil)
+	e := NewExtractor(nil, slog.New(slog.DiscardHandler))
 	r := strings.NewReader(sampleArticleHTML)
 	_, err := e.ExtractFromReader(r, "https://example.com", "unknown", "")
 	if err == nil {
@@ -95,7 +96,7 @@ func TestExtractNetworkCalls(t *testing.T) {
 	}))
 	defer server.Close()
 
-	e := NewExtractor(nil)
+	e := NewExtractor(nil, slog.New(slog.DiscardHandler))
 
 	// Happy path
 	res, err := e.Extract(context.Background(), server.URL, types.StrategySelector, "article h1")
