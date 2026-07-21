@@ -40,8 +40,8 @@ func setupTestDB(t *testing.T) *database.Repository {
 
 func makeTestServer(t *testing.T, repo *database.Repository) (*Server, *httptest.Server) {
 	t.Helper()
-	cr := crawler.NewCrawler(nil)
-	ex := extractor.NewExtractor(nil)
+	cr := crawler.NewCrawler(nil, slog.New(slog.DiscardHandler))
+	ex := extractor.NewExtractor(nil, slog.New(slog.DiscardHandler))
 	sa := sanitizer.NewSanitizer(600)
 	sched := scheduler.New(repo, cr, ex, sa, scheduler.Config{}, nil)
 
@@ -432,8 +432,8 @@ func TestServerControlActions(t *testing.T) {
 		underlying: mc.Transport,
 		targetHost: mockServer.Listener.Addr().String(),
 	}
-	s.crawler = crawler.NewCrawler(mc)
-	s.extractor = extractor.NewExtractor(mc)
+	s.crawler = crawler.NewCrawler(mc, slog.New(slog.DiscardHandler))
+	s.extractor = extractor.NewExtractor(mc, slog.New(slog.DiscardHandler))
 
 	feed := &types.Feed{
 		Title:              "Crawl Feed",

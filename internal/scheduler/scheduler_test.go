@@ -119,8 +119,8 @@ func TestSchedulerHappyPath(t *testing.T) {
 	ctrl := makeMockServer(t)
 	defer ctrl.server.Close()
 
-	cr := crawler.NewCrawler(ctrl.server.Client())
-	ex := extractor.NewExtractor(ctrl.server.Client())
+	cr := crawler.NewCrawler(ctrl.server.Client(), slog.New(slog.DiscardHandler))
+	ex := extractor.NewExtractor(ctrl.server.Client(), slog.New(slog.DiscardHandler))
 	sa := sanitizer.NewSanitizer(600)
 	s := New(repo, cr, ex, sa, Config{
 		PollInterval: 5 * time.Millisecond,
@@ -208,8 +208,8 @@ func TestSchedulerExtractionStrategiesAndFailures(t *testing.T) {
 	ctrl := makeMockServer(t)
 	defer ctrl.server.Close()
 
-	cr := crawler.NewCrawler(ctrl.server.Client())
-	ex := extractor.NewExtractor(ctrl.server.Client())
+	cr := crawler.NewCrawler(ctrl.server.Client(), slog.New(slog.DiscardHandler))
+	ex := extractor.NewExtractor(ctrl.server.Client(), slog.New(slog.DiscardHandler))
 	sa := sanitizer.NewSanitizer(600)
 	s := New(repo, cr, ex, sa, Config{}, nil)
 
@@ -307,8 +307,8 @@ func TestSchedulerNotModified(t *testing.T) {
 	ctrl := makeMockServer(t)
 	defer ctrl.server.Close()
 
-	cr := crawler.NewCrawler(ctrl.server.Client())
-	ex := extractor.NewExtractor(ctrl.server.Client())
+	cr := crawler.NewCrawler(ctrl.server.Client(), slog.New(slog.DiscardHandler))
+	ex := extractor.NewExtractor(ctrl.server.Client(), slog.New(slog.DiscardHandler))
 	sa := sanitizer.NewSanitizer(600)
 	s := New(repo, cr, ex, sa, Config{}, nil)
 
@@ -360,8 +360,8 @@ func TestSchedulerCrawlErrorsAndBackoff(t *testing.T) {
 	ctrl := makeMockServer(t)
 	defer ctrl.server.Close()
 
-	cr := crawler.NewCrawler(ctrl.server.Client())
-	ex := extractor.NewExtractor(ctrl.server.Client())
+	cr := crawler.NewCrawler(ctrl.server.Client(), slog.New(slog.DiscardHandler))
+	ex := extractor.NewExtractor(ctrl.server.Client(), slog.New(slog.DiscardHandler))
 	sa := sanitizer.NewSanitizer(600)
 	s := New(repo, cr, ex, sa, Config{}, nil)
 
@@ -455,8 +455,8 @@ func TestSchedulerNoSubscribers(t *testing.T) {
 	ctrl := makeMockServer(t)
 	defer ctrl.server.Close()
 
-	cr := crawler.NewCrawler(ctrl.server.Client())
-	ex := extractor.NewExtractor(ctrl.server.Client())
+	cr := crawler.NewCrawler(ctrl.server.Client(), slog.New(slog.DiscardHandler))
+	ex := extractor.NewExtractor(ctrl.server.Client(), slog.New(slog.DiscardHandler))
 	sa := sanitizer.NewSanitizer(600)
 	s := New(repo, cr, ex, sa, Config{}, nil)
 
@@ -494,8 +494,8 @@ func TestSchedulerStartStop(t *testing.T) {
 	repo := setupTestDB(t)
 	ctx, cancel := context.WithCancel(context.Background())
 
-	cr := crawler.NewCrawler(nil)
-	ex := extractor.NewExtractor(nil)
+	cr := crawler.NewCrawler(nil, slog.New(slog.DiscardHandler))
+	ex := extractor.NewExtractor(nil, slog.New(slog.DiscardHandler))
 	sa := sanitizer.NewSanitizer(600)
 	s := New(repo, cr, ex, sa, Config{
 		PollInterval: 2 * time.Millisecond,
@@ -603,8 +603,8 @@ func TestSchedulerDBErrorsExtended(t *testing.T) {
 	ctrl := makeMockServer(t)
 	defer ctrl.server.Close()
 
-	cr := crawler.NewCrawler(ctrl.server.Client())
-	ex := extractor.NewExtractor(ctrl.server.Client())
+	cr := crawler.NewCrawler(ctrl.server.Client(), slog.New(slog.DiscardHandler))
+	ex := extractor.NewExtractor(ctrl.server.Client(), slog.New(slog.DiscardHandler))
 	sa := sanitizer.NewSanitizer(600)
 
 	// Test UpdateFeed fails on crawl failure
