@@ -55,7 +55,7 @@
             <th>Recipients</th>
             <th>Subject</th>
             <th>Status</th>
-            <th style="width: 140px;">Attempts</th>
+            <th style="width: 140px;">Retries</th>
             <th style="width: 180px;">Date Generated</th>
           </tr>
         </thead>
@@ -73,7 +73,7 @@
                 </span>
               </td>
               <td style="font-size: 0.85rem;">
-                {item.retry_count} attempts
+                {item.retry_count} retries
                 {#if item.last_error}
                   <div style="color: var(--md-sys-color-error); font-size: 0.75rem; margin-top: 4px; max-width: 250px; word-break: break-all;" title={item.last_error}>
                     {item.last_error}

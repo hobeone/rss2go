@@ -57,7 +57,7 @@ describe('StatsPanel', () => {
     expect(screen.getByText('test@example.com')).toBeInTheDocument()
     expect(screen.getByText('Weekly Digest')).toBeInTheDocument()
     expect(screen.getByText('delivered')).toBeInTheDocument()
-    expect(screen.getByText('0 attempts')).toBeInTheDocument()
+    expect(screen.getByText('0 retries')).toBeInTheDocument()
   })
 
   it('triggers onRefresh when clicking Refresh button', async () => {
