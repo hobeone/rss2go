@@ -11,7 +11,7 @@ require (
 	github.com/mxschmitt/playwright-go v0.6100.0
 	github.com/pressly/goose/v3 v3.27.2
 	gopkg.in/yaml.v3 v3.0.1
-	modernc.org/sqlite v1.53.0
+	modernc.org/sqlite v1.54.0
 )
 
 require (
