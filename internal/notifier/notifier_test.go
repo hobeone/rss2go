@@ -10,7 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestCleanHeader(t *testing.T) {
@@ -77,8 +79,52 @@ func TestSendmailSender(t *testing.T) {
 	}
 }
 
-// startMockSMTPServer starts a local TCP server that simulates basic SMTP exchanges.
-func startMockSMTPServer(t *testing.T) (string, func()) {
+// mockConn pairs an accepted server-side connection with a per-connection
+// silence flag, so a test can make exactly one connection stop responding
+// (simulating a stale/hung cached connection) without affecting any other
+// connection accepted before or after it.
+type mockConn struct {
+	conn     net.Conn
+	silenced atomic.Bool
+}
+
+// mockSMTPServer simulates basic SMTP exchanges for tests. It tracks AUTH
+// invocations and each accepted server-side connection so tests can force-
+// close or silence a specific connection to exercise SMTPSender's reconnect
+// and deadline handling.
+type mockSMTPServer struct {
+	addr      string
+	authCount atomic.Int64
+
+	// rejectAuth, when set, makes every AUTH PLAIN fail with a permanent
+	// error instead of succeeding.
+	rejectAuth atomic.Bool
+
+	mu    sync.Mutex
+	conns []*mockConn
+	// rejectRcpt, when non-empty, makes RCPT TO for exactly this address
+	// fail with a permanent error instead of succeeding. Guarded by mu
+	// (read/written far less often than conns, sharing the lock is fine).
+	rejectRcpt string
+
+	wg sync.WaitGroup
+}
+
+func (srv *mockSMTPServer) setRejectRcpt(addr string) {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	srv.rejectRcpt = addr
+}
+
+func (srv *mockSMTPServer) getRejectRcpt() string {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	return srv.rejectRcpt
+}
+
+// startMockSMTPServer starts a local TCP server that simulates basic SMTP
+// exchanges.
+func startMockSMTPServer(t *testing.T) *mockSMTPServer {
 	t.Helper()
 
 	l, err := net.Listen("tcp", "127.0.0.1:0")
@@ -86,36 +132,63 @@ func startMockSMTPServer(t *testing.T) (string, func()) {
 		t.Fatalf("failed to listen: %v", err)
 	}
 
-	shutdown := make(chan struct{})
-	var serverWg sync.WaitGroup
+	srv := &mockSMTPServer{addr: l.Addr().String()}
 
-	serverWg.Go(func() {
+	srv.wg.Go(func() {
 		for {
 			conn, err := l.Accept()
 			if err != nil {
-				select {
-				case <-shutdown:
-					return
-				default:
-					t.Errorf("SMTP accept error: %v", err)
-					return
-				}
+				return
 			}
 
-			go handleSMTPConn(conn)
+			mc := &mockConn{conn: conn}
+			srv.mu.Lock()
+			srv.conns = append(srv.conns, mc)
+			srv.mu.Unlock()
+
+			srv.wg.Go(func() {
+				srv.handleConn(mc)
+			})
 		}
 	})
 
-	closeFn := func() {
-		close(shutdown)
+	t.Cleanup(func() {
 		_ = l.Close()
-		serverWg.Wait()
-	}
+		srv.mu.Lock()
+		for _, mc := range srv.conns {
+			_ = mc.conn.Close()
+		}
+		srv.mu.Unlock()
+		srv.wg.Wait()
+	})
 
-	return l.Addr().String(), closeFn
+	return srv
 }
 
-func handleSMTPConn(c net.Conn) {
+// connAt returns the i'th server-side connection accepted so far, or nil.
+func (srv *mockSMTPServer) connAt(i int) net.Conn {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	if i >= len(srv.conns) {
+		return nil
+	}
+	return srv.conns[i].conn
+}
+
+// silenceConnAt makes the i'th accepted connection stop responding to any
+// further commands, without closing the socket — simulating a server that
+// goes silent mid-session. Only that specific connection is affected;
+// connections accepted before or after it behave normally.
+func (srv *mockSMTPServer) silenceConnAt(i int) {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	if i < len(srv.conns) {
+		srv.conns[i].silenced.Store(true)
+	}
+}
+
+func (srv *mockSMTPServer) handleConn(mc *mockConn) {
+	c := mc.conn
 	defer func() { _ = c.Close() }()
 
 	reader := bufio.NewReader(c)
@@ -132,21 +205,40 @@ func handleSMTPConn(c net.Conn) {
 			return
 		}
 
+		// Once armed, stop responding to anything further on this
+		// specific connection, simulating a server that goes silent
+		// mid-session without closing the socket.
+		if mc.silenced.Load() {
+			continue
+		}
+
 		cmd := strings.ToUpper(line)
-		if strings.HasPrefix(cmd, "EHLO") || strings.HasPrefix(cmd, "HELO") {
+		switch {
+		case strings.HasPrefix(cmd, "EHLO") || strings.HasPrefix(cmd, "HELO"):
 			_, _ = c.Write([]byte("250-smtp.mock.test Hello\r\n250 AUTH PLAIN\r\n"))
-		} else if strings.HasPrefix(cmd, "AUTH PLAIN") {
+		case strings.HasPrefix(cmd, "AUTH PLAIN"):
+			if srv.rejectAuth.Load() {
+				_, _ = c.Write([]byte("535 5.7.8 Authentication credentials invalid\r\n"))
+				break
+			}
 			authed = true
+			srv.authCount.Add(1)
 			_, _ = c.Write([]byte("235 2.7.0 Authentication successful\r\n"))
-		} else if strings.HasPrefix(cmd, "MAIL FROM:") {
+		case strings.HasPrefix(cmd, "MAIL FROM:"):
 			if !authed {
 				_, _ = c.Write([]byte("530 5.7.0 Must issue a STARTTLS or AUTH command first\r\n"))
 			} else {
 				_, _ = c.Write([]byte("250 2.1.0 Ok\r\n"))
 			}
-		} else if strings.HasPrefix(cmd, "RCPT TO:") {
-			_, _ = c.Write([]byte("250 2.1.5 Ok\r\n"))
-		} else if cmd == "DATA" {
+		case strings.HasPrefix(cmd, "RCPT TO:"):
+			if reject := srv.getRejectRcpt(); reject != "" && strings.Contains(cmd, strings.ToUpper(reject)) {
+				_, _ = c.Write([]byte("550 5.1.1 User unknown\r\n"))
+			} else {
+				_, _ = c.Write([]byte("250 2.1.5 Ok\r\n"))
+			}
+		case cmd == "NOOP":
+			_, _ = c.Write([]byte("250 2.0.0 Ok\r\n"))
+		case cmd == "DATA":
 			_, _ = c.Write([]byte("354 Start mail input; end with <CR><LF>.<CR><LF>\r\n"))
 			// Read mail body until "."
 			for {
@@ -159,18 +251,57 @@ func handleSMTPConn(c net.Conn) {
 				}
 			}
 			_, _ = c.Write([]byte("250 2.0.0 Ok: queued\r\n"))
-		} else if cmd == "QUIT" {
+		case cmd == "QUIT":
 			_, _ = c.Write([]byte("221 2.0.0 Bye\r\n"))
 			return
-		} else {
+		default:
 			_, _ = c.Write([]byte("500 5.5.1 Command unrecognized\r\n"))
 		}
 	}
 }
 
-func TestSMTPSenderHappyPath(t *testing.T) {
-	addr, closeFn := startMockSMTPServer(t)
-	defer closeFn()
+// startSilentListener accepts TCP connections but never writes a byte,
+// simulating a server that accepts the connection but never sends the SMTP
+// greeting — used to test connect()'s own deadline bound.
+func startSilentListener(t *testing.T) string {
+	t.Helper()
+
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+
+	var mu sync.Mutex
+	var conns []net.Conn
+	var wg sync.WaitGroup
+
+	wg.Go(func() {
+		for {
+			conn, err := l.Accept()
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			conns = append(conns, conn)
+			mu.Unlock()
+		}
+	})
+
+	t.Cleanup(func() {
+		_ = l.Close()
+		mu.Lock()
+		for _, c := range conns {
+			_ = c.Close()
+		}
+		mu.Unlock()
+		wg.Wait()
+	})
+
+	return l.Addr().String()
+}
+
+func newTestSMTPSender(t *testing.T, addr string) *SMTPSender {
+	t.Helper()
 
 	host, portStr, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -191,22 +322,26 @@ func TestSMTPSenderHappyPath(t *testing.T) {
 		Security: SecurityNone,
 	}
 
-	sender := NewSMTPSender(cfg)
-	err = sender.Send(context.Background(), "Hello", "<p>Test</p>", []string{"recipient@test.com"})
+	return NewSMTPSender(cfg)
+}
+
+func TestSMTPSenderHappyPath(t *testing.T) {
+	srv := startMockSMTPServer(t)
+
+	sender := newTestSMTPSender(t, srv.addr)
+	err := sender.Send(context.Background(), "Hello", "<p>Test</p>", []string{"recipient@test.com"})
 	if err != nil {
 		t.Fatalf("SMTP send failed: %v", err)
 	}
 }
 
 func TestNilLoggerGuards(t *testing.T) {
-	addr, closeFn := startMockSMTPServer(t)
-	defer closeFn()
+	srv := startMockSMTPServer(t)
 
-	host, portStr, err := net.SplitHostPort(addr)
+	host, portStr, err := net.SplitHostPort(srv.addr)
 	if err != nil {
 		t.Fatalf("failed to split host/port: %v", err)
 	}
-
 	var port int
 	if _, err := fmt.Sscanf(portStr, "%d", &port); err != nil {
 		t.Fatalf("failed to parse port: %v", err)
@@ -222,7 +357,8 @@ func TestNilLoggerGuards(t *testing.T) {
 			From:     "sender@test.com",
 			Security: SecurityNone,
 		},
-		log: nil,
+		log:       nil,
+		opTimeout: defaultSMTPOpTimeout,
 	}
 
 	if err := smtpSender.Send(context.Background(), "Hello", "<p>Test</p>", []string{"recipient@test.com"}); err != nil {
@@ -323,5 +459,193 @@ func TestSMTPSenderDataCloseError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "close data writer") {
 		t.Errorf("expected error message to contain 'close data writer', got: %v", err)
+	}
+}
+
+// TestSMTPSenderConnectionReuse proves consecutive Send() calls reuse the
+// cached connection instead of dialing and authenticating fresh each time.
+func TestSMTPSenderConnectionReuse(t *testing.T) {
+	srv := startMockSMTPServer(t)
+	sender := newTestSMTPSender(t, srv.addr)
+
+	for i := range 3 {
+		if err := sender.Send(context.Background(), "Hello", "<p>Test</p>", []string{"recipient@test.com"}); err != nil {
+			t.Fatalf("send %d failed: %v", i, err)
+		}
+	}
+
+	if got := srv.authCount.Load(); got != 1 {
+		t.Errorf("expected 1 AUTH across 3 sequential sends, got %d", got)
+	}
+}
+
+// TestSMTPSenderConcurrentSendsSerialize proves concurrent Send() calls are
+// serialized onto the single cached connection without protocol corruption,
+// and still only authenticate once.
+func TestSMTPSenderConcurrentSendsSerialize(t *testing.T) {
+	srv := startMockSMTPServer(t)
+	sender := newTestSMTPSender(t, srv.addr)
+
+	const n = 10
+	var wg sync.WaitGroup
+	errs := make([]error, n)
+
+	for i := range n {
+		wg.Go(func() {
+			errs[i] = sender.Send(context.Background(), "Hello", "<p>Test</p>", []string{"recipient@test.com"})
+		})
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("send %d failed: %v", i, err)
+		}
+	}
+
+	if got := srv.authCount.Load(); got != 1 {
+		t.Errorf("expected 1 AUTH across %d concurrent sends, got %d", n, got)
+	}
+}
+
+// TestSMTPSenderReconnectAfterStaleConnection proves that when the cached
+// connection dies server-side, the next Send() detects it and redials.
+func TestSMTPSenderReconnectAfterStaleConnection(t *testing.T) {
+	srv := startMockSMTPServer(t)
+	sender := newTestSMTPSender(t, srv.addr)
+
+	if err := sender.Send(context.Background(), "Hello", "<p>Test</p>", []string{"recipient@test.com"}); err != nil {
+		t.Fatalf("first send failed: %v", err)
+	}
+
+	conn := srv.connAt(0)
+	if conn == nil {
+		t.Fatal("expected a server-side connection to have been accepted")
+	}
+	_ = conn.Close()
+
+	if err := sender.Send(context.Background(), "Hello again", "<p>Test</p>", []string{"recipient@test.com"}); err != nil {
+		t.Fatalf("second send failed after forced disconnect: %v", err)
+	}
+
+	if got := srv.authCount.Load(); got != 2 {
+		t.Errorf("expected 2 AUTH (one per physical connection), got %d", got)
+	}
+}
+
+// TestSMTPSenderHungConnectBound proves connect() itself is bounded by
+// opTimeout when the server accepts the TCP connection but never sends the
+// greeting.
+func TestSMTPSenderHungConnectBound(t *testing.T) {
+	addr := startSilentListener(t)
+	sender := newTestSMTPSender(t, addr)
+	sender.opTimeout = 100 * time.Millisecond
+
+	start := time.Now()
+	err := sender.Send(context.Background(), "Hello", "<p>Test</p>", []string{"recipient@test.com"})
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected an error from a silent server, got nil")
+	}
+	if elapsed > time.Second {
+		t.Errorf("expected Send to bound by ~opTimeout, took %v", elapsed)
+	}
+
+	// A subsequent send against a healthy server must still succeed.
+	srv := startMockSMTPServer(t)
+	sender2 := newTestSMTPSender(t, srv.addr)
+	if err := sender2.Send(context.Background(), "Hello", "<p>Test</p>", []string{"recipient@test.com"}); err != nil {
+		t.Fatalf("send against healthy server failed: %v", err)
+	}
+}
+
+// TestSMTPSenderHungReuseBound proves that if the cached connection goes
+// silent mid-session (without closing the socket), the Noop liveness check
+// in getClient catches it — bounded by opTimeout, not hanging — and Send()
+// transparently discards the stale connection and redials within the same
+// call, so the send still succeeds rather than surfacing an error to the
+// caller. This is a better outcome than a bare bounded error: the discard-
+// on-any-error path is still the deeper safety net for staleness the Noop
+// check misses (e.g. a hang mid-transaction, after Noop already succeeded),
+// but the common case of a liveness-checkable stale connection self-heals
+// invisibly.
+func TestSMTPSenderHungReuseBound(t *testing.T) {
+	srv := startMockSMTPServer(t)
+	sender := newTestSMTPSender(t, srv.addr)
+	sender.opTimeout = 100 * time.Millisecond
+
+	if err := sender.Send(context.Background(), "Hello", "<p>Test</p>", []string{"recipient@test.com"}); err != nil {
+		t.Fatalf("first send failed: %v", err)
+	}
+
+	// Silence only the one connection the first Send() established and
+	// cached — a new connection dialed later must NOT inherit this.
+	srv.silenceConnAt(0)
+
+	start := time.Now()
+	err := sender.Send(context.Background(), "Hello again", "<p>Test</p>", []string{"recipient@test.com"})
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("expected transparent redial to succeed despite the stale cached connection, got: %v", err)
+	}
+	if elapsed > time.Second {
+		t.Errorf("expected the stale-connection detection + redial to bound by ~opTimeout, took %v", elapsed)
+	}
+	if elapsed < sender.opTimeout {
+		t.Errorf("expected elapsed time to include the Noop liveness-check timeout (~%v), got %v", sender.opTimeout, elapsed)
+	}
+
+	if got := srv.authCount.Load(); got != 2 {
+		t.Errorf("expected 2 AUTH (initial connection + redial after detecting staleness), got %d", got)
+	}
+}
+
+// TestSMTPSenderRcptRejected proves a mid-transaction SMTP rejection (as
+// opposed to a connection-level failure) still discards the cached
+// connection via discardAndFail, so the next Send() redials rather than
+// reusing a connection left in an undefined transaction state.
+func TestSMTPSenderRcptRejected(t *testing.T) {
+	srv := startMockSMTPServer(t)
+	srv.setRejectRcpt("bad@test.com")
+	sender := newTestSMTPSender(t, srv.addr)
+
+	err := sender.Send(context.Background(), "Hello", "<p>Test</p>", []string{"bad@test.com"})
+	if err == nil {
+		t.Fatal("expected an error for a rejected recipient, got nil")
+	}
+
+	// A later send to a valid recipient must redial cleanly rather than
+	// reuse the connection the rejection left mid-transaction.
+	srv.setRejectRcpt("")
+	if err := sender.Send(context.Background(), "Hello", "<p>Test</p>", []string{"good@test.com"}); err != nil {
+		t.Fatalf("send after rejection failed: %v", err)
+	}
+
+	if got := srv.authCount.Load(); got != 2 {
+		t.Errorf("expected 2 AUTH (rejection discarded the first connection, forcing a redial), got %d", got)
+	}
+}
+
+// TestSMTPSenderAuthRejected proves a connect()-phase Auth failure returns a
+// clean error with nothing cached, and does not corrupt state for a later
+// send against a healthy configuration.
+func TestSMTPSenderAuthRejected(t *testing.T) {
+	srv := startMockSMTPServer(t)
+	srv.rejectAuth.Store(true)
+	sender := newTestSMTPSender(t, srv.addr)
+
+	err := sender.Send(context.Background(), "Hello", "<p>Test</p>", []string{"recipient@test.com"})
+	if err == nil {
+		t.Fatal("expected an error for rejected authentication, got nil")
+	}
+	if sender.client != nil {
+		t.Error("expected no client to be cached after a failed Auth")
+	}
+
+	srv.rejectAuth.Store(false)
+	if err := sender.Send(context.Background(), "Hello", "<p>Test</p>", []string{"recipient@test.com"}); err != nil {
+		t.Fatalf("send after auth rejection cleared failed: %v", err)
 	}
 }

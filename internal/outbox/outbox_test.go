@@ -100,13 +100,11 @@ func TestOutboxQueueHappyPath(t *testing.T) {
 		t.Fatalf("failed to enqueue: %v", err)
 	}
 
-	// Run outbox processPending once
+	// Run outbox processPending once; delivery is synchronous, so by the
+	// time this returns, the item has already been sent.
 	if err := queue.processPending(ctx); err != nil {
 		t.Fatalf("processPending failed: %v", err)
 	}
-
-	// Wait for queue workers to finish
-	queue.wg.Wait()
 
 	// Verify sent email
 	sent := sender.getSent()
@@ -157,7 +155,6 @@ func TestOutboxQueueRetryBackoff(t *testing.T) {
 	if err := queue.processPending(ctx); err != nil {
 		t.Fatalf("processPending failed: %v", err)
 	}
-	queue.wg.Wait()
 
 	fetched, err := repo.GetOutboxItem(ctx, item.ID)
 	if err != nil {
@@ -215,7 +212,6 @@ func TestOutboxQueuePermanentFailure(t *testing.T) {
 	if err := queue.processPending(ctx); err != nil {
 		t.Fatalf("processPending failed: %v", err)
 	}
-	queue.wg.Wait()
 
 	fetched, err := repo.GetOutboxItem(ctx, item.ID)
 	if err != nil {
@@ -238,7 +234,6 @@ func TestOutboxQueuePermanentFailure(t *testing.T) {
 	if err := queue.processPending(ctx); err != nil {
 		t.Fatalf("processPending failed: %v", err)
 	}
-	queue.wg.Wait()
 
 	if sender.getCalled() != 0 {
 		t.Errorf("expected 0 calls since item is failed, got %d", sender.getCalled())
@@ -264,7 +259,6 @@ func TestOutboxQueuePermanentFailure(t *testing.T) {
 	if err := queue.processPending(ctx); err != nil {
 		t.Fatalf("processPending failed: %v", err)
 	}
-	queue.wg.Wait()
 
 	if sender.getCalled() != 0 {
 		t.Errorf("expected 0 calls since RetryCount >= MaxRetries, got %d", sender.getCalled())
@@ -447,7 +441,6 @@ func TestOutboxQueueDBCallbacks(t *testing.T) {
 		if err := queue.processPending(context.Background()); err != nil {
 			t.Fatalf("processPending failed: %v", err)
 		}
-		queue.wg.Wait()
 		// Status should still be delivering because final update failed
 		fetched, err := repo.GetOutboxItem(context.Background(), item.ID)
 		if err != nil {
@@ -495,7 +488,6 @@ func TestOutboxQueueDBCallbacks(t *testing.T) {
 		if err := queue.processPending(context.Background()); err != nil {
 			t.Fatalf("processPending failed: %v", err)
 		}
-		queue.wg.Wait()
 		// Status should still be delivering
 		fetched, err := repo.GetOutboxItem(context.Background(), item.ID)
 		if err != nil {
@@ -535,7 +527,6 @@ func TestOutboxQueueDistantFutureAndBoundary(t *testing.T) {
 	if err := queue.processPending(ctx); err != nil {
 		t.Fatalf("processPending failed: %v", err)
 	}
-	queue.wg.Wait()
 
 	fetched, err := repo.GetOutboxItem(ctx, item.ID)
 	if err != nil {
@@ -575,9 +566,141 @@ func TestOutboxQueueDistantFutureAndBoundary(t *testing.T) {
 	if err := queue.processPending(ctx); err != nil {
 		t.Fatalf("processPending failed: %v", err)
 	}
-	queue.wg.Wait()
 
 	if sender.getCalled() != 0 {
 		t.Errorf("expected 0 calls since RetryCount matches MaxRetries, got %d", sender.getCalled())
 	}
+}
+
+// TestOutboxQueueSequentialOrder proves delivery is now fully sequential and
+// oldest-due-first, matching ListPendingOutboxItems' ORDER BY next_attempt_at.
+func TestOutboxQueueSequentialOrder(t *testing.T) {
+	repo := setupTestDB(t)
+	sender := &MockSender{}
+	ctx := context.Background()
+
+	cfg := Config{
+		MaxRetries:     3,
+		InitialBackoff: 10 * time.Millisecond,
+		MaxBackoff:     100 * time.Millisecond,
+		PollInterval:   5 * time.Millisecond,
+	}
+	queue := NewQueue(repo, sender, cfg, nil)
+
+	base := time.Now().Add(-time.Hour)
+	// Enqueue deliberately out of NextAttemptAt order.
+	items := []*types.OutboxItem{
+		{Subject: "third", Body: "b", Recipients: []string{"u@test.com"}, Status: types.OutboxPending, NextAttemptAt: base.Add(30 * time.Minute)},
+		{Subject: "first", Body: "b", Recipients: []string{"u@test.com"}, Status: types.OutboxPending, NextAttemptAt: base.Add(10 * time.Minute)},
+		{Subject: "second", Body: "b", Recipients: []string{"u@test.com"}, Status: types.OutboxPending, NextAttemptAt: base.Add(20 * time.Minute)},
+	}
+	for _, it := range items {
+		if err := repo.EnqueueOutboxItem(ctx, it); err != nil {
+			t.Fatalf("failed to enqueue: %v", err)
+		}
+	}
+
+	if err := queue.processPending(ctx); err != nil {
+		t.Fatalf("processPending failed: %v", err)
+	}
+
+	sent := sender.getSent()
+	if len(sent) != 3 {
+		t.Fatalf("expected 3 emails sent, got %d", len(sent))
+	}
+
+	wantOrder := []string{"first", "second", "third"}
+	gotOrder := make([]string, len(sent))
+	for i, s := range sent {
+		gotOrder[i] = s.Subject
+	}
+	for i, want := range wantOrder {
+		if gotOrder[i] != want {
+			t.Errorf("send order mismatch: got %v, want %v", gotOrder, wantOrder)
+			break
+		}
+	}
+}
+
+// blockingSender blocks in Send until release is closed, signaling once
+// (non-blocking) on started when a send has actually begun.
+type blockingSender struct {
+	release <-chan struct{}
+	started chan struct{}
+}
+
+func (b *blockingSender) Send(_ context.Context, _ string, _ string, _ []string) error {
+	select {
+	case b.started <- struct{}{}:
+	default:
+	}
+	<-b.release
+	return nil
+}
+
+// TestOutboxQueueStopWaitsForInFlightDelivery proves Stop()'s documented
+// "waits for in-flight deliveries to complete" guarantee still holds after
+// re-scoping wg from per-item to per-processPending-call: Stop() called from
+// a goroutine other than Start's own must block until the currently
+// in-flight delivery actually finishes.
+func TestOutboxQueueStopWaitsForInFlightDelivery(t *testing.T) {
+	repo := setupTestDB(t)
+
+	release := make(chan struct{})
+	sender := &blockingSender{release: release, started: make(chan struct{}, 1)}
+	ctx := context.Background()
+
+	cfg := Config{
+		MaxRetries:     3,
+		InitialBackoff: 10 * time.Millisecond,
+		MaxBackoff:     100 * time.Millisecond,
+		PollInterval:   2 * time.Millisecond,
+	}
+	queue := NewQueue(repo, sender, cfg, nil)
+
+	item := &types.OutboxItem{
+		Subject:       "Slow Send",
+		Body:          "Body",
+		Recipients:    []string{"user@test.com"},
+		Status:        types.OutboxPending,
+		NextAttemptAt: time.Now().Add(-time.Second),
+	}
+	if err := repo.EnqueueOutboxItem(ctx, item); err != nil {
+		t.Fatalf("failed to enqueue: %v", err)
+	}
+
+	var startWg sync.WaitGroup
+	startWg.Go(func() {
+		_ = queue.Start(ctx)
+	})
+
+	// Wait until delivery has actually started, so Stop() below is
+	// guaranteed to race against real in-flight work, not an empty poll.
+	select {
+	case <-sender.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for delivery to start")
+	}
+
+	stopped := make(chan struct{})
+	go func() {
+		queue.Stop()
+		close(stopped)
+	}()
+
+	select {
+	case <-stopped:
+		t.Fatal("Stop() returned before in-flight delivery completed")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(release)
+
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop() did not return after delivery completed")
+	}
+
+	startWg.Wait()
 }
