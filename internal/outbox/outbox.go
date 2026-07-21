@@ -23,7 +23,10 @@ type Config struct {
 // Queue manages background processing of the durable email outbox. Delivery
 // is fully sequential within Start's own goroutine — items are drained one
 // at a time (oldest-due-first) rather than fanned out to a goroutine per
-// item, so the shared notifier.Sender only ever sees one caller at a time.
+// item, keeping a poll cycle to at most one simultaneous SMTP
+// connection/login regardless of how many items are pending. This is a
+// property of how Queue drains its own batch, not a requirement
+// notifier.Sender itself imposes.
 type Queue struct {
 	repo   *database.Repository
 	sender notifier.Sender
@@ -142,6 +145,15 @@ func (q *Queue) processPending(ctx context.Context) error {
 	}
 
 	for _, item := range items {
+		// Bail out of the batch on a canceled context rather than working
+		// through every remaining item first: since delivery is sequential,
+		// skipping this check would let a cancellation partway through a
+		// large batch cost up to len(items)*opTimeout before Start's loop
+		// can even reach its own ctx.Done() case.
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		// Filter out items already hit max retries
 		if item.RetryCount >= q.cfg.MaxRetries {
 			continue

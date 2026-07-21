@@ -99,6 +99,9 @@ type mockSMTPServer struct {
 	// rejectAuth, when set, makes every AUTH PLAIN fail with a permanent
 	// error instead of succeeding.
 	rejectAuth atomic.Bool
+	// rejectMailFrom, when set, makes every MAIL FROM fail with a
+	// permanent error instead of succeeding.
+	rejectMailFrom atomic.Bool
 
 	mu    sync.Mutex
 	conns []*mockConn
@@ -225,9 +228,12 @@ func (srv *mockSMTPServer) handleConn(mc *mockConn) {
 			srv.authCount.Add(1)
 			_, _ = c.Write([]byte("235 2.7.0 Authentication successful\r\n"))
 		case strings.HasPrefix(cmd, "MAIL FROM:"):
-			if !authed {
+			switch {
+			case !authed:
 				_, _ = c.Write([]byte("530 5.7.0 Must issue a STARTTLS or AUTH command first\r\n"))
-			} else {
+			case srv.rejectMailFrom.Load():
+				_, _ = c.Write([]byte("451 4.7.1 Sender rejected\r\n"))
+			default:
 				_, _ = c.Write([]byte("250 2.1.0 Ok\r\n"))
 			}
 		case strings.HasPrefix(cmd, "RCPT TO:"):
@@ -628,6 +634,30 @@ func TestSMTPSenderRcptRejected(t *testing.T) {
 	}
 }
 
+// TestSMTPSenderMailFromRejected proves a MAIL FROM rejection (the earliest
+// point in the per-message transaction where the server can reject) also
+// discards the cached connection via discardAndFail, same as a later-stage
+// RCPT rejection.
+func TestSMTPSenderMailFromRejected(t *testing.T) {
+	srv := startMockSMTPServer(t)
+	srv.rejectMailFrom.Store(true)
+	sender := newTestSMTPSender(t, srv.addr)
+
+	err := sender.Send(context.Background(), "Hello", "<p>Test</p>", []string{"recipient@test.com"})
+	if err == nil {
+		t.Fatal("expected an error for a rejected MAIL FROM, got nil")
+	}
+
+	srv.rejectMailFrom.Store(false)
+	if err := sender.Send(context.Background(), "Hello", "<p>Test</p>", []string{"recipient@test.com"}); err != nil {
+		t.Fatalf("send after rejection failed: %v", err)
+	}
+
+	if got := srv.authCount.Load(); got != 2 {
+		t.Errorf("expected 2 AUTH (rejection discarded the first connection, forcing a redial), got %d", got)
+	}
+}
+
 // TestSMTPSenderAuthRejected proves a connect()-phase Auth failure returns a
 // clean error with nothing cached, and does not corrupt state for a later
 // send against a healthy configuration.
@@ -647,5 +677,74 @@ func TestSMTPSenderAuthRejected(t *testing.T) {
 	srv.rejectAuth.Store(false)
 	if err := sender.Send(context.Background(), "Hello", "<p>Test</p>", []string{"recipient@test.com"}); err != nil {
 		t.Fatalf("send after auth rejection cleared failed: %v", err)
+	}
+}
+
+// TestSMTPSenderCanceledContext proves Send() bails out immediately on an
+// already-canceled context instead of proceeding to reuse (or dial) a
+// connection regardless — including on a warm cache, where no SMTP call in
+// the reuse path otherwise takes a context at all.
+func TestSMTPSenderCanceledContext(t *testing.T) {
+	srv := startMockSMTPServer(t)
+	sender := newTestSMTPSender(t, srv.addr)
+
+	// Warm the cache with one successful send first.
+	if err := sender.Send(context.Background(), "Hello", "<p>Test</p>", []string{"recipient@test.com"}); err != nil {
+		t.Fatalf("warm-up send failed: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if err := sender.Send(ctx, "Hello again", "<p>Test</p>", []string{"recipient@test.com"}); err == nil {
+		t.Fatal("expected an error for an already-canceled context, got nil")
+	}
+
+	// The canceled-context send must not have touched the connection at
+	// all: AUTH count stays at 1, and the next send with a live context
+	// reuses the still-cached, still-good connection.
+	if got := srv.authCount.Load(); got != 1 {
+		t.Errorf("expected AUTH count to stay at 1 (canceled send should not touch the connection), got %d", got)
+	}
+	if err := sender.Send(context.Background(), "Hello once more", "<p>Test</p>", []string{"recipient@test.com"}); err != nil {
+		t.Fatalf("send after canceled-context send failed: %v", err)
+	}
+	if got := srv.authCount.Load(); got != 1 {
+		t.Errorf("expected AUTH count to remain 1 (cache still valid), got %d", got)
+	}
+}
+
+// TestSMTPSenderCanceledContextWhileWaitingForLock proves the second,
+// post-lock ctx.Err() check in Send() is reachable and correct: a context
+// that is still live when Send() is called, but gets canceled while Send()
+// is blocked waiting to acquire s.mu, must still bail out once the lock is
+// acquired — without ever attempting to contact the server.
+func TestSMTPSenderCanceledContextWhileWaitingForLock(t *testing.T) {
+	srv := startMockSMTPServer(t)
+	sender := newTestSMTPSender(t, srv.addr)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Hold the lock ourselves (simulating another in-flight Send()), so
+	// this call's pre-lock check sees a live ctx and then blocks on
+	// s.mu.Lock() — exactly the window the post-lock check exists for.
+	sender.mu.Lock()
+	unlocked := make(chan struct{})
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+		time.Sleep(50 * time.Millisecond)
+		sender.mu.Unlock()
+		close(unlocked)
+	}()
+
+	err := sender.Send(ctx, "Hello", "<p>Test</p>", []string{"recipient@test.com"})
+	<-unlocked
+
+	if err == nil {
+		t.Fatal("expected an error for a context canceled while waiting on the lock")
+	}
+	if got := srv.authCount.Load(); got != 0 {
+		t.Errorf("expected no AUTH attempt (post-lock ctx check must bail before touching the connection), got %d", got)
 	}
 }

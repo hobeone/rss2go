@@ -704,3 +704,56 @@ func TestOutboxQueueStopWaitsForInFlightDelivery(t *testing.T) {
 
 	startWg.Wait()
 }
+
+// cancelAfterFirstSendSender wraps a MockSender and cancels the given
+// context after its first Send() call, simulating ctx being canceled
+// partway through a poll cycle's batch.
+type cancelAfterFirstSendSender struct {
+	*MockSender
+	cancel func()
+}
+
+func (s *cancelAfterFirstSendSender) Send(ctx context.Context, subject, body string, recipients []string) error {
+	err := s.MockSender.Send(ctx, subject, body, recipients)
+	s.cancel()
+	return err
+}
+
+// TestOutboxQueueProcessPendingStopsOnCanceledContext proves processPending
+// bails out of its sequential delivery loop as soon as ctx is canceled,
+// rather than working through every remaining item in the batch first.
+func TestOutboxQueueProcessPendingStopsOnCanceledContext(t *testing.T) {
+	repo := setupTestDB(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	mock := &MockSender{}
+	sender := &cancelAfterFirstSendSender{MockSender: mock, cancel: cancel}
+
+	cfg := Config{
+		MaxRetries:     3,
+		InitialBackoff: 10 * time.Millisecond,
+		MaxBackoff:     100 * time.Millisecond,
+	}
+	queue := NewQueue(repo, sender, cfg, nil)
+
+	for i := range 3 {
+		item := &types.OutboxItem{
+			Subject:       "Item",
+			Body:          "Body",
+			Recipients:    []string{"user@test.com"},
+			Status:        types.OutboxPending,
+			NextAttemptAt: time.Now().Add(-time.Duration(3-i) * time.Second),
+		}
+		if err := repo.EnqueueOutboxItem(context.Background(), item); err != nil {
+			t.Fatalf("failed to enqueue: %v", err)
+		}
+	}
+
+	err := queue.processPending(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got: %v", err)
+	}
+
+	if got := mock.getCalled(); got != 1 {
+		t.Errorf("expected exactly 1 delivery attempt before bailing on cancellation, got %d", got)
+	}
+}
