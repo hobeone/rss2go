@@ -134,11 +134,16 @@ func (s *SMTPSender) Send(ctx context.Context, subject string, body string, reci
 		s.log.Debug("SMTP DATA command failed", "err", err)
 		return fmt.Errorf("notifier: open data writer: %w", err)
 	}
-	defer func() { _ = w.Close() }()
 
 	if _, err := w.Write(msg); err != nil {
+		_ = w.Close()
 		s.log.Debug("SMTP message data write failed", "err", err)
 		return fmt.Errorf("notifier: write message data: %w", err)
+	}
+
+	if err := w.Close(); err != nil {
+		s.log.Debug("SMTP DATA termination failed", "err", err)
+		return fmt.Errorf("notifier: close data writer: %w", err)
 	}
 
 	s.log.Debug("SMTP email delivered successfully", "recipients_count", len(recipients), "bytes", len(msg))
