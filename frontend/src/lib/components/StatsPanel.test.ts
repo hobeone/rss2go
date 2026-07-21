@@ -72,7 +72,7 @@ describe('StatsPanel', () => {
 
     render(StatsPanel, { stats: mockStats, outboxItems: [], onRefresh: mockOnRefresh })
 
-    const refreshBtn = screen.getByRole('button', { name: '🔄 Refresh Counters' })
+    const refreshBtn = screen.getByRole('button', { name: 'Refresh Counters' })
     await fireEvent.click(refreshBtn)
 
     expect(mockOnRefresh).toHaveBeenCalled()

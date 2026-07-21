@@ -51,7 +51,7 @@ describe('FeedManager', () => {
 
     render(FeedManager, { feeds: mockFeeds, triggerToast: mockTriggerToast, onRefresh: mockOnRefresh })
 
-    const addBtn = screen.getByRole('button', { name: '+ Add Feed Source' })
+    const addBtn = screen.getByRole('button', { name: 'Add Feed Source' })
     await fireEvent.click(addBtn)
 
     expect(screen.getByText('Configure New Feed Source')).toBeInTheDocument()
@@ -80,7 +80,7 @@ describe('FeedManager', () => {
 
     render(FeedManager, { feeds: mockFeeds, triggerToast: mockTriggerToast, onRefresh: mockOnRefresh })
 
-    const addBtn = screen.getByRole('button', { name: '+ Add Feed Source' })
+    const addBtn = screen.getByRole('button', { name: 'Add Feed Source' })
     await fireEvent.click(addBtn)
 
     const titleInput = screen.getByPlaceholderText('Engineering Blog')
@@ -108,7 +108,7 @@ describe('FeedManager', () => {
 
     render(FeedManager, { feeds: mockFeeds, triggerToast: mockTriggerToast, onRefresh: mockOnRefresh })
 
-    const addBtn = screen.getByRole('button', { name: '+ Add Feed Source' })
+    const addBtn = screen.getByRole('button', { name: 'Add Feed Source' })
     await fireEvent.click(addBtn)
 
     const titleInput = screen.getByPlaceholderText('Engineering Blog')
@@ -144,7 +144,7 @@ describe('FeedManager', () => {
     expect(itemLink).toBeInTheDocument()
 
     // Control buttons should be visible
-    expect(screen.getByRole('button', { name: '🧪 Test Feed Dry-run' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '⚡ Run Scan Now' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Test Feed' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Scan Now' })).toBeInTheDocument()
   })
 })

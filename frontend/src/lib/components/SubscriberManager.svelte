@@ -13,6 +13,7 @@
   let activeUser = $state<any>(null);
   let userSearchQuery = $state('');
   let userForm = $state({ email: '' });
+  let pendingDeleteId = $state<number | null>(null);
 
   let filteredFeeds = $derived(
     feeds.filter(feed => 
@@ -43,10 +44,8 @@
     }
   }
 
-  async function deleteUser(id: number) {
-    if (!confirm('Delete user email address? All subscription rows will be removed.')) {
-      return;
-    }
+  async function confirmDeleteUser(id: number) {
+    pendingDeleteId = null;
     const res = await api.deleteUser(id);
     if (res !== null) {
       if (activeUser && activeUser.id === id) {
@@ -167,7 +166,7 @@
                 <button 
                   class="m-btn m-btn-text" 
                   style="color: var(--md-sys-color-error); padding: 4px;" 
-                  onclick={(e) => { e.stopPropagation(); deleteUser(user.id); }}
+                  onclick={(e) => { e.stopPropagation(); pendingDeleteId = user.id; }}
                 >
                   Remove
                 </button>
@@ -206,10 +205,10 @@
       <!-- Bulk Selection Controls -->
       <div class="bulk-select-controls">
         <button class="m-btn m-btn-tonal" style="flex: 1;" onclick={selectAllFiltered}>
-          ✔️ Select All Filtered ({filteredFeeds.length})
+          Select All Filtered ({filteredFeeds.length})
         </button>
         <button class="m-btn m-btn-outlined" style="flex: 1;" onclick={deselectAllFiltered}>
-          ❌ Deselect All Filtered
+          Deselect All Filtered
         </button>
       </div>
 
@@ -241,9 +240,27 @@
       </div>
     {:else}
       <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 250px; text-align: center; color: var(--md-sys-color-on-surface-variant); gap: 12px;">
-        <span style="font-size: 3rem; opacity: 0.75;">📬</span>
         <p class="m-body-medium" style="max-width: 250px;">Select a subscriber from the list to audit and configure their feed subscriptions.</p>
       </div>
     {/if}
   </div>
 </div>
+
+<!-- Delete Confirmation Dialog -->
+{#if pendingDeleteId !== null}
+  <div class="m-modal-container">
+    <button class="m-dialog-overlay" onclick={() => pendingDeleteId = null} aria-label="Cancel delete"></button>
+    <div class="m-dialog m-dialog-danger">
+      <h2 class="m-title-medium">Remove this subscriber?</h2>
+      <p class="m-body-medium">All of their feed subscriptions will be removed along with them. This cannot be undone.</p>
+      <div style="display: flex; justify-content: flex-end; gap: 12px;">
+        <button class="m-btn m-btn-outlined" onclick={() => pendingDeleteId = null}>
+          Cancel
+        </button>
+        <button class="m-btn m-btn-error" onclick={() => confirmDeleteUser(pendingDeleteId!)}>
+          Remove Subscriber
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}

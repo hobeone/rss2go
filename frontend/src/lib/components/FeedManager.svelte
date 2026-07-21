@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import * as api from '../api';
 
   interface Props {
@@ -21,6 +22,8 @@
   let testResult = $state.raw<any>(null);
   let isTestingFeed = $state(false);
   let rewindLimit = $state(10);
+  let pendingDeleteId = $state<number | null>(null);
+  let nowTick = $state(Date.now());
 
   let users = $state<any[]>([]);
   let subscribeAll = $state(false);
@@ -149,10 +152,8 @@
     }
   }
 
-  async function deleteFeed(id: number) {
-    if (!confirm('Are you sure you want to delete this feed? All subscribers will be unsubscribed.')) {
-      return;
-    }
+  async function confirmDeleteFeed(id: number) {
+    pendingDeleteId = null;
     try {
       const res = await api.deleteFeed(id);
       if (res !== null) {
@@ -208,6 +209,27 @@
     }
   }
 
+  onMount(() => {
+    const timer = setInterval(() => { nowTick = Date.now(); }, 1000);
+    return () => clearInterval(timer);
+  });
+
+  // Signature element: fraction of the poll interval elapsed since the last crawl,
+  // driving the amber pulse-bar fill on each feed card.
+  function pollCycleProgress(feed: any): { pct: number; label: string } {
+    const intervalMs = (feed.poll_interval_secs || 1) * 1000;
+    const next = feed.next_poll_at ? new Date(feed.next_poll_at).getTime() : null;
+    if (!next) return { pct: 0, label: 'awaiting first poll' };
+    const remainingMs = next - nowTick;
+    const pct = Math.min(100, Math.max(0, 100 - (remainingMs / intervalMs) * 100));
+    if (remainingMs <= 0) return { pct: 100, label: 'polling due' };
+    const remainingSecs = Math.round(remainingMs / 1000);
+    const label = remainingSecs < 60
+      ? `next poll in ${remainingSecs}s`
+      : `next poll in ${Math.round(remainingSecs / 60)}m`;
+    return { pct, label };
+  }
+
   async function rewindFeed(id: number) {
     try {
       const res = await api.rewindFeed(id, rewindLimit);
@@ -230,44 +252,42 @@
     <p class="m-body-medium">Add, configure, and inspect feed polling rules.</p>
   </div>
   <button class="m-btn m-btn-filled" onclick={openAddFeed}>
-    <span>+</span> Add Feed Source
+    Add Feed Source
   </button>
 </div>
 
-<!-- Search / Filter input -->
-<div class="m-card" style="margin-bottom: 32px; padding: 16px;">
-  <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end;">
-    <div class="m-input-group" style="margin: 0; flex: 1; min-width: 250px; max-width: 500px;">
-      <span class="m-input-label">Filter Feeds list</span>
-      <input
-        type="text"
-        placeholder="Search feed title or URL..."
-        class="m-input"
-        bind:value={feedSearchQuery}
-      />
-    </div>
-    <div style="display: flex; align-items: center; gap: 8px; height: 48px;">
-      <button
-        type="button"
-        class="m-btn {feedFilterStatus === 'all' ? 'm-btn-filled' : 'm-btn-outlined'}"
-        onclick={() => feedFilterStatus = 'all'}
-      >
-        All Feeds
-      </button>
-      <button
-        type="button"
-        class="m-btn {feedFilterStatus === 'error' ? 'm-btn-filled' : 'm-btn-outlined'}"
-        style={feedFilterStatus === 'error' ? 'background-color: var(--md-sys-color-error); color: var(--md-sys-color-on-error); border-color: var(--md-sys-color-error);' : ''}
-        onclick={() => feedFilterStatus = 'error'}
-      >
-        ⚠️ Errors Only
-      </button>
-    </div>
+<!-- Search / Filter toolbar -->
+<div class="m-toolbar">
+  <div class="m-input-group" style="margin: 0; flex: 1; min-width: 250px; max-width: 500px;">
+    <span class="m-input-label">Filter feeds</span>
+    <input
+      type="text"
+      placeholder="Search feed title or URL..."
+      class="m-input"
+      bind:value={feedSearchQuery}
+    />
+  </div>
+  <div style="display: flex; align-items: center; gap: 8px; height: 44px;">
+    <button
+      type="button"
+      class="m-btn {feedFilterStatus === 'all' ? 'm-btn-filled' : 'm-btn-outlined'}"
+      onclick={() => feedFilterStatus = 'all'}
+    >
+      All Feeds
+    </button>
+    <button
+      type="button"
+      class="m-btn {feedFilterStatus === 'error' ? 'm-btn-error' : 'm-btn-outlined'}"
+      onclick={() => feedFilterStatus = 'error'}
+    >
+      Errors Only
+    </button>
   </div>
 </div>
 
 <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px;">
   {#each filteredDashboardFeeds as feed (feed.id)}
+    {@const cycle = pollCycleProgress(feed)}
     <div
       class="m-card m-card-interactive"
       role="button"
@@ -275,28 +295,35 @@
       onclick={() => activeFeed = feed}
       onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { activeFeed = feed; e.preventDefault(); } }}
     >
-      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
-        <h3 class="m-title-small" style="font-weight: 600; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 220px;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px;">
+        <h3 class="m-title-small" style="text-overflow: ellipsis; overflow: hidden; white-space: nowrap; min-width: 0;">
           {feed.title || 'Untitled Feed'}
         </h3>
-        <span class="m-badge {feed.last_error_str ? 'm-badge-error' : 'm-badge-primary'}">
+        <span class="m-status {feed.last_error_str ? 'm-status-error' : 'm-status-ok'}" style="flex-shrink: 0;">
           {feed.last_error_str ? 'Error' : 'Active'}
         </span>
       </div>
       <p class="m-body-medium" style="word-break: break-all; margin-bottom: 16px; font-size: 0.85rem;">
         {feed.url}
       </p>
-      <div style="display: flex; gap: 16px; border-top: 1px solid var(--md-sys-color-outline-variant); padding-top: 12px; font-size: 0.85rem; color: var(--md-sys-color-on-surface-variant);">
-        <div>⏱️ {feed.poll_interval_secs}s</div>
-        <div>🔄 x{feed.backoff_factor}</div>
+      <div style="display: flex; gap: 16px; margin-bottom: 14px; font-size: 0.8rem; font-family: var(--font-mono); color: var(--md-sys-color-on-surface-variant);">
+        <div>poll {feed.poll_interval_secs}s</div>
+        <div>backoff x{feed.backoff_factor}</div>
         {#if feed.extract_full_article}
-          <div>📄 Extractor</div>
+          <div>extractor on</div>
         {/if}
+      </div>
+      <div class="poll-cycle" style="border-top: 1px solid var(--md-sys-color-outline-variant); padding-top: 12px;">
+        <div class="poll-cycle-track">
+          <div class="poll-cycle-fill" style="width: {cycle.pct}%;"></div>
+        </div>
+        <div class="poll-cycle-label">
+          <span>{feed.last_error_str ? 'stalled on error' : cycle.label}</span>
+        </div>
       </div>
     </div>
   {:else}
     <div class="m-card" style="grid-column: 1 / -1; text-align: center; padding: 48px; color: var(--md-sys-color-on-surface-variant);">
-      <span style="font-size: 2.5rem; display: block; margin-bottom: 12px;">🔍</span>
       <p class="m-body-medium">No feeds match your search criteria.</p>
     </div>
   {/each}
@@ -311,7 +338,7 @@
         <div>
           <h2 class="m-title-medium">{activeFeed.title}</h2>
           <a href={activeFeed.url} target="_blank" class="m-body-medium" style="color: var(--md-sys-color-primary); text-decoration: none; word-break: break-all; font-size: 0.85rem;">
-            {activeFeed.url} 🔗
+            {activeFeed.url}
           </a>
         </div>
         <button class="m-btn m-btn-text" style="padding: 4px;" onclick={() => activeFeed = null}>✕</button>
@@ -344,7 +371,7 @@
         </div>
         {#if activeFeed.last_error_str}
         <div class="m-card" style="background-color: var(--md-sys-color-error-container); border-color: var(--md-sys-color-error); padding: 12px 16px; grid-column: span 2;">
-          <h4 style="color: var(--md-sys-color-on-error-container); font-weight: bold; margin-bottom: 4px;">Crawling Error Alert</h4>
+          <h4 style="color: var(--md-sys-color-on-error-container); margin-bottom: 4px; font-size: 0.85rem;">Crawling Error Alert</h4>
           <p style="color: var(--md-sys-color-on-error-container); font-size: 0.85rem; word-break: break-all;">
             {activeFeed.last_error_str}
           </p>
@@ -354,8 +381,8 @@
 
       <!-- Feed Items List -->
       <div style="border-top: 1px solid var(--md-sys-color-outline-variant); padding-top: 16px; display: flex; flex-direction: column; gap: 8px;">
-        <h4 class="m-title-small" style="font-size: 0.95rem; font-weight: bold; display: flex; align-items: center; gap: 8px;">
-          📰 Recent Feed Items ({activeFeedItems.length})
+        <h4 class="m-title-small" style="font-size: 0.9rem;">
+          Recent Feed Items ({activeFeedItems.length})
         </h4>
 
         {#if isLoadingFeedItems}
@@ -364,7 +391,7 @@
           </div>
         {:else if feedItemsError}
           <div style="color: var(--md-sys-color-error); font-size: 0.85rem; padding: 8px; border: 1px solid var(--md-sys-color-error); border-radius: var(--radius-sm); background-color: var(--md-sys-color-error-container);">
-            ⚠ {feedItemsError}
+            {feedItemsError}
           </div>
         {:else}
           <div style="max-height: 220px; overflow-y: auto; border: 1px solid var(--md-sys-color-outline-variant); border-radius: var(--radius-md); padding: 8px; background-color: var(--md-sys-color-surface); display: flex; flex-direction: column; gap: 8px;">
@@ -378,7 +405,7 @@
                     {item.published_at ? new Date(item.published_at).toLocaleString() : 'No date'}
                   </span>
                 </div>
-                <span class="m-badge {item.seen ? 'm-badge-primary' : 'm-badge-secondary'}" style="font-size: 0.7rem; padding: 2px 8px; flex-shrink: 0;">
+                <span class="m-status {item.seen ? 'm-status-ok' : 'm-status-pending'}" style="font-size: 0.65rem; flex-shrink: 0;">
                   {item.seen ? 'Emailed' : 'Unseen'}
                 </span>
               </div>
@@ -392,20 +419,20 @@
       </div>
 
       <div style="border-top: 1px solid var(--md-sys-color-outline-variant); padding-top: 16px; display: flex; flex-direction: column; gap: 16px;">
-        <h4 class="m-title-small" style="font-size: 0.95rem; font-weight: bold;">Operator Control Operations</h4>
+        <h4 class="m-title-small" style="font-size: 0.9rem;">Operator Control Operations</h4>
         <div style="display: flex; flex-wrap: wrap; gap: 12px;">
           <button class="m-btn m-btn-tonal" onclick={() => testCrawl(activeFeed)}>
-            🧪 Test Feed Dry-run
+            Test Feed
           </button>
-          <button class="m-btn class-btn-outlined m-btn-outlined" onclick={() => catchupFeed(activeFeed.id)}>
-            ✔️ Catch Up (Mark Seen)
+          <button class="m-btn m-btn-outlined" onclick={() => catchupFeed(activeFeed.id)}>
+            Catch Up
           </button>
           <button class="m-btn m-btn-outlined" onclick={() => scanFeedNow(activeFeed.id)}>
-            ⚡ Run Scan Now
+            Scan Now
           </button>
           <div style="display: flex; align-items: center; gap: 8px;">
             <button class="m-btn m-btn-outlined" onclick={() => rewindFeed(activeFeed.id)}>
-              ⏪ Rewind
+              Rewind
             </button>
             <input type="number" class="m-input" style="width: 70px; padding: 8px 12px;" bind:value={rewindLimit} min="1" max="500" />
             <span class="m-body-medium">items</span>
@@ -415,10 +442,10 @@
 
       <div style="margin-top: 16px; display: flex; justify-content: space-between; border-top: 1px solid var(--md-sys-color-outline-variant); padding-top: 16px;">
         <button class="m-btn m-btn-tonal" onclick={() => { openEditFeed(activeFeed); }}>
-          ✏️ Edit Feed Config
+          Edit Feed Config
         </button>
-        <button class="m-btn m-btn-error" onclick={() => deleteFeed(activeFeed.id)}>
-          🗑️ Delete
+        <button class="m-btn m-btn-error" onclick={() => { pendingDeleteId = activeFeed.id; }}>
+          Delete
         </button>
       </div>
     </div>
@@ -531,7 +558,7 @@
     <div class="m-dialog" style="max-width: 800px;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid var(--md-sys-color-outline-variant); padding-bottom: 12px;">
         <div>
-          <h2 class="m-title-medium">🧪 Test Crawl Dry-Run Report</h2>
+          <h2 class="m-title-medium">Test Crawl Dry-Run Report</h2>
           {#if testResult}
             <p class="m-body-medium">Parsed feed: <strong>{testResult.title || 'Unknown Title'}</strong></p>
           {/if}
@@ -567,7 +594,7 @@
 
                 {#if item.extracted_content}
                   <div style="border-top: 1px dashed var(--md-sys-color-outline); padding-top: 8px; margin-top: 8px;">
-                    <h5 class="m-input-label" style="margin-bottom: 6px; font-weight: bold; color: var(--md-sys-color-primary);">📄 Full-text Extractor Preview (First Item Only)</h5>
+                    <h5 class="m-input-label" style="margin-bottom: 6px; color: var(--md-sys-color-primary);">Full-text Extractor Preview (First Item Only)</h5>
                     <div style="background-color: var(--md-sys-color-surface); padding: 12px; border-radius: var(--radius-sm); font-size: 0.85rem; max-height: 180px; overflow-y: auto; text-align: left; line-height: 1.6; border: 1px solid var(--md-sys-color-outline-variant);">
                       {@html item.extracted_content}
                     </div>
@@ -575,7 +602,7 @@
                 {/if}
 
                 <div style="border-top: 1px dashed var(--md-sys-color-outline); padding-top: 8px; margin-top: 4px;">
-                  <h5 class="m-input-label" style="margin-bottom: 6px; font-weight: bold;">🧹 HTML Sanitizer & Relative Paths Resolution Output</h5>
+                  <h5 class="m-input-label" style="margin-bottom: 6px;">HTML Sanitizer & Relative Paths Resolution Output</h5>
                   <div style="background-color: var(--md-sys-color-surface); padding: 12px; border-radius: var(--radius-sm); font-size: 0.85rem; max-height: 150px; overflow-y: auto; text-align: left; line-height: 1.6; border: 1px solid var(--md-sys-color-outline-variant);">
                     {@html item.content || '<em>No body content or description tags found</em>'}
                   </div>
@@ -589,6 +616,25 @@
       <div style="display: flex; justify-content: flex-end; border-top: 1px solid var(--md-sys-color-outline-variant); padding-top: 12px;">
         <button class="m-btn m-btn-filled" onclick={() => isTestResultOpen = false}>
           Close Report
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Delete Confirmation Dialog -->
+{#if pendingDeleteId !== null}
+  <div class="m-modal-container">
+    <button class="m-dialog-overlay" onclick={() => pendingDeleteId = null} aria-label="Cancel delete"></button>
+    <div class="m-dialog m-dialog-danger">
+      <h2 class="m-title-medium">Delete this feed?</h2>
+      <p class="m-body-medium">All subscribers will be unsubscribed and its crawl history discarded. This cannot be undone.</p>
+      <div style="display: flex; justify-content: flex-end; gap: 12px;">
+        <button class="m-btn m-btn-outlined" onclick={() => pendingDeleteId = null}>
+          Cancel
+        </button>
+        <button class="m-btn m-btn-error" onclick={() => confirmDeleteFeed(pendingDeleteId!)}>
+          Delete Feed
         </button>
       </div>
     </div>

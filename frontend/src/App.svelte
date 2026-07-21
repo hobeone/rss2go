@@ -93,34 +93,34 @@
   <!-- Nav Sidebar -->
   <aside class="sidebar">
     <div class="sidebar-brand">
-      <span class="brand-icon">⚡</span>
-      <h2 class="m-title-small" style="font-weight: 600;">rss2go panel</h2>
+      <span class="brand-mark"></span>
+      <h2 class="m-title-small">rss2go</h2>
     </div>
 
     <nav class="sidebar-nav">
       <button
-        class="m-btn m-btn-text nav-item {currentTab === 'feeds' ? 'nav-item-active' : ''}"
+        class="nav-item {currentTab === 'feeds' ? 'nav-item-active' : ''}"
         onclick={() => currentTab = 'feeds'}
       >
-        <span>📰</span> Feeds
+        Feeds
       </button>
       <button
-        class="m-btn m-btn-text nav-item {currentTab === 'users' ? 'nav-item-active' : ''}"
+        class="nav-item {currentTab === 'users' ? 'nav-item-active' : ''}"
         onclick={() => currentTab = 'users'}
       >
-        <span>👤</span> Subscribers
+        Subscribers
       </button>
       <button
-        class="m-btn m-btn-text nav-item {currentTab === 'stats' ? 'nav-item-active' : ''}"
+        class="nav-item {currentTab === 'stats' ? 'nav-item-active' : ''}"
         onclick={() => currentTab = 'stats'}
       >
-        <span>📊</span> System Stats
+        System Stats
       </button>
       <button
-        class="m-btn m-btn-text nav-item {currentTab === 'logs' ? 'nav-item-active' : ''}"
+        class="nav-item {currentTab === 'logs' ? 'nav-item-active' : ''}"
         onclick={() => currentTab = 'logs'}
       >
-        <span>💻</span> Live Logs
+        Live Logs
       </button>
     </nav>
   </aside>
@@ -149,10 +149,9 @@
 
 <!-- Toast Alerts Notification Bar -->
 {#if showActionToast}
-  <div style="position: fixed; bottom: 24px; right: 24px; z-index: 1000; animation: slideIn 0.3s cubic-bezier(0.2, 0, 0, 1);" class="m-card">
-    <div style="display: flex; align-items: center; gap: 12px; padding: 4px 8px;">
-      <span style="font-size: 1.2rem;">🔔</span>
-      <span style="font-weight: 500; font-size: 0.95rem;">{showActionToast}</span>
+  <div style="position: fixed; bottom: 24px; right: 24px; z-index: 1000; animation: slideIn 0.3s cubic-bezier(0.2, 0, 0, 1); border-left: 3px solid var(--md-sys-color-primary);" class="m-card">
+    <div style="display: flex; align-items: center; padding: 2px 6px;">
+      <span style="font-family: var(--font-sans); font-size: 0.9rem;">{showActionToast}</span>
     </div>
   </div>
 {/if}

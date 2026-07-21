@@ -25,7 +25,7 @@
     </div>
     <div class="m-card" style="text-align: center;">
       <h3 class="m-input-label" style="margin-bottom: 8px;">Outbox Pending</h3>
-      <span class="m-title-large" style="color: #FFB300;">{stats.outbox_pending}</span>
+      <span class="m-title-large" style="color: var(--md-sys-color-secondary);">{stats.outbox_pending}</span>
     </div>
     <div class="m-card" style="text-align: center;">
       <h3 class="m-input-label" style="margin-bottom: 8px;">Outbox Failed</h3>
@@ -33,13 +33,13 @@
     </div>
     <div class="m-card" style="text-align: center;">
       <h3 class="m-input-label" style="margin-bottom: 8px;">Outbox Delivered</h3>
-      <span class="m-title-large" style="color: #4CAF50;">{stats.outbox_delivered}</span>
+      <span class="m-title-large" style="color: var(--md-sys-color-success);">{stats.outbox_delivered}</span>
     </div>
   </div>
 
   <div class="m-card" style="margin-bottom: 32px; padding: 24px;">
-    <h3 class="m-title-small" style="margin-bottom: 16px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-      <span>📬 Recent Outbox Transmissions (Email Audit Log)</span>
+    <h3 class="m-title-small" style="margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+      <span>Recent Outbox Transmissions</span>
       {#if stats.mailer_mode}
         <span class="m-badge m-badge-secondary" style="font-size: 0.8rem; text-transform: uppercase;">
           Mailer: {stats.mailer_mode}
@@ -68,7 +68,7 @@
               </td>
               <td style="font-size: 0.85rem; font-weight: 500;">{item.subject}</td>
               <td>
-                <span class="m-badge {item.status === 'delivered' ? 'm-badge-primary' : item.status === 'pending' ? 'm-badge-secondary' : 'm-badge-error'}">
+                <span class="m-status {item.status === 'delivered' ? 'm-status-ok' : item.status === 'pending' ? 'm-status-pending' : 'm-status-error'}">
                   {item.status}
                 </span>
               </td>
@@ -76,7 +76,7 @@
                 {item.retry_count} attempts
                 {#if item.last_error}
                   <div style="color: var(--md-sys-color-error); font-size: 0.75rem; margin-top: 4px; max-width: 250px; word-break: break-all;" title={item.last_error}>
-                    ⚠ {item.last_error}
+                    {item.last_error}
                   </div>
                 {/if}
               </td>
@@ -100,5 +100,5 @@
 {/if}
 
 <button class="m-btn m-btn-tonal" onclick={onRefresh}>
-  🔄 Refresh Counters
+  Refresh Counters
 </button>

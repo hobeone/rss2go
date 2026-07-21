@@ -42,7 +42,7 @@ describe('App Component Layout Shell', () => {
   it('loads feeds dashboard automatically on mount', async () => {
     render(App)
 
-    const title = await screen.findByText('rss2go panel')
+    const title = await screen.findByText('rss2go')
     expect(title).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Feeds' })).toBeInTheDocument()
     expect(screen.getByText('Tech Blog')).toBeInTheDocument()
@@ -51,20 +51,20 @@ describe('App Component Layout Shell', () => {
   it('can navigate between dashboard sidebar tabs', async () => {
     render(App)
 
-    await screen.findByText('rss2go panel')
-    
+    await screen.findByText('rss2go')
+
     // Switch to Subscribers tab
-    const subTab = screen.getByRole('button', { name: '👤 Subscribers' })
+    const subTab = screen.getByRole('button', { name: 'Subscribers' })
     await fireEvent.click(subTab)
     expect(screen.getByRole('heading', { name: 'Syndication Subscribers' })).toBeInTheDocument()
 
     // Switch to System Stats tab
-    const statsTab = screen.getByRole('button', { name: '📊 System Stats' })
+    const statsTab = screen.getByRole('button', { name: 'System Stats' })
     await fireEvent.click(statsTab)
     expect(screen.getByRole('heading', { name: 'System Telemetry' })).toBeInTheDocument()
 
     // Switch to Live Logs tab
-    const logsTab = screen.getByRole('button', { name: '💻 Live Logs' })
+    const logsTab = screen.getByRole('button', { name: 'Live Logs' })
     await fireEvent.click(logsTab)
     expect(screen.getByRole('heading', { name: 'Aggregator Console Logs' })).toBeInTheDocument()
   })

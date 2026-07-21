@@ -76,13 +76,15 @@ describe('SubscriberManager', () => {
 
   it('removes recipient email on delete click', async () => {
     vi.mocked(api.deleteUser).mockResolvedValue(true)
-    vi.stubGlobal('confirm', () => true)
 
     render(SubscriberManager, { feeds: mockFeeds, triggerToast: mockTriggerToast })
 
     await screen.findByText('alice@example.com')
     const removeButtons = screen.getAllByRole('button', { name: 'Remove' })
     await fireEvent.click(removeButtons[0]) // click Alice's remove button
+
+    const confirmBtn = await screen.findByRole('button', { name: 'Remove Subscriber' })
+    await fireEvent.click(confirmBtn)
 
     expect(api.deleteUser).toHaveBeenCalledWith(101)
     expect(mockTriggerToast).toHaveBeenCalledWith('User removed')
