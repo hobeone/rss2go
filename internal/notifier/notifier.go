@@ -60,8 +60,13 @@ func (s *SMTPSender) Send(ctx context.Context, subject string, body string, reci
 		return fmt.Errorf("notifier: smtp: no recipients specified")
 	}
 
+	log := s.log
+	if log == nil {
+		log = slog.Default().With("component", "notifier")
+	}
+
 	cleanedSubject := CleanHeader(subject)
-	s.log.Debug("Starting SMTP email delivery", "host", s.cfg.Host, "port", s.cfg.Port, "recipients_count", len(recipients), "subject", cleanedSubject)
+	log.Debug("Starting SMTP email delivery", "host", s.cfg.Host, "port", s.cfg.Port, "recipients_count", len(recipients), "subject", cleanedSubject)
 
 	msg := buildMessage(s.cfg.From, recipients, cleanedSubject, body)
 
@@ -82,14 +87,14 @@ func (s *SMTPSender) Send(ctx context.Context, subject string, body string, reci
 		conn, err = dialer.DialContext(ctx, "tcp", addr)
 	}
 	if err != nil {
-		s.log.Debug("SMTP connection failed", "addr", addr, "security", s.cfg.Security, "err", err)
+		log.Debug("SMTP connection failed", "addr", addr, "security", s.cfg.Security, "err", err)
 		return fmt.Errorf("notifier: smtp dial failed: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
 
 	client, err := smtp.NewClient(conn, s.cfg.Host)
 	if err != nil {
-		s.log.Debug("Failed creating SMTP client", "host", s.cfg.Host, "err", err)
+		log.Debug("Failed creating SMTP client", "host", s.cfg.Host, "err", err)
 		return fmt.Errorf("notifier: create smtp client: %w", err)
 	}
 	defer func() { _ = client.Close() }()
@@ -101,7 +106,7 @@ func (s *SMTPSender) Send(ctx context.Context, subject string, body string, reci
 			MinVersion: tls.VersionTLS12,
 		}
 		if err := client.StartTLS(tlsConfig); err != nil {
-			s.log.Debug("SMTP STARTTLS failed", "host", s.cfg.Host, "err", err)
+			log.Debug("SMTP STARTTLS failed", "host", s.cfg.Host, "err", err)
 			return fmt.Errorf("notifier: starttls failed: %w", err)
 		}
 	}
@@ -110,20 +115,20 @@ func (s *SMTPSender) Send(ctx context.Context, subject string, body string, reci
 	if s.cfg.Username != "" {
 		auth := smtp.PlainAuth("", s.cfg.Username, s.cfg.Password, s.cfg.Host)
 		if err := client.Auth(auth); err != nil {
-			s.log.Debug("SMTP authentication failed", "user", s.cfg.Username, "err", err)
+			log.Debug("SMTP authentication failed", "user", s.cfg.Username, "err", err)
 			return fmt.Errorf("notifier: authentication failed: %w", err)
 		}
 	}
 
 	// Set sender and recipients
 	if err := client.Mail(s.cfg.From); err != nil {
-		s.log.Debug("SMTP MAIL FROM command failed", "from", s.cfg.From, "err", err)
+		log.Debug("SMTP MAIL FROM command failed", "from", s.cfg.From, "err", err)
 		return fmt.Errorf("notifier: set mail from: %w", err)
 	}
 
 	for _, to := range recipients {
 		if err := client.Rcpt(to); err != nil {
-			s.log.Debug("SMTP RCPT TO command failed", "to", to, "err", err)
+			log.Debug("SMTP RCPT TO command failed", "to", to, "err", err)
 			return fmt.Errorf("notifier: set rcpt to %s: %w", to, err)
 		}
 	}
@@ -131,22 +136,22 @@ func (s *SMTPSender) Send(ctx context.Context, subject string, body string, reci
 	// Write body
 	w, err := client.Data()
 	if err != nil {
-		s.log.Debug("SMTP DATA command failed", "err", err)
+		log.Debug("SMTP DATA command failed", "err", err)
 		return fmt.Errorf("notifier: open data writer: %w", err)
 	}
 
 	if _, err := w.Write(msg); err != nil {
 		_ = w.Close()
-		s.log.Debug("SMTP message data write failed", "err", err)
+		log.Debug("SMTP message data write failed", "err", err)
 		return fmt.Errorf("notifier: write message data: %w", err)
 	}
 
 	if err := w.Close(); err != nil {
-		s.log.Debug("SMTP DATA termination failed", "err", err)
+		log.Debug("SMTP DATA termination failed", "err", err)
 		return fmt.Errorf("notifier: close data writer: %w", err)
 	}
 
-	s.log.Debug("SMTP email delivered successfully", "recipients_count", len(recipients), "bytes", len(msg))
+	log.Debug("SMTP email delivered successfully", "recipients_count", len(recipients), "bytes", len(msg))
 	return nil
 }
 
@@ -182,8 +187,13 @@ func (s *SendmailSender) Send(ctx context.Context, subject string, body string, 
 		return fmt.Errorf("notifier: sendmail: no recipients specified")
 	}
 
+	log := s.log
+	if log == nil {
+		log = slog.Default().With("component", "notifier")
+	}
+
 	cleanedSubject := CleanHeader(subject)
-	s.log.Debug("Starting sendmail binary delivery", "path", s.path, "recipients_count", len(recipients), "subject", cleanedSubject)
+	log.Debug("Starting sendmail binary delivery", "path", s.path, "recipients_count", len(recipients), "subject", cleanedSubject)
 
 	msg := buildMessage(s.from, recipients, cleanedSubject, body)
 
@@ -195,11 +205,11 @@ func (s *SendmailSender) Send(ctx context.Context, subject string, body string, 
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		s.log.Debug("Sendmail execution failed", "path", s.path, "stderr", stderr.String(), "err", err)
+		log.Debug("Sendmail execution failed", "path", s.path, "stderr", stderr.String(), "err", err)
 		return fmt.Errorf("notifier: sendmail failed (stderr: %q): %w", stderr.String(), err)
 	}
 
-	s.log.Debug("Sendmail binary delivery succeeded", "recipients_count", len(recipients), "bytes", len(msg))
+	log.Debug("Sendmail binary delivery succeeded", "recipients_count", len(recipients), "bytes", len(msg))
 	return nil
 }
 

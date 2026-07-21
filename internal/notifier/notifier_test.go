@@ -197,3 +197,131 @@ func TestSMTPSenderHappyPath(t *testing.T) {
 		t.Fatalf("SMTP send failed: %v", err)
 	}
 }
+
+func TestNilLoggerGuards(t *testing.T) {
+	addr, closeFn := startMockSMTPServer(t)
+	defer closeFn()
+
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		t.Fatalf("failed to split host/port: %v", err)
+	}
+
+	var port int
+	if _, err := fmt.Sscanf(portStr, "%d", &port); err != nil {
+		t.Fatalf("failed to parse port: %v", err)
+	}
+
+	// Directly initialize SMTPSender with nil log field (struct literal without NewSMTPSender)
+	smtpSender := &SMTPSender{
+		cfg: SMTPConfig{
+			Host:     host,
+			Port:     port,
+			Username: "user",
+			Password: "pass",
+			From:     "sender@test.com",
+			Security: SecurityNone,
+		},
+		log: nil,
+	}
+
+	if err := smtpSender.Send(context.Background(), "Hello", "<p>Test</p>", []string{"recipient@test.com"}); err != nil {
+		t.Fatalf("SMTPSender.Send with nil logger failed: %v", err)
+	}
+
+	// Directly initialize SendmailSender with nil log field
+	tempDir := t.TempDir()
+	mockSendmailPath := filepath.Join(tempDir, "sendmail")
+	scriptContent := fmt.Sprintf("#!/bin/sh\ncat > %s.out\n", mockSendmailPath)
+	if err := os.WriteFile(mockSendmailPath, []byte(scriptContent), 0755); err != nil {
+		t.Fatalf("failed to write mock sendmail: %v", err)
+	}
+
+	sendmailSender := &SendmailSender{
+		path: mockSendmailPath,
+		from: "sender@test.com",
+		log:  nil,
+	}
+
+	if err := sendmailSender.Send(context.Background(), "Hello", "<p>Test</p>", []string{"recipient@test.com"}); err != nil {
+		t.Fatalf("SendmailSender.Send with nil logger failed: %v", err)
+	}
+}
+
+func TestSMTPSenderDataCloseError(t *testing.T) {
+	// Start a mock server that returns 554 error after receiving "." in DATA
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	defer func() { _ = l.Close() }()
+
+	go func() {
+		conn, err := l.Accept()
+		if err != nil {
+			return
+		}
+		defer func() { _ = conn.Close() }()
+
+		reader := bufio.NewReader(conn)
+		tp := textproto.NewReader(reader)
+
+		_, _ = conn.Write([]byte("220 smtp.mock.test\r\n"))
+
+		for {
+			line, err := tp.ReadLine()
+			if err != nil {
+				return
+			}
+			cmd := strings.ToUpper(line)
+			if strings.HasPrefix(cmd, "EHLO") || strings.HasPrefix(cmd, "HELO") {
+				_, _ = conn.Write([]byte("250-smtp.mock.test Hello\r\n250 AUTH PLAIN\r\n"))
+			} else if strings.HasPrefix(cmd, "AUTH PLAIN") {
+				_, _ = conn.Write([]byte("235 2.7.0 Authentication successful\r\n"))
+			} else if strings.HasPrefix(cmd, "MAIL FROM:") {
+				_, _ = conn.Write([]byte("250 2.1.0 Ok\r\n"))
+			} else if strings.HasPrefix(cmd, "RCPT TO:") {
+				_, _ = conn.Write([]byte("250 2.1.5 Ok\r\n"))
+			} else if cmd == "DATA" {
+				_, _ = conn.Write([]byte("354 Start mail input; end with <CR><LF>.<CR><LF>\r\n"))
+				for {
+					bodyLine, err := tp.ReadLine()
+					if err != nil {
+						return
+					}
+					if bodyLine == "." {
+						break
+					}
+				}
+				// Reject data termination with 554
+				_, _ = conn.Write([]byte("554 5.7.1 Transaction failed / rejected by policy\r\n"))
+				return
+			}
+		}
+	}()
+
+	host, portStr, err := net.SplitHostPort(l.Addr().String())
+	if err != nil {
+		t.Fatalf("failed to split host/port: %v", err)
+	}
+	var port int
+	_, _ = fmt.Sscanf(portStr, "%d", &port)
+
+	cfg := SMTPConfig{
+		Host:     host,
+		Port:     port,
+		Username: "user",
+		Password: "pass",
+		From:     "sender@test.com",
+		Security: SecurityNone,
+	}
+
+	sender := NewSMTPSender(cfg)
+	err = sender.Send(context.Background(), "Hello", "<p>Test</p>", []string{"recipient@test.com"})
+	if err == nil {
+		t.Fatalf("expected error on SMTP DATA termination failure, got nil")
+	}
+	if !strings.Contains(err.Error(), "close data writer") {
+		t.Errorf("expected error message to contain 'close data writer', got: %v", err)
+	}
+}
