@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log/slog"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -755,5 +756,91 @@ func TestOutboxQueueProcessPendingStopsOnCanceledContext(t *testing.T) {
 
 	if got := mock.getCalled(); got != 1 {
 		t.Errorf("expected exactly 1 delivery attempt before bailing on cancellation, got %d", got)
+	}
+}
+
+// recordingHandler is a minimal slog.Handler that captures every record it
+// receives, so tests can assert on log level/content without parsing text
+// output.
+type recordingHandler struct {
+	mu      sync.Mutex
+	records []slog.Record
+}
+
+func (h *recordingHandler) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h *recordingHandler) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.records = append(h.records, r)
+	return nil
+}
+
+func (h *recordingHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
+func (h *recordingHandler) WithGroup(_ string) slog.Handler      { return h }
+
+func (h *recordingHandler) hasMessageAtLevel(msg string, level slog.Level) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, r := range h.records {
+		if r.Level == level && r.Message == msg {
+			return true
+		}
+	}
+	return false
+}
+
+// TestOutboxQueueNoErrorLogOnContextCancellation proves a context-cancellation
+// mid-batch (processPending returning context.Canceled) is not logged at
+// Error level — that's routine, cancel-driven shutdown, not a genuine
+// processing failure.
+func TestOutboxQueueNoErrorLogOnContextCancellation(t *testing.T) {
+	repo := setupTestDB(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	mock := &MockSender{}
+	sender := &cancelAfterFirstSendSender{MockSender: mock, cancel: cancel}
+	handler := &recordingHandler{}
+
+	cfg := Config{
+		MaxRetries:     3,
+		InitialBackoff: 10 * time.Millisecond,
+		MaxBackoff:     100 * time.Millisecond,
+		PollInterval:   2 * time.Millisecond,
+	}
+	queue := NewQueue(repo, sender, cfg, slog.New(handler))
+
+	for i := range 3 {
+		item := &types.OutboxItem{
+			Subject:       "Item",
+			Body:          "Body",
+			Recipients:    []string{"user@test.com"},
+			Status:        types.OutboxPending,
+			NextAttemptAt: time.Now().Add(-time.Duration(3-i) * time.Second),
+		}
+		if err := repo.EnqueueOutboxItem(context.Background(), item); err != nil {
+			t.Fatalf("failed to enqueue: %v", err)
+		}
+	}
+
+	// Drive through the real Start loop: item 1's Send() cancels ctx, so
+	// processPending's ctx.Err() check bails on item 2, returning
+	// context.Canceled up into Start's own log-suppression logic.
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		_ = queue.Start(ctx)
+	})
+	wg.Wait()
+
+	if got := mock.getCalled(); got != 1 {
+		t.Fatalf("expected exactly 1 delivery attempt before Start's loop observed cancellation, got %d", got)
+	}
+	// Scoped to Start's own "Processing error" log call (the one this fix
+	// touches) rather than asserting no Error-level record at all: item 1's
+	// own delivery can independently log an unrelated DB-write error here
+	// (its status-update races the same cancellation), which is pre-existing
+	// deliverItem behavior this PR does not change and is out of scope for
+	// this test's claim.
+	if handler.hasMessageAtLevel("Processing error", slog.LevelError) {
+		t.Error("expected no \"Processing error\" log record for a context-cancellation shutdown")
 	}
 }

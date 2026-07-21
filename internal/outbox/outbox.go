@@ -2,6 +2,7 @@ package outbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -106,7 +107,7 @@ func (q *Queue) Start(ctx context.Context) error {
 		if q.tryBeginCycle() {
 			err := q.processPending(ctx)
 			q.wg.Done()
-			if err != nil {
+			if err != nil && !errors.Is(err, context.Canceled) {
 				q.log.Error("Processing error", "err", err)
 			}
 		}
