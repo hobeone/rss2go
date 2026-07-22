@@ -24,7 +24,7 @@
     "vitest": "^4.1.10",
     "@vitest/coverage-v8": "^4.1.10",
     "@testing-library/svelte": "^5.4.2",
-    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/jest-dom": "^7.0.0",
     "happy-dom": "^20.10.6"
   }
 }
