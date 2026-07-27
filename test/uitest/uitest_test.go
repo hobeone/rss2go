@@ -80,7 +80,7 @@ func TestFeedAddAndDelete(t *testing.T) {
 	if err := titleInput.Fill("E2E Test Feed"); err != nil {
 		t.Fatalf("fill Title: %v", err)
 	}
-	urlInput := page.GetByPlaceholder("https://site.com/feed.xml")
+	urlInput := page.GetByPlaceholder("https://site.com/feed.xml or https://site.com/stories")
 	if err := urlInput.Fill(env.BaseURL + "/testfeed.xml"); err != nil {
 		t.Fatalf("fill URL: %v", err)
 	}
@@ -105,10 +105,10 @@ func TestFeedAddAndDelete(t *testing.T) {
 		t.Fatalf("click feed card: %v", err)
 	}
 
-	// Click "Run Scan Now" button in the popup.
-	scanBtn := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Run Scan Now"})
+	// Click "Scan Now" button in the popup.
+	scanBtn := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Scan Now"})
 	if err := scanBtn.Click(); err != nil {
-		t.Fatalf("click Run Scan Now: %v", err)
+		t.Fatalf("click Scan Now: %v", err)
 	}
 
 	// Wait for the scan toast notification.
@@ -124,6 +124,12 @@ func TestFeedAddAndDelete(t *testing.T) {
 	deleteBtn := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Delete"})
 	if err := deleteBtn.Click(); err != nil {
 		t.Fatalf("click Delete: %v", err)
+	}
+
+	// Click "Delete Feed" button in confirmation modal.
+	confirmBtn := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Delete Feed"})
+	if err := confirmBtn.Click(); err != nil {
+		t.Fatalf("click modal Delete Feed button: %v", err)
 	}
 
 	// Wait for feed card to disappear.
@@ -316,6 +322,12 @@ func TestSubscriberAddAndDelete(t *testing.T) {
 		t.Fatalf("click user Remove button: %v", err)
 	}
 
+	// Click "Remove Subscriber" button in confirmation modal.
+	confirmBtn := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Remove Subscriber"})
+	if err := confirmBtn.Click(); err != nil {
+		t.Fatalf("click modal Remove Subscriber button: %v", err)
+	}
+
 	// Wait for user row to disappear.
 	if err := userRow.WaitFor(playwright.LocatorWaitForOptions{
 		State:   playwright.WaitForSelectorStateHidden,
@@ -344,7 +356,7 @@ func TestFeedEditFlow(t *testing.T) {
 	if err := titleInput.Fill("E2E Edit Test Feed"); err != nil {
 		t.Fatalf("fill Title: %v", err)
 	}
-	urlInput := page.GetByPlaceholder("https://site.com/feed.xml")
+	urlInput := page.GetByPlaceholder("https://site.com/feed.xml or https://site.com/stories")
 	if err := urlInput.Fill(env.BaseURL + "/testfeed.xml"); err != nil {
 		t.Fatalf("fill URL: %v", err)
 	}

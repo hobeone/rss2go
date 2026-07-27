@@ -57,7 +57,7 @@ describe('FeedManager', () => {
     expect(screen.getByText('Configure New Feed Source')).toBeInTheDocument()
 
     const titleInput = screen.getByPlaceholderText('Engineering Blog')
-    const urlInput = screen.getByPlaceholderText('https://site.com/feed.xml')
+    const urlInput = screen.getByPlaceholderText('https://site.com/feed.xml or https://site.com/stories')
 
     await fireEvent.input(titleInput, { target: { value: 'News Blog' } })
     await fireEvent.input(urlInput, { target: { value: 'https://news.com/feed.xml' } })
@@ -84,7 +84,7 @@ describe('FeedManager', () => {
     await fireEvent.click(addBtn)
 
     const titleInput = screen.getByPlaceholderText('Engineering Blog')
-    const urlInput = screen.getByPlaceholderText('https://site.com/feed.xml')
+    const urlInput = screen.getByPlaceholderText('https://site.com/feed.xml or https://site.com/stories')
 
     await fireEvent.input(titleInput, { target: { value: 'All News' } })
     await fireEvent.input(urlInput, { target: { value: 'https://all.com/feed.xml' } })
@@ -112,7 +112,7 @@ describe('FeedManager', () => {
     await fireEvent.click(addBtn)
 
     const titleInput = screen.getByPlaceholderText('Engineering Blog')
-    const urlInput = screen.getByPlaceholderText('https://site.com/feed.xml')
+    const urlInput = screen.getByPlaceholderText('https://site.com/feed.xml or https://site.com/stories')
 
     await fireEvent.input(titleInput, { target: { value: 'Selected News' } })
     await fireEvent.input(urlInput, { target: { value: 'https://sel.com/feed.xml' } })
