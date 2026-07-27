@@ -37,7 +37,11 @@
     backoff_factor: 1.5,
     extract_full_article: false,
     extraction_strategy: 'heuristic',
-    css_selector: ''
+    css_selector: '',
+    scraper_item_selector: '',
+    scraper_title_selector: '',
+    scraper_link_selector: '',
+    scraper_description_selector: ''
   });
 
   let filteredDashboardFeeds = $derived(
@@ -83,7 +87,11 @@
       backoff_factor: 1.5,
       extract_full_article: false,
       extraction_strategy: 'heuristic',
-      css_selector: ''
+      css_selector: '',
+      scraper_item_selector: '',
+      scraper_title_selector: '',
+      scraper_link_selector: '',
+      scraper_description_selector: ''
     };
     subscribeAll = false;
     selectedUserIDs = [];
@@ -108,7 +116,11 @@
       backoff_factor: feed.backoff_factor,
       extract_full_article: feed.extract_full_article,
       extraction_strategy: feed.extraction_strategy || 'heuristic',
-      css_selector: feed.css_selector || ''
+      css_selector: feed.css_selector || '',
+      scraper_item_selector: feed.scraper_item_selector || '',
+      scraper_title_selector: feed.scraper_title_selector || '',
+      scraper_link_selector: feed.scraper_link_selector || '',
+      scraper_description_selector: feed.scraper_description_selector || ''
     };
     isEditFeedOpen = true;
   }
@@ -122,7 +134,11 @@
       backoff_factor: Number(feedForm.backoff_factor),
       extract_full_article: feedForm.extract_full_article,
       extraction_strategy: feedForm.extraction_strategy,
-      css_selector: feedForm.css_selector || null
+      css_selector: feedForm.css_selector || null,
+      scraper_item_selector: feedForm.scraper_item_selector || '',
+      scraper_title_selector: feedForm.scraper_title_selector || '',
+      scraper_link_selector: feedForm.scraper_link_selector || '',
+      scraper_description_selector: feedForm.scraper_description_selector || ''
     };
     if (isAddFeedOpen) {
       payload.subscribe_all = subscribeAll;
@@ -466,8 +482,8 @@
             <input type="text" placeholder="Engineering Blog" class="m-input" bind:value={feedForm.title} required />
           </div>
           <div class="m-input-group">
-            <span class="m-input-label">Feed XML URL Address</span>
-            <input type="url" placeholder="https://site.com/feed.xml" class="m-input" bind:value={feedForm.url} required />
+            <span class="m-input-label">Feed XML or Website HTML URL</span>
+            <input type="url" placeholder="https://site.com/feed.xml or https://site.com/stories" class="m-input" bind:value={feedForm.url} required />
           </div>
           <div class="m-input-group">
             <span class="m-input-label">Scheduled Polling Interval (seconds)</span>
@@ -503,6 +519,28 @@
             {/if}
           </div>
         {/if}
+
+        <div style="border-top: 1px solid var(--md-sys-color-outline-variant); padding-top: 16px;">
+          <span class="m-input-label" style="margin-bottom: 8px; display: block; font-weight: 500;">HTML Website Scraper (for pages without RSS/Atom feeds)</span>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; border-left: 3px solid var(--md-sys-color-secondary); padding-left: 12px;" class="m-card">
+            <div class="m-input-group">
+              <span class="m-input-label">Item CSS Selector (repeating block, e.g. div.post)</span>
+              <input type="text" placeholder="div.post" class="m-input" bind:value={feedForm.scraper_item_selector} />
+            </div>
+            <div class="m-input-group">
+              <span class="m-input-label">Title CSS Selector (relative, e.g. h3)</span>
+              <input type="text" placeholder="h3" class="m-input" bind:value={feedForm.scraper_title_selector} required={!!feedForm.scraper_item_selector} />
+            </div>
+            <div class="m-input-group">
+              <span class="m-input-label">Link CSS Selector (relative, e.g. a)</span>
+              <input type="text" placeholder="a" class="m-input" bind:value={feedForm.scraper_link_selector} required={!!feedForm.scraper_item_selector} />
+            </div>
+            <div class="m-input-group">
+              <span class="m-input-label">Description CSS Selector (relative, optional)</span>
+              <input type="text" placeholder="div.description" class="m-input" bind:value={feedForm.scraper_description_selector} />
+            </div>
+          </div>
+        </div>
 
         {#if isAddFeedOpen}
           <div style="border-top: 1px solid var(--md-sys-color-outline-variant); padding-top: 16px;">

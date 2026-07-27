@@ -5,9 +5,6 @@ services:
       dockerfile: Dockerfile
     image: rss2go:latest
     container_name: rss2go-daemon
-    depends_on:
-      rss2go-scraper:
-        condition: service_started
     restart: unless-stopped
     environment:
       - PUID=${PUID:-1000}
@@ -16,24 +13,5 @@ services:
       - ./rss2go_docker.yaml:/app/rss2go.yaml
       - ./rss2go.db:/app/rss2go.db
     command: ["rss2go", "--config", "/app/rss2go.yaml"]
-    networks:
-      - rss2go-network
-
-  rss2go-scraper:
-    image: rss2go:latest
-    container_name: rss2go-scraper
-    restart: unless-stopped
-    environment:
-      - PUID=${PUID:-1000}
-      - PGID=${PGID:-1000}
-    volumes:
-      - ./rss2go_docker.yaml:/app/rss2go.yaml
-    command: ["rss2go", "sidecar", "--config", "/app/rss2go.yaml"]
     ports:
-      - "127.0.0.1:8282:8282"
-    networks:
-      - rss2go-network
-
-networks:
-  rss2go-network:
-    driver: bridge
+      - "127.0.0.1:8080:8080"

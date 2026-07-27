@@ -77,11 +77,7 @@ func Setup(opts LoggingOptions) (*slog.Logger, io.Closer, error) {
 	if consoleOut == nil {
 		consoleOut = os.Stderr
 	}
-	handlers = append(handlers, tint.NewHandler(consoleOut, &tint.Options{
-		Level:      minLevel,
-		AddSource:  opts.AddSource,
-		TimeFormat: time.TimeOnly,
-	}))
+	handlers = append(handlers, tint.NewTextHandler(consoleOut, &tint.Options{Level: minLevel, AddSource: opts.AddSource, TimeFormat: time.TimeOnly}))
 
 	// 2. File handler (Plain text via standard TextHandler)
 	if opts.LogFile != "" {

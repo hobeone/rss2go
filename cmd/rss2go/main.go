@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -22,7 +21,6 @@ import (
 	"rss2go/internal/sanitizer"
 	"rss2go/internal/scheduler"
 	"rss2go/internal/server"
-	"rss2go/internal/sidecar"
 )
 
 var (
@@ -32,62 +30,14 @@ var (
 )
 
 func main() {
-	isSidecar, cmdAddr, globalArgs := parseSidecarArgs(os.Args[1:])
-
 	// Load resolved configuration via YAML config file, env variables, and flags
-	cfg, err := config.Load(globalArgs)
+	cfg, err := config.Load(os.Args[1:])
 	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(0)
 		}
 		fmt.Fprintf(os.Stderr, "Error loading configuration: %v\n", err)
 		os.Exit(2)
-	}
-
-	if isSidecar {
-		if cmdAddr != "" {
-			cfg.SidecarAddr = cmdAddr
-		}
-
-		logLvl, err := logger.ParseLevel(cfg.LogLevel)
-		if err != nil {
-			logLvl = slog.LevelInfo
-		}
-		compLvls := make(map[string]slog.Level)
-		for comp, lvlStr := range cfg.LogLevels {
-			if lvl, err := logger.ParseLevel(lvlStr); err == nil {
-				compLvls[comp] = lvl
-			}
-		}
-
-		_, logCloser, err := logger.Setup(logger.LoggingOptions{
-			Level:           logLvl,
-			LogFile:         cfg.LogFile,
-			ComponentLevels: compLvls,
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error setting up sidecar logger: %v\n", err)
-			os.Exit(1)
-		}
-		if logCloser != nil {
-			defer func() {
-				_ = logCloser.Close()
-			}()
-		}
-
-		slog.Info("Starting rss2go scraper sidecar", "addr", cfg.SidecarAddr, "version", Version, "commit", Commit, "date", Date)
-
-		srv := sidecar.NewServer(cfg.SidecarAddr, nil, slog.Default().With("component", "sidecar"))
-
-		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-		defer cancel()
-
-		if err := srv.Start(ctx); err != nil {
-			slog.Error("Scraper Sidecar crashed", "err", err)
-			os.Exit(1)
-		}
-		slog.Info("Scraper sidecar shutdown complete")
-		return
 	}
 
 	// 1. Initialize log broadcaster and unified logger
@@ -224,32 +174,4 @@ type mockNotifier struct{}
 func (m *mockNotifier) Send(ctx context.Context, subject string, body string, recipients []string) error {
 	slog.Info("[MOCK MAIL] Sending notification", "recipients", recipients, "subject", subject, "body_len", len(body))
 	return nil
-}
-
-func parseSidecarArgs(args []string) (bool, string, []string) {
-	if len(args) == 0 {
-		return false, "", args
-	}
-	if args[0] != "sidecar" {
-		return false, "", args
-	}
-
-	var sidecarAddr string
-	var globalArgs []string
-	for i := 1; i < len(args); i++ {
-		arg := args[i]
-		if arg == "-addr" || arg == "--addr" {
-			if i+1 < len(args) {
-				sidecarAddr = args[i+1]
-				i++
-			}
-		} else if after, ok := strings.CutPrefix(arg, "-addr="); ok {
-			sidecarAddr = after
-		} else if after, ok := strings.CutPrefix(arg, "--addr="); ok {
-			sidecarAddr = after
-		} else {
-			globalArgs = append(globalArgs, arg)
-		}
-	}
-	return true, sidecarAddr, globalArgs
 }

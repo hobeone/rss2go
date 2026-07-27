@@ -64,8 +64,9 @@ func (r *Repository) CreateFeed(ctx context.Context, f *types.Feed) error {
 			title, url, etag, last_modified, next_poll_at, 
 			poll_interval_secs, backoff_factor, last_error_str, 
 			last_error_time, last_error_snippet, last_polled_at, extract_full_article, 
-			extraction_strategy, css_selector
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			extraction_strategy, css_selector,
+			scraper_item_selector, scraper_title_selector, scraper_link_selector, scraper_description_selector
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	var errTime *time.Time
 	if f.LastErrorTime != nil {
@@ -88,6 +89,7 @@ func (r *Repository) CreateFeed(ctx context.Context, f *types.Feed) error {
 		f.PollIntervalSecs, f.BackoffFactor, f.LastErrorStr,
 		errTime, f.LastErrorSnippet, polledTime, extractVal,
 		string(f.ExtractionStrategy), f.CSSSelector,
+		f.ScraperItemSelector, f.ScraperTitleSelector, f.ScraperLinkSelector, f.ScraperDescriptionSelector,
 	)
 	if err != nil {
 		return fmt.Errorf("repository: create feed: %w", err)
@@ -107,7 +109,7 @@ func (r *Repository) GetFeed(ctx context.Context, id int64) (*types.Feed, error)
 			id, title, url, etag, last_modified, next_poll_at, 
 			poll_interval_secs, backoff_factor, last_error_str, 
 			last_error_time, last_error_snippet, last_polled_at, extract_full_article, 
-			extraction_strategy, css_selector, created_at, updated_at
+			extraction_strategy, css_selector, scraper_item_selector, scraper_title_selector, scraper_link_selector, scraper_description_selector, created_at, updated_at
 		FROM feeds
 		WHERE id = ?
 	`
@@ -121,7 +123,7 @@ func (r *Repository) GetFeedByURL(ctx context.Context, url string) (*types.Feed,
 			id, title, url, etag, last_modified, next_poll_at, 
 			poll_interval_secs, backoff_factor, last_error_str, 
 			last_error_time, last_error_snippet, last_polled_at, extract_full_article, 
-			extraction_strategy, css_selector, created_at, updated_at
+			extraction_strategy, css_selector, scraper_item_selector, scraper_title_selector, scraper_link_selector, scraper_description_selector, created_at, updated_at
 		FROM feeds
 		WHERE url = ?
 	`
@@ -135,7 +137,9 @@ func (r *Repository) UpdateFeed(ctx context.Context, f *types.Feed) error {
 			title = ?, url = ?, etag = ?, last_modified = ?, next_poll_at = ?, 
 			poll_interval_secs = ?, backoff_factor = ?, last_error_str = ?, 
 			last_error_time = ?, last_error_snippet = ?, last_polled_at = ?, extract_full_article = ?, 
-			extraction_strategy = ?, css_selector = ?, updated_at = CURRENT_TIMESTAMP
+			extraction_strategy = ?, css_selector = ?, 
+			scraper_item_selector = ?, scraper_title_selector = ?, scraper_link_selector = ?, scraper_description_selector = ?,
+			updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?
 	`
 	extractVal := 0
@@ -154,6 +158,7 @@ func (r *Repository) UpdateFeed(ctx context.Context, f *types.Feed) error {
 		f.PollIntervalSecs, f.BackoffFactor, f.LastErrorStr,
 		f.LastErrorTime, f.LastErrorSnippet, polledTime, extractVal,
 		string(f.ExtractionStrategy), f.CSSSelector,
+		f.ScraperItemSelector, f.ScraperTitleSelector, f.ScraperLinkSelector, f.ScraperDescriptionSelector,
 		f.ID,
 	)
 	if err != nil {
@@ -193,7 +198,7 @@ func (r *Repository) ListFeeds(ctx context.Context) ([]*types.Feed, error) {
 			id, title, url, etag, last_modified, next_poll_at, 
 			poll_interval_secs, backoff_factor, last_error_str, 
 			last_error_time, last_error_snippet, last_polled_at, extract_full_article, 
-			extraction_strategy, css_selector, created_at, updated_at
+			extraction_strategy, css_selector, scraper_item_selector, scraper_title_selector, scraper_link_selector, scraper_description_selector, created_at, updated_at
 		FROM feeds
 		ORDER BY title ASC
 	`
@@ -225,7 +230,7 @@ func (r *Repository) ListFeedsDue(ctx context.Context, now time.Time) ([]*types.
 			id, title, url, etag, last_modified, next_poll_at, 
 			poll_interval_secs, backoff_factor, last_error_str, 
 			last_error_time, last_error_snippet, last_polled_at, extract_full_article, 
-			extraction_strategy, css_selector, created_at, updated_at
+			extraction_strategy, css_selector, scraper_item_selector, scraper_title_selector, scraper_link_selector, scraper_description_selector, created_at, updated_at
 		FROM feeds
 		WHERE next_poll_at <= ?
 		ORDER BY next_poll_at ASC
@@ -414,7 +419,7 @@ func (r *Repository) ListSubscriptionsForUser(ctx context.Context, userID int64)
 			f.id, f.title, f.url, f.etag, f.last_modified, f.next_poll_at, 
 			f.poll_interval_secs, f.backoff_factor, f.last_error_str, 
 			f.last_error_time, f.last_error_snippet, f.last_polled_at, f.extract_full_article, 
-			f.extraction_strategy, f.css_selector, f.created_at, f.updated_at
+			f.extraction_strategy, f.css_selector, f.scraper_item_selector, f.scraper_title_selector, f.scraper_link_selector, f.scraper_description_selector, f.created_at, f.updated_at
 		FROM feeds f
 		JOIN subscriptions s ON f.id = s.feed_id
 		WHERE s.user_id = ?
@@ -810,7 +815,9 @@ func scanFeed(row *sql.Row) (*types.Feed, error) {
 		&f.ID, &f.Title, &f.URL, &f.ETag, &f.LastModified, &f.NextPollAt,
 		&f.PollIntervalSecs, &f.BackoffFactor, &f.LastErrorStr,
 		&errTime, &f.LastErrorSnippet, &polledTime, &extractVal,
-		&strategyStr, &f.CSSSelector, &f.CreatedAt, &f.UpdatedAt,
+		&strategyStr, &f.CSSSelector,
+		&f.ScraperItemSelector, &f.ScraperTitleSelector, &f.ScraperLinkSelector, &f.ScraperDescriptionSelector,
+		&f.CreatedAt, &f.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -842,7 +849,9 @@ func scanFeedRow(rows *sql.Rows) (*types.Feed, error) {
 		&f.ID, &f.Title, &f.URL, &f.ETag, &f.LastModified, &f.NextPollAt,
 		&f.PollIntervalSecs, &f.BackoffFactor, &f.LastErrorStr,
 		&errTime, &f.LastErrorSnippet, &polledTime, &extractVal,
-		&strategyStr, &f.CSSSelector, &f.CreatedAt, &f.UpdatedAt,
+		&strategyStr, &f.CSSSelector,
+		&f.ScraperItemSelector, &f.ScraperTitleSelector, &f.ScraperLinkSelector, &f.ScraperDescriptionSelector,
+		&f.CreatedAt, &f.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("repository: scan feed row: %w", err)

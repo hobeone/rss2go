@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -250,5 +251,101 @@ func TestResolveItemLink(t *testing.T) {
 	// 4. Nil item.
 	if link := ResolveItemLink(nil); link != "" {
 		t.Errorf("expected empty string for nil item, got %q", link)
+	}
+}
+
+func TestCrawlNativeScraper(t *testing.T) {
+	// Spin up a test server serving some HTML
+	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`
+			<html>
+				<body>
+					<div class="post">
+						<h3>Story A</h3>
+						<a href="/story-a">Link A</a>
+					</div>
+					<div class="post">
+						<h3>Story B</h3>
+						<a href="/story-b">Link B</a>
+					</div>
+				</body>
+			</html>
+		`))
+	}))
+	defer testServer.Close()
+
+	c := NewCrawler(nil, slog.New(slog.DiscardHandler))
+	feed := &types.Feed{
+		URL:                  testServer.URL,
+		ScraperItemSelector:  "div.post",
+		ScraperTitleSelector: "h3",
+		ScraperLinkSelector:  "a",
+	}
+
+	res, err := c.Crawl(context.Background(), feed)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if res.Feed == nil {
+		t.Fatal("expected feed not to be nil")
+	}
+
+	if len(res.Feed.Items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(res.Feed.Items))
+	}
+
+	item1 := res.Feed.Items[0]
+	if item1.Title != "Story A" {
+		t.Errorf("expected Title 'Story A', got %q", item1.Title)
+	}
+	if item1.Link != testServer.URL+"/story-a" {
+		t.Errorf("expected resolved absolute Link, got %q", item1.Link)
+	}
+
+	item2 := res.Feed.Items[1]
+	if item2.Title != "Story B" {
+		t.Errorf("expected Title 'Story B', got %q", item2.Title)
+	}
+}
+
+func TestCrawlScraperURLFallback(t *testing.T) {
+	// Spin up a test server serving some HTML
+	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Mock html
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`
+			<html>
+				<body>
+					<div class="post">
+						<h3>Story C</h3>
+						<a href="/story-c">Link C</a>
+					</div>
+				</body>
+			</html>
+		`))
+	}))
+	defer testServer.Close()
+
+	c := NewCrawler(nil, slog.New(slog.DiscardHandler))
+	// Simulate old URL format
+	feed := &types.Feed{
+		URL: "http://localhost:8282/scrape?url=" + url.QueryEscape(testServer.URL) + "&item=div.post&title=h3&link=a",
+	}
+
+	res, err := c.Crawl(context.Background(), feed)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if res.Feed == nil || len(res.Feed.Items) != 1 {
+		t.Fatalf("expected 1 item parsed from fallback URL, got %d", len(res.Feed.Items))
+	}
+
+	if res.Feed.Items[0].Title != "Story C" {
+		t.Errorf("expected Title 'Story C', got %q", res.Feed.Items[0].Title)
 	}
 }

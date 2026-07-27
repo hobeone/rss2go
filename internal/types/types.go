@@ -15,23 +15,27 @@ const (
 
 // Feed represents a tracked RSS/Atom feed source.
 type Feed struct {
-	ID                 int64              `json:"id"`
-	Title              string             `json:"title"`
-	URL                string             `json:"url"`
-	ETag               string             `json:"etag"`
-	LastModified       string             `json:"last_modified"`
-	NextPollAt         time.Time          `json:"next_poll_at"`
-	PollIntervalSecs   int                `json:"poll_interval_secs"`
-	BackoffFactor      float64            `json:"backoff_factor"`
-	LastErrorStr       string             `json:"last_error_str,omitempty"`
-	LastErrorTime      *time.Time         `json:"last_error_time,omitempty"`
-	LastErrorSnippet   string             `json:"last_error_snippet,omitempty"`
-	LastPolledAt       *time.Time         `json:"last_polled_at,omitempty"`
-	ExtractFullArticle bool               `json:"extract_full_article"`
-	ExtractionStrategy ExtractionStrategy `json:"extraction_strategy"`
-	CSSSelector        string             `json:"css_selector"`
-	CreatedAt          time.Time          `json:"created_at"`
-	UpdatedAt          time.Time          `json:"updated_at"`
+	ID                         int64              `json:"id"`
+	Title                      string             `json:"title"`
+	URL                        string             `json:"url"`
+	ETag                       string             `json:"etag"`
+	LastModified               string             `json:"last_modified"`
+	NextPollAt                 time.Time          `json:"next_poll_at"`
+	PollIntervalSecs           int                `json:"poll_interval_secs"`
+	BackoffFactor              float64            `json:"backoff_factor"`
+	LastErrorStr               string             `json:"last_error_str,omitempty"`
+	LastErrorTime              *time.Time         `json:"last_error_time,omitempty"`
+	LastErrorSnippet           string             `json:"last_error_snippet,omitempty"`
+	LastPolledAt               *time.Time         `json:"last_polled_at,omitempty"`
+	ExtractFullArticle         bool               `json:"extract_full_article"`
+	ExtractionStrategy         ExtractionStrategy `json:"extraction_strategy"`
+	CSSSelector                string             `json:"css_selector"`
+	ScraperItemSelector        string             `json:"scraper_item_selector"`
+	ScraperTitleSelector       string             `json:"scraper_title_selector"`
+	ScraperLinkSelector        string             `json:"scraper_link_selector"`
+	ScraperDescriptionSelector string             `json:"scraper_description_selector"`
+	CreatedAt                  time.Time          `json:"created_at"`
+	UpdatedAt                  time.Time          `json:"updated_at"`
 }
 
 // User represents a recipient of email notifications.

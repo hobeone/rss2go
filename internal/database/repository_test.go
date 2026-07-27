@@ -36,17 +36,21 @@ func TestFeedOperations(t *testing.T) {
 	errTimeInit := now.Add(-time.Hour)
 
 	feed := &types.Feed{
-		Title:              "Example Feed",
-		URL:                "https://example.com/rss",
-		NextPollAt:         now,
-		PollIntervalSecs:   1800,
-		BackoffFactor:      1.5,
-		LastErrorTime:      &errTimeInit,
-		LastErrorStr:       "Initial Error",
-		LastErrorSnippet:   "Connection reset",
-		ExtractFullArticle: true,
-		ExtractionStrategy: types.StrategySelector,
-		CSSSelector:        ".article-body",
+		Title:                      "Example Feed",
+		URL:                        "https://example.com/rss",
+		NextPollAt:                 now,
+		PollIntervalSecs:           1800,
+		BackoffFactor:              1.5,
+		LastErrorTime:              &errTimeInit,
+		LastErrorStr:               "Initial Error",
+		LastErrorSnippet:           "Connection reset",
+		ExtractFullArticle:         true,
+		ExtractionStrategy:         types.StrategySelector,
+		CSSSelector:                ".article-body",
+		ScraperItemSelector:        "div.post",
+		ScraperTitleSelector:       "h3",
+		ScraperLinkSelector:        "a",
+		ScraperDescriptionSelector: "p.desc",
 	}
 
 	// Negative get check
@@ -72,7 +76,9 @@ func TestFeedOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get feed: %v", err)
 	}
-	if fetched.Title != feed.Title || fetched.URL != feed.URL || fetched.CSSSelector != feed.CSSSelector {
+	if fetched.Title != feed.Title || fetched.URL != feed.URL || fetched.CSSSelector != feed.CSSSelector ||
+		fetched.ScraperItemSelector != feed.ScraperItemSelector || fetched.ScraperTitleSelector != feed.ScraperTitleSelector ||
+		fetched.ScraperLinkSelector != feed.ScraperLinkSelector || fetched.ScraperDescriptionSelector != feed.ScraperDescriptionSelector {
 		t.Errorf("fetched feed mismatch: %+v vs %+v", fetched, feed)
 	}
 	if fetched.ExtractFullArticle != feed.ExtractFullArticle {
