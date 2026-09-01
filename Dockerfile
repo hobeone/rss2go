@@ -7,7 +7,7 @@ COPY frontend/ ./
 RUN bun run build
 
 # Stage 2: Build the Go application
-FROM golang:1.26.6-alpine AS go-builder
+FROM golang:1.27.0-alpine AS go-builder
 WORKDIR /src
 RUN apk add --no-cache git
 COPY go.mod go.sum ./
