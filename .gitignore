@@ -23,6 +23,9 @@ rss2go.config.yaml
 rss2go.yaml
 rss2go_docker.yaml
 rss2go_web.yaml
+
+# Local Docker Compose file (copy from docker-compose-example.yml)
+docker-compose.yml
 *.db.bak
 *.db-shm.bak
 *.db-wal.bak
