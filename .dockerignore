@@ -1,0 +1,8 @@
+.claude
+tmp
+**/node_modules
+frontend/coverage
+internal/server/ui/dist
+*.db
+*.db-*
+*.db.*
