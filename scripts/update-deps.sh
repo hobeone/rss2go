@@ -85,7 +85,7 @@ build_commit_message() {
   section "Go modules" "${go_summary}"
   section "Bun packages" "${bun_summary}"
   if [[ "${verified}" -eq 1 ]]; then
-    printf 'Verified with go build, go test, bun run build and bun run test.\n'
+    printf 'Verified with go build, go test, bun run check, bun run build and bun run test.\n'
   else
     printf 'Not verified: update ran with --skip-verify.\n'
   fi
@@ -123,6 +123,7 @@ main() {
     run go test ./...
 
     echo "=== [4/4] Verifying frontend ==="
+    run_in frontend bun run check
     run_in frontend bun run build
     run_in frontend bun run test
   else
