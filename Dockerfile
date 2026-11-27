@@ -1,5 +1,5 @@
 # Stage 1: Build the Svelte UI
-FROM oven/bun:1.4-alpine AS ui-builder
+FROM --platform=$BUILDPLATFORM oven/bun:1.4-alpine AS ui-builder
 WORKDIR /ui
 COPY frontend/package.json frontend/bun.lock ./
 RUN bun install --frozen-lockfile

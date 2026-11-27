@@ -12,6 +12,7 @@ export default defineConfig({
     emptyOutDir: true,
   },
   test: {
+    fsModuleCache: true,
     include: ['src/**/*.{test,spec}.{js,ts}'],
     environment: 'happy-dom',
     globals: true,
